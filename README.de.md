@@ -1,186 +1,124 @@
 <p align="center">
-  <img src="icon.png" alt="Collinx" width="128" />
+  <img src="icon.png" alt="Collinx" width="96" />
 </p>
 
-# Collinx
+<h1 align="center">Collinx</h1>
 
-> Eine agent-native Musik-IDE — vereint kreative Ziele, Musikobjekte, Ansichten, Rendering und ästhetisches Gedächtnis in einem einzigen Projektgraphen.
+<p align="center">
+  <strong>Agent-native Musik-IDE</strong><br/>
+  <sub>Ziele / Objekte / Ansichten / Renders / Geschmacksgedächtnis — Ein Graph</sub>
+</p>
 
-Collinx ist keine traditionelle DAW. Es ist eine auf einem **Projektgraphen** (typisierter Eigenschaftsgraph) aufgebaute Musikproduktionsumgebung, die von 8 spezialisierten **Agenten** betrieben wird, die den Graphen direkt manipulieren, um Komposition, Arrangement, Orchestrierung, Mischung, Notation, Lehre und ästhetisches Lernen zu bewältigen. Jede Agentenoperation erzeugt ein strukturiertes **DiffEnvelope**, das erst nach Benutzerbestätigung in den Hauptzweig geschrieben wird, mit vollständiger Audit-, Rollback- und Domänerklärungsunterstützung.
-
----
-
-## Kernkonzepte
-
-### Projektgraph
-
-Alle Musikdaten (Noten, Akkorde, Form, Tracks, Effekte, Partitur, ästhetische Evidenz) existieren in einem einzigen typisierten Eigenschaftsgraphen. Knotentypen umfassen `CompositionUnit`, `Phrase`, `Motif`, `Track`, `Player`, `PartLayout`, `NoteSpan`, `AutomationCurve`, `AudioBus`, `RenderArtifact`, `TasteEvidence` und `ExportVersion`. Kantentypen umfassen `contains`, `realizes`, `notates`, `performed_as`, `routed_to`, `rendered_to`, `derived_from`, `suggested_by_agent`, `confirmed_by_user` und `updates_taste`. Vollständige Versionskontrolle und Zweigverwaltung werden unterstützt.
-
-### DiffEnvelope
-
-Das Ausgabeformat aller Agentenoperationen. Enthält Operationssummary, Domänerklärungen, Evidenzreferenzen, Risikoflaggen und ein Rollback-Token. Der Standardberechtigungsbereich ist `proposal_only` — Agenten können nur vorschlagen; Änderungen werden erst nach Benutzerbestätigung in den Hauptgraphen geschrieben.
-
-### Taste Genome
-
-Ein langfristiges Gedächtnismodell für Benutzerästhetik über drei Ebenen:
-- **Erklärbare Ebene**: Menschenlesbare Parameter (z.B. `harmony.chromatic_color = 0.33`)
-- **Verteilungsebene**: Bayes'sche Verteilungen (Beta, Dirichlet, Bernoulli, Gaussian)
-- **Einbettungsebene**: Tag-basierte Einbettungsvektoren
-
-Deckt 8 ästhetische Domänen ab: Harmonie, Melodie, Rhythmus, Textur, Timbre, Form, Mix, Ablehnung.
-
-### Vier-Schicht-Musik-Pipeline
-
-| Schicht | Inhalt |
-|---------|--------|
-| Composition Layer | Was geschrieben wurde — Noten, Akkorde, Rhythmus, Form |
-| Notation Layer | Wie es aussieht — Partitur, Layout, Stimmen |
-| Performance Layer | Wie es gespielt wird — Tempokurven, Dynamik, Ausdruck |
-| Audio Layer | Wie es klingt — Mischung, Effekte, Export |
+<p align="center">
+  <a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a>
+</p>
 
 ---
 
-## Architektur
+Collinx klickt nicht für dich. Es verwandelt dein Musikprojekt in einen typisierten Eigenschaftsgraphen und lässt 8 spezialisierte Agenten direkt darauf operieren — komponieren, arrangeren, orchestrieren, mischen, notieren, lehren und deinen Geschmack lernen. Jede Operation erzeugt ein strukturiertes DiffEnvelope. Du genehmigst es, es landet auf Main. Nicht gewünscht? Rollback.
+
+Das ist kein Chatbot-Wrapper um eine DAW. Agenten haben Tool-Berechtigungen, Operations-Audits und Domänerklärungen. Was sie tun — du kannst es prüfen, nachverfolgen und ihnen beibringen, es besser zu machen.
+
+---
+
+## So funktioniert es
 
 ```
-Collinx/
-├── packages/
-│   ├── core/        @collinx/core       Domänenmodelle, Graph, Diff, Taste, IO
-│   ├── agent/       @collinx/agent      8 spezialisierte Agenten
-│   ├── ui/          @collinx/ui         React + Vite Frontend (9 Tabs)
-│   └── audio/       collinx-audio-engine  C++20/JUCE Audio-Engine
-├── docs/            Dokumentation
-└── .github/         CI-Pipeline
+┌─────────────────────────────────────────────────────────┐
+│                     Project Graph                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
+│  │Composition│  │ Notation │  │Performance│  │  Audio  │ │
+│  │  Layer    │→│  Layer   │→│   Layer   │→│  Layer  │ │
+│  │Was wurde  │  │Wie es    │  │Wie es     │  │Wie es   │ │
+│  │geschrieben│  │aussieht  │  │gespielt   │  │klingt   │ │
+│  └──────────┘  └──────────┘  └──────────┘  └─────────┘ │
+│       ↑              ↑              ↑            ↑      │
+│  ┌────┴──────────────┴──────────────┴────────────┴────┐ │
+│  │              Agent Bus (pub/sub)                   │ │
+│  └────┬──────┬──────┬──────┬──────┬──────┬──────┬────┘ │
+│     Plan  Compose Arrange Orch.  Mix  Engr. Teach  Taste│
+└─────────────────────────────────────────────────────────┘
+         │                                    │
+         ▼                                    ▼
+   DiffEnvelope                        Taste Genome
+   (Vorschlag → Genehmigung → Write) (Bayes'sches Geschmacksgedächtnis)
 ```
 
-**Tech-Stack**: TypeScript, React 18, Vite 5, pnpm 9 + Turborepo 2, Zod, pdfkit, fflate, VexFlow 5, i18next, Vitest, Playwright, JUCE 8 (C++20)
+**Project Graph** — 12 Knotentypen, 10 Kantentypen, Versionskontrolle und Zweigverwaltung. Alle Musikdaten leben hier: Noten, Akkorde, Form, Tracks, Effekte, Partituren, ästhetische Evidenz.
+
+**DiffEnvelope** — Das Ausgabeformat jeder Agentenoperation. Enthält Zusammenfassung, Domänerklärungen, Evidenzreferenzen, Risikoflaggen und ein Rollback-Token. Standardberechtigung: `proposal_only` — Agenten schlagen vor, du entscheidest.
+
+**Taste Genome** — Dein ästhetisches Gedächtnis über drei Ebenen: Erklärbar (menschenlesbare Parameter), Verteilung (Beta / Dirichlet / Bernoulli), Einbettung (Tag-Vektoren). Deckt 8 Domänen ab: Harmonie, Melodie, Rhythmus, Textur, Timbre, Form, Mix, Ablehnung. Je mehr du es nutzt, desto besser verstehen dich die Agenten.
 
 ---
 
-## Pakete
+## 8 Agenten
 
-### @collinx/core
+| | Agent | Was er tut |
+|---|---|---|
+| 1 | **Planner** | Zerlegt "schreib einen Refrain" in einen Taskgraphen, ordnet Tools zu |
+| 2 | **Composer** | Generiert Melodien und Harmonien — 13 Skalen, 6 Stile, 8 Rhythmusvorlagen |
+| 3 | **Arranger** | Motiv → vollständiges Arrangement. Formstruktur, Energiekurven, Variantengenerierung |
+| 4 | **Orchestrator** | Instrumentierung — 30+ Instrumente, 7 Familien, Registerkonflikterkennung, Spielbarkeitsvalidierung |
+| 5 | **Engraving** | Partitur-Layout, Kollisionserkennung, Stimmenextraktion (4 Hausstile) |
+| 6 | **Mixing** | Gain-Struktur, FX-Ketten, Panning — regelbasiert, keine Blackbox |
+| 7 | **Teaching** | Erklärt jede musikalische Entscheidung auf 4 Schwierigkeitsstufen |
+| 8 | **Taste Memory** | Analysiert Exporte, sammelt ästhetische Evidenz, rankt Kandidaten nach Geschmack |
 
-Kern-Domänenschicht mit:
-- **Modelle** (16 Module): NoteEvent, TempoMap, HarmonyPlan, Motif, Phrase, Section, FormRole, FormTemplate, EnergyCurve, Instrument, MixerState, FXChain, DSP-Effekte, ScoreModel, EngravingEngine, StemRenderer
-- **Graphsystem**: ProjectGraph (CRUD, Traversal, Validierung, Serialisierung), RevisionStore (Commit, Checkpoint, Restore)
-- **Diff-System**: DiffEnvelope, DiffEngine (Anwendung, Rollback, Validierung, Merge, Konflikterkennung), DiffLog
-- **Taste-System** (12 Module): TasteGenome, TasteStore, EvidenceExtractor, ExportAnalyzer, UpdateEngine, ScoringEngine, ReportGenerator, TentativeBuffer, ProjectOverlay, ABPlayer
-- **IO**: MIDI-Import/Export, MusicXML 4.0, PDF-Partitur, WAV-Audio, `.agentmusic`-Containerformat
-- **Agenteninfrastruktur**: ToolRegistry (14 integrierte Tools), AgentBus (Punkt-zu-Punkt, Request/Response, Pub/Sub)
+Jede Agentenoperation ist ein DiffEnvelope — prüfen, annehmen, ablehnen oder rollback.
 
-### @collinx/agent
+---
 
-8 spezialisierte Agenten:
+## UI — 9 Tabs
 
-| Agent | Verantwortung |
-|-------|--------------|
-| **Planner** | Zerlegt natürlichsprachliche Ziele in Taskgraphen, ordnet Schlüsselwörtern Tools zu |
-| **Composer** | Generiert Melodien und Harmonien (13 Skalen, 6 Stilvorlagen, 8 Rhythmusvorlagen) |
-| **Arranger** | Erweitert Motive zu vollständigen Arrangements, entwirf Formstrukturen und Energiekurven |
-| **Orchestrator** | Instrumentierung, Stimmzuweisung, Registerkonflikt-Erkennung, Spielbarkeitsvalidierung (30+ Instrumente, 7 Familien) |
-| **EngravingAgent** | Partitur-Layout, Kollisionserkennung, Stimmenextraktion (4 Hausstile) |
-| **MixingAgent** |schlägt Gain-Struktur, FX-Ketten, Stereo-Panning vor |
-| **TeachingAgent** | Erklärt musikalische Entscheidungen auf 4 Schwierigkeitsstufen (Anfänger/Fortgeschritten/Experte/Profi) |
-| **TasteMemoryAgent** | Analysiert Exporte, bestätigt/verwirft ästhetische Evidenz, rollt Genom zurück, rankt Kandidaten nach Geschmack |
-
-### @collinx/ui
-
-React 18 + Vite 5 Frontend mit 9 Tabs:
-
-| Tab | Komponenten | Funktion |
-|-----|------------|----------|
-| **compose** | PianoRollView, ScorePanel, ArrangementView | Piano-Roll-Bearbeitung + kompakte Partitur + Arrangement-Zeitleiste |
-| **arrange** | ArrangementView, ArrangerPanel | Abschnittsarrangement + Diff-Vorschau |
-| **orchestrate** | ArrangementView, OrchestratorPanel | Instrumentenzuweisung + Konfliktanzeige |
-| **mixer** | MixerConsole | Vollständiges Mischpult (Gain, Pan, Mute, Solo, FX-Ketten) |
-| **score** | ScorePanel | Vollständige Partitur (Auto-Layout, Stimmenextraktion, MusicXML-Export) |
-| **taste** | TasteTimelineView, TasteLibraryPanel, TasteDiffPanel | Taste-Genom-Zeitleiste + Parameter-Bibliothek + Diff-Berichte |
-| **teaching** | TeachingPanel | Musiktheorie-Erklärungen auf mehreren Ebenen |
-| **agent** | AgentPanel, AgentChat | Diff-Warteschlange + Chat-Schnittstelle |
-| **graph** | GraphView, NodeDetail | Projektgraph-Visualisierung (Canvas 2D, Kraftgerichtetes Layout) |
-
-### collinx-audio-engine
-
-C++20 Audio-Engine (JUCE 8.0.1):
-- VST3- und CLAP-Plugin-Hosting mit sandboxed Crash-Erkennung
-- Integrierter Wavetable-Synthesizer
-- DSP: Parallele Verarbeitung, Latenzkompensation
-- MIDI-Effektketten und Routing
-- Preset-Verwaltung
-- Asynchrone Plugin-Suche
-- Leistungsüberwachung und Profiling
-- Automatisierungskurven
+| Tab | Was er tut |
+|---|---|
+| **compose** | Piano-Roll + kompakte Partitur + Arrangement-Zeitleiste |
+| **arrange** | Abschnittsarrangement + Diff-Vorschau |
+| **orchestrate** | Instrumentenzuweisung + Konfliktanzeige |
+| **mixer** | Vollständiges Mischpult — Gain, Pan, Mute, Solo, FX-Ketten |
+| **score** | Vollständige Partitur — Auto-Layout, Stimmenextraktion, MusicXML-Export |
+| **taste** | Taste-Genom-Zeitleiste + Parameter-Bibliothek + Diff-Berichte |
+| **teaching** | Musiktheorie-Erklärungen auf mehreren Ebenen |
+| **agent** | Diff-Warteschlange + Chat-Schnittstelle |
+| **graph** | Projektgraph-Visualisierung — Canvas 2D kraftgerichtetes Layout |
 
 ---
 
 ## Schnellstart
 
-### Voraussetzungen
-
-- Node.js >= 18
-- pnpm 9.0.0
-- CMake 3.22+ (Audio-Engine)
-- C++20-Compiler (Audio-Engine)
-
-### Installation
-
 ```bash
-pnpm install
-```
+# Voraussetzungen: Node.js >= 18, pnpm 9
 
-### Entwicklung
-
-```bash
-pnpm dev          # Alle Dev-Server starten
-pnpm dev:ui       # Nur UI starten (Port 5180)
-```
-
-### Build
-
-```bash
-pnpm build        # Alle Pakete über Turborepo bauen
-```
-
-### Test
-
-```bash
-pnpm test         # Alle Tests ausführen (Vitest Unit-Tests)
-pnpm test:core    # Nur Core-Paket-Tests
-pnpm test:agent   # Nur Agent-Paket-Tests
-pnpm test:e2e     # Playwright E2E-Tests (84 Testfälle)
-```
-
-### Sonstiges
-
-```bash
-pnpm typecheck    # TypeScript-Typprüfung
-pnpm lint         # ESLint
-pnpm format       # Prettier-Formatierung
+pnpm install          # Abhängigkeiten installieren
+pnpm dev              # Alle Dev-Server starten
+pnpm dev:ui           # Nur UI starten (Port 5180)
+pnpm build            # Alle Pakete bauen
+pnpm test             # Unit-Tests (Vitest)
+pnpm test:e2e         # E2E-Tests (Playwright, 84 Fälle)
+pnpm typecheck        # Typprüfung
 ```
 
 ---
 
-## Testabdeckung
+## Tests
 
-- **62+ Unit-Test-Dateien**: Abdeckung aller Modelle, Graphsystem, Diff-System, Taste-System, IO, Agenteninfrastruktur und 8 Agenten
-- **12 E2E-Test-Dateien** (Playwright): Abdeckung aller 9 Tabs' Kerninteraktionsabläufe
-- **Integrationstests**: Note-zu-Export, Mischpult-Renderkette, Graph-zu-Diff, Formorchestrierung, Agenten-Toolkette
-- **Leistungs- und Stabilitätstest-Suiten
+```
+62+ Unit-Test-Dateien   Alle Modelle, Graph, Diff, Taste, IO, Agenten abgedeckt
+12  E2E-Spec-Dateien    Alle 9 Tabs' Kerninteraktionen abgedeckt
+5   Integrationstests   Note→Export, Mischkette, Graph→Diff, Form, Agenten-Tools
+2   Suiten              Leistung + Stabilität
+```
 
 ---
 
-## Iterationsplan
+## Tech-Stack
 
-Aktuelle Version: v0.6.0 (UI) / v0.1.0 (Pakete)
-
-| Phase | Beschreibung | Status |
-|-------|-------------|--------|
-| Phase 0 (PoC) | Graph + Diff + Agent | 100% |
-| Phase 1 (MVP) | Arrangement + PianoRoll + Partitur + Mischpult + Taste + Export | 99% |
-| Phase 2 (Benutzbarkeit) | Gravur + A/B + Overlay + Leistung | 95% |
-| Phase 3 (Plugins) | VST3 + Sandbox | 25% |
-| Phase 4 (Ökosystem) | CLAP + Markt + SDK | 0% |
+```
+TypeScript · React 18 · Vite 5 · pnpm 9 · Turborepo 2
+Zod · pdfkit · fflate · VexFlow 5 · i18next
+Vitest · Playwright · JUCE 8 (C++20)
+```
 
 ---
 
@@ -188,56 +126,29 @@ Aktuelle Version: v0.6.0 (UI) / v0.1.0 (Pakete)
 
 ```
 Collinx/
-├── .github/workflows/       CI-Pipeline
-├── .playwright-mcp/         Playwright MCP-Logs
-├── docs/
-│   ├── CONTEXT.md           Begriffs- und Konzeptdefinitionen
-│   ├── ITERATION-PLAN.md    Iterationsplan
-│   ├── deep-research-report.md
-│   ├── audio/               Audio-Forschungsdokumente
-│   ├── bayesian-history/    Bayes'sche Planungshistorie
-│   └── ui/                  UI-Entwicklungsdokumentation
 ├── packages/
-│   ├── core/
-│   │   └── src/
-│   │       ├── schema/      Zod-Graphschema-Definitionen
-│   │       ├── graph/       ProjectGraph + RevisionStore
-│   │       ├── model/       16 Domänenmodelle
-│   │       ├── diff/        DiffEnvelope + DiffEngine + DiffLog
-│   │       ├── taste/       Taste-Genom-System (12 Module)
-│   │       ├── agent/       ToolRegistry + AgentBus
-│   │       ├── io/          MIDI/MusicXML/PDF/WAV/.agentmusic
-│   │       └── util/        Hilfsfunktionen
-│   ├── agent/
-│   │   └── src/
-│   │       ├── planner.ts       Aufgabenplanung
-│   │       ├── composer.ts      Melodie-/Harmoniegenerierung
-│   │       ├── arranger/        Arrangement (Varianten, Motivtransformationen, Energiekurven)
-│   │       ├── orchestrator/    Orchestrierung (Stimmführung, Konflikterkennung)
-│   │       ├── engraving/       Notation (Layout, Kollision, Stimmen)
-│   │       ├── mixing/          Mischvorschläge
-│   │       ├── teaching/        Lehrerklärungen
-│   │       ├── taste-memory/    Ästhetisches Gedächtnis
-│   │       └── tools.ts         Tool-Registrierung
-│   ├── ui/
-│   │   ├── e2e/             Playwright E2E-Tests
-│   │   └── src/
-│   │       ├── components/  15 Komponentenverzeichnisse
-│   │       ├── contexts/    React Contexts
-│   │       ├── hooks/       Benutzerdefinierte Hooks
-│   │       ├── i18n/        Internationalisierung
-│   │       ├── styles/      Design-Token + Themes
-│   │       └── data/        Demodaten
-│   └── audio/
-│       └── src/             C++20/JUCE Audio-Engine
-├── package.json
-├── pnpm-workspace.yaml
-├── turbo.json
-└── tsconfig.json
+│   ├── core/          Domänenmodelle, Graph, Diff, Taste, IO
+│   ├── agent/         8 Agenten + Tool-Registrierung + Agent Bus
+│   ├── ui/            React-Frontend + 15 Komponenten + E2E-Tests
+│   └── audio/         C++20/JUCE Audio-Engine (VST3/CLAP)
+├── docs/              Begriffe, Iterationsplan, Forschung
+└── .github/           CI-Pipeline
 ```
 
 ---
 
-## Lizenz
+## Roadmap
 
-Privat — nicht öffentlich veröffentlicht.
+| Phase | Inhalt | Status |
+|---|---|---|
+| Phase 0 — PoC | Graph + Diff + Agent | Done |
+| Phase 1 — MVP | Arrangement + Piano-Roll + Partitur + Mischpult + Taste + Export | 99% |
+| Phase 2 — Benutzbarkeit | Gravur + A/B + Overlay + Leistung | 95% |
+| Phase 3 — Plugins | VST3 + Sandbox | 25% |
+| Phase 4 — Ökosystem | CLAP + Markt + SDK | — |
+
+---
+
+<p align="center">
+  <sub>Privat — nicht öffentlich veröffentlicht</sub>
+</p>
