@@ -1,0 +1,373 @@
+.routerView {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  user-select: none;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--bg-elevated);
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.tabBar {
+  display: flex;
+  gap: 0;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.tabActive {
+  color: var(--accent-cyan);
+  border-bottom-color: var(--accent-cyan);
+}
+
+.tabContent {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.section {
+  padding: var(--space-2) var(--space-3);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.clearBtn {
+  background: none;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 2px var(--space-1);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.clearBtn:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.channelGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.channelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.channelRow:hover {
+  background: var(--bg-elevated);
+}
+
+.chLabel {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.chArrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.chSelect {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 10px;
+  padding: 1px var(--space-1);
+  outline: none;
+  cursor: pointer;
+}
+
+.chSelect:focus {
+  border-color: var(--accent-cyan);
+}
+
+.chClearBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.chClearBtn:hover {
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ccAddRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ccInputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ccLabel {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.ccInput {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 2px var(--space-1);
+  outline: none;
+  width: 56px;
+  text-align: center;
+}
+
+.ccInput:focus {
+  border-color: var(--accent-cyan);
+}
+
+.ccName {
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 40px;
+}
+
+.ccArrow {
+  font-size: 12px;
+  color: var(--text-muted);
+  align-self: flex-end;
+  padding-bottom: 2px;
+}
+
+.ccAddBtn {
+  background: var(--accent-green);
+  border: 1px solid var(--accent-green);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 2px var(--space-2);
+  cursor: pointer;
+  transition: opacity var(--transition-normal);
+  white-space: nowrap;
+}
+
+.ccAddBtn:hover {
+  opacity: 0.9;
+}
+
+.ccList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ccItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+}
+
+.ccItemText {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.ccRemoveBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+.ccRemoveBtn:hover {
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.filterNote {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+  line-height: 1.4;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+}
+
+.filterBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.filterBtn:hover {
+  border-color: var(--text-secondary);
+}
+
+.filterBtnActive {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.filterDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent-green);
+  flex-shrink: 0;
+}
+
+.filterBtnActive .filterDot {
+  background: var(--accent-red);
+}
+
+.emptySection {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-3) 0;
+}
+
+.outputAddRow {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  align-items: center;
+}
+
+.outputList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.outputItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.outputDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--accent-green);
+  flex-shrink: 0;
+}
+
+.outputLabel {
+  flex: 1;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}

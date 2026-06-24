@@ -1,0 +1,31 @@
+.rendererContainer {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-primary, #0a0a0a);
+  border: 1px solid var(--border-primary, #2a2a36);
+  border-radius: 4px;
+  min-height: 200px;
+}
+
+.rendererCanvas {
+  display: inline-block;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.rendererCanvas svg {
+  display: block;
+}
+
+.errorPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--accent-red);
+  font-size: 13px;
+  font-family: sans-serif;
+  padding: 16px;
+  text-align: center;
+}

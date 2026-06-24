@@ -1,0 +1,215 @@
+.appRoot {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.header {
+  padding: var(--space-1) var(--space-4);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.headerBrand {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.headerVersion {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tabBar {
+  display: flex;
+  gap: 2px;
+  margin-left: var(--space-4);
+  overflow-x: auto;
+  max-width: calc(100vw - 320px);
+}
+
+.tabButton {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.tabButtonActive {
+  background: var(--bg-elevated);
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+.headerStatus {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-disabled);
+  white-space: nowrap;
+}
+
+.composeLayout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.composeArrangement {
+  padding: var(--space-1) var(--space-2);
+}
+
+.composeMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2);
+  overflow: hidden;
+}
+
+.composeScore {
+  flex: 0 0 120px;
+}
+
+.composePianoRoll {
+  flex: 1;
+  min-height: 0;
+}
+
+.sectionRow {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sectionColumn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+.sectionMargin {
+  margin-bottom: var(--space-2);
+}
+
+.diffInfoBox {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-active);
+  border: 1px solid var(--accent-cyan);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.diffInfoTitle {
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+  color: var(--accent-cyan);
+}
+
+.diffInfoSummary {
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.diffInfoMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.emptyHint {
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mixerFill {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tasteLayout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.tasteToolbar {
+  padding: var(--space-1) var(--space-2);
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tasteButton {
+  background: var(--border-primary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tasteContent {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tasteTimeline {
+  flex: 1 1 60%;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-primary);
+}
+
+.tasteLibrary {
+  flex: 1 1 40%;
+  display: flex;
+  flex-direction: column;
+}
+
+.graphLayout {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-2);
+}
+
+.agentLayout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.agentChatContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-primary);
+}
+
+.agentPanelContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}

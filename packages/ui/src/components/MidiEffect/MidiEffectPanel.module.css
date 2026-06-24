@@ -1,0 +1,227 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  user-select: none;
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--bg-elevated);
+  gap: var(--space-2);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.panelTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.panelSubtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.headerActions {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.chainBypassBtn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.chainBypassBtn:hover {
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
+}
+
+.chainBypassBtnActive {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
+}
+
+.addBtn {
+  background: var(--accent-green);
+  border: 1px solid var(--accent-green);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  transition: opacity var(--transition-normal);
+}
+
+.addBtn:hover {
+  opacity: 0.9;
+}
+
+.addMenu {
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--bg-elevated);
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.addMenuItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--bg-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  text-align: left;
+  width: 100%;
+}
+
+.addMenuItem:hover {
+  border-color: var(--accent-cyan);
+  background: var(--bg-elevated);
+}
+
+.addMenuName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.addMenuDesc {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.chainContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.effectList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+}
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: var(--space-4);
+}
+
+.emptyIcon {
+  font-size: 28px;
+  opacity: 0.3;
+}
+
+.emptyText {
+  font-size: 11px;
+}
+
+.emptyAddBtn {
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  transition: border-color var(--transition-normal), color var(--transition-normal);
+}
+
+.emptyAddBtn:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.chainFlow {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--bg-elevated);
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.flowLabel {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-1);
+}
+
+.flowPath {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.flowPath::-webkit-scrollbar {
+  height: 4px;
+}
+
+.flowPath::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+.flowNode {
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--accent-cyan);
+  background: rgba(0, 200, 255, 0.1);
+  border: 1px solid rgba(0, 200, 255, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.flowNodeBypassed {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.flowArrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}

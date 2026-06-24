@@ -1,0 +1,35 @@
+/* ============================================================
+   Collinx Dark Theme
+   ============================================================ */
+
+[data-theme="dark"] {
+  /* ---- Background ---- */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111118;
+  --bg-elevated: #1c1c26;
+
+  /* ---- Text ---- */
+  --text-primary: #e8e8ec;
+  --text-secondary: #a0a0a8;
+  --text-muted: #66666e;
+
+  /* ---- Border ---- */
+  --border-primary: #2a2a36;
+  --border-secondary: #3a3a48;
+
+  /* ---- Accent ---- */
+  --accent-primary: #00d4ff;
+  --accent-secondary: #33ddff;
+  --accent-red: #ef4444;
+  --accent-green: #22c55e;
+  --accent-yellow: #f59e0b;
+  --accent-cyan: #00d4ff;
+
+  /* ---- Component ---- */
+  --button-bg: #2a2a36;
+  --button-text: #e8e8ec;
+  --input-bg: #16161e;
+  --input-border: #2a2a36;
+  --card-bg: #16161e;
+  --card-border: #2a2a36;
+}

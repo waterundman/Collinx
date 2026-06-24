@@ -1,0 +1,321 @@
+.scorePanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.toolbarBtn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  transition: border-color var(--transition-normal), background var(--transition-normal);
+}
+
+.toolbarBtn:hover {
+  border-color: var(--accent-cyan);
+  background: var(--bg-surface);
+}
+
+.toolbarBtn:active {
+  background: var(--bg-primary);
+}
+
+.viewToggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.viewToggle .toolbarBtn {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--border-primary);
+}
+
+.viewToggle .toolbarBtn:last-child {
+  border-right: none;
+}
+
+.toolbarBtnActive {
+  background: var(--accent-cyan) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--accent-cyan) !important;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+.toolbarBadge {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 3px var(--space-2);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.section {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--bg-elevated);
+}
+
+.sectionHeader {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.layoutGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1) var(--space-3);
+}
+
+.layoutItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.layoutKey {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.layoutValue {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.staffList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.staffItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.staffClef {
+  font-family: serif;
+  font-size: 18px;
+  color: var(--text-primary);
+  width: var(--space-6);
+  text-align: center;
+}
+
+.staffName {
+  flex: 1;
+}
+
+.staffCount {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.collisionSection {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--bg-elevated);
+}
+
+.collisionCount {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.collisionBadgeError {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+}
+
+.collisionBadgeWarn {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-yellow);
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+}
+
+.collisionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.collisionCardError {
+  background: var(--bg-error);
+  border: 1px solid var(--accent-red);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-2);
+}
+
+.collisionCardWarn {
+  background: var(--bg-warning);
+  border: 1px solid var(--accent-yellow);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-2);
+}
+
+.collisionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-1);
+}
+
+.collisionType {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-1);
+}
+
+.collisionTypeWarn {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-yellow);
+  background: rgba(245, 158, 11, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-1);
+}
+
+.collisionLocation {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.collisionDesc {
+  font-size: 11px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin-bottom: 3px;
+}
+
+.collisionFix {
+  font-size: 10px;
+  color: var(--accent-cyan);
+  font-style: italic;
+}
+
+.previewArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.previewHeader {
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.previewHeaderTitle {
+  font-weight: 600;
+}
+
+.previewHeaderInfo {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.previewCanvas {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+.previewPlaceholder {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.previewPlaceholderIcon {
+  font-size: 32px;
+  margin-bottom: var(--space-2);
+  opacity: 0.3;
+}
+
+.previewPlaceholderText {
+  margin-top: var(--space-1);
+}
+
+.emptySidebar {
+  padding: var(--space-6) var(--space-3);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.stavesSvgPreview {
+  width: 100%;
+  height: 100%;
+}

@@ -1,0 +1,28 @@
+{
+  "name": "collinx",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent-native Music IDE",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "test:core": "turbo run test --filter=@collinx/core",
+    "test:agent": "turbo run test --filter=@collinx/agent",
+    "test:e2e": "turbo run test:e2e --filter=@collinx/ui",
+    "dev:ui": "turbo run dev --filter=@collinx/ui",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,140 @@
+.canvas {
+  display: block;
+  cursor: grab;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  transition: border-color var(--transition-normal) var(--ease-standard);
+  will-change: transform;
+}
+
+.canvas:hover {
+  border-color: var(--border-secondary);
+}
+
+.canvas:active {
+  cursor: grabbing;
+  border-color: var(--accent-cyan);
+}
+
+.detailPanel {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: 260px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-primary);
+  z-index: 10;
+  overflow-y: auto;
+  max-height: calc(100% - var(--space-4));
+}
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.detailBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.detailClose {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.detailClose:hover {
+  color: var(--text-primary);
+  background: var(--bg-overlay);
+}
+
+.detailId {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+  word-break: break-all;
+}
+
+.detailSection {
+  margin-bottom: var(--space-3);
+}
+
+.detailSectionTitle {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-1);
+}
+
+.detailEmpty {
+  color: var(--text-disabled);
+  font-style: italic;
+}
+
+.detailKvList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detailKv {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.detailKey {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.detailValue {
+  color: var(--text-primary);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailConnectedList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detailConnected {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.detailConnectedType {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.detailConnectedEdge {
+  color: var(--text-muted);
+  font-size: 11px;
+}

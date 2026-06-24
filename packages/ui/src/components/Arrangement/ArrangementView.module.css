@@ -1,0 +1,101 @@
+.arrangementRoot {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  user-select: none;
+  position: relative;
+}
+
+.barContainer {
+  display: flex;
+  align-items: flex-end;
+  height: 64px;
+  position: relative;
+}
+
+.barLine {
+  position: absolute;
+  bottom: 0;
+}
+
+.barLabel {
+  position: absolute;
+  transform: translateX(2px);
+  top: 2;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.phraseBlock {
+  position: absolute;
+  bottom: 4;
+  min-width: 28px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.12);
+  transition: opacity var(--transition-fast), transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.phraseBlockHovered {
+  opacity: 0.95;
+  transform: scaleY(1.08);
+  z-index: 2;
+}
+
+.phraseBlockSelected {
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 0 8px rgba(255,255,255,0.25);
+}
+
+.phraseName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--bg-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phraseRole {
+  font-size: 9px;
+  color: rgba(26,26,46,0.7);
+}
+
+.arrowIndicator {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--border-secondary);
+  font-size: 14px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.selectedInfo {
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.infoLabel {
+  color: var(--text-secondary);
+}
+
+.infoValue {
+  color: var(--text-primary);
+  font-weight: 600;
+}

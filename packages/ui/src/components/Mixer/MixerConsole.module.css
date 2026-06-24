@@ -1,0 +1,624 @@
+.mixerConsole {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Header */
+.mixerHeader {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--bg-elevated);
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.mixerTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mixerSubtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.addTrackBtn {
+  margin-left: auto;
+  background: var(--accent-green);
+  border: 1px solid var(--accent-green);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity var(--transition-normal);
+}
+
+.addTrackBtn:hover {
+  opacity: 0.9;
+}
+
+/* Channel Strips Container */
+.stripsContainer {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
+  gap: 0;
+  min-height: 0;
+}
+
+.stripsContainer::-webkit-scrollbar {
+  height: 6px;
+}
+
+.stripsContainer::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+.stripsContainer::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+/* Channel Strip */
+.channelStrip {
+  flex: 0 0 100px;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-right: 1px solid var(--bg-elevated);
+  padding: var(--space-2) var(--space-1);
+  gap: var(--space-1);
+  position: relative;
+  background: var(--bg-primary);
+  transition: background var(--transition-normal);
+}
+
+.channelStrip:hover {
+  background: var(--bg-secondary);
+}
+
+.channelStripMaster {
+  flex: 0 0 180px;
+  min-width: 180px;
+}
+
+/* Track Name */
+.trackName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--bg-elevated);
+}
+
+.trackType {
+  font-size: 9px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Fader Section */
+.faderSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 120px;
+  position: relative;
+}
+
+.faderTrack {
+  width: 4px;
+  height: 100%;
+  min-height: 80px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  position: relative;
+}
+
+.faderFill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, var(--accent-cyan), var(--accent-cyan));
+  border-radius: var(--radius-sm);
+  transition: height var(--transition-fast) var(--ease-standard);
+}
+
+.faderThumb {
+  position: absolute;
+  left: -5px;
+  right: -5px;
+  height: 10px;
+  background: var(--accent-cyan);
+  border: 2px solid var(--accent-cyan);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.faderValue {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  font-family: var(--font-mono);
+}
+
+/* Meter */
+.meterContainer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.meterBar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  position: relative;
+}
+
+.meterFill {
+  height: 100%;
+  background: var(--accent-green);
+  transition: width var(--transition-fast) var(--ease-standard);
+  border-radius: var(--radius-sm);
+}
+
+.meterDb {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 1px;
+}
+
+/* Pan Knob */
+.panSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.panKnob {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-primary);
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panKnob:hover {
+  border-color: var(--accent-cyan);
+}
+
+.panIndicator {
+  width: 2px;
+  height: 12px;
+  background: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  transform-origin: 50% 100%;
+}
+
+.panLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Mute/Solo Buttons */
+.controlButtons {
+  display: flex;
+  gap: var(--space-1);
+  width: 100%;
+  justify-content: center;
+}
+
+.muteBtn,
+.soloBtn {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--transition-normal);
+}
+
+.muteBtn {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+}
+
+.muteBtn:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.muteBtnActive {
+  background: var(--accent-red);
+  color: var(--text-primary);
+  border-color: var(--accent-red);
+}
+
+.soloBtn {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+}
+
+.soloBtn:hover {
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
+}
+
+.soloBtnActive {
+  background: var(--accent-yellow);
+  color: var(--bg-primary);
+  border-color: var(--accent-yellow);
+}
+
+/* FX Slots */
+.fxSection {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fxSlotLabel {
+  font-size: 8px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.fxSlot {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-1);
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.fxSlot:hover {
+  border-color: var(--accent-cyan);
+  color: var(--text-primary);
+}
+
+.fxSlotActive {
+  background: var(--bg-active);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.fxSlotDisabled {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.fxSlotType {
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.fxSlotDragHandle {
+  cursor: grab;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.fxAddBtn {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  cursor: pointer;
+  padding: 2px;
+  border: 1px dashed var(--border-primary);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-normal);
+}
+
+.fxAddBtn:hover {
+  color: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+/* FX Editor Panel */
+.fxEditorOverlay {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  min-width: 200px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  margin-bottom: var(--space-1);
+}
+
+.fxEditorOverlay::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--border-primary);
+}
+
+.fxEditorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.fxEditorTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.fxEditorClose {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+.fxEditorClose:hover {
+  background: var(--bg-elevated);
+  color: var(--accent-red);
+}
+
+/* FX Parameter Controls */
+.fxParamRow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: var(--space-2);
+}
+
+.fxParamLabel {
+  font-size: 10px;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+}
+
+.fxParamValue {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.fxParamKnob {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.fxParamKnobInput {
+  width: 100%;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+}
+
+.fxParamKnobInput::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--accent-cyan);
+  border: 2px solid var(--accent-cyan);
+  cursor: pointer;
+}
+
+.fxParamKnobInput::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--accent-cyan);
+  border: 2px solid var(--accent-cyan);
+  cursor: pointer;
+}
+
+/* Send Config */
+.sendSection {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sendItem {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-1);
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.sendItem:hover {
+  border-color: var(--accent-yellow);
+}
+
+/* Drag-over indicator */
+.dragOver {
+  outline: 2px dashed var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+.dragSendTarget {
+  outline: 2px dashed var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+/* Add Track Modal */
+.addTrackModal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  min-width: 280px;
+  z-index: 200;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.7);
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 199;
+}
+
+.modalTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+}
+
+.modalRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.modalLabel {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.modalInput {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: var(--space-1) var(--space-2);
+  outline: none;
+}
+
+.modalInput:focus {
+  border-color: var(--accent-cyan);
+}
+
+.modalButtons {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.modalBtn {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.modalBtnPrimary {
+  background: var(--accent-green);
+  color: var(--text-primary);
+  border-color: var(--accent-green);
+}
+
+.modalBtnPrimary:hover {
+  opacity: 0.9;
+}
+
+.modalBtnCancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+}
+
+.modalBtnCancel:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+/* Empty State */
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.emptyIcon {
+  font-size: 32px;
+  opacity: 0.3;
+}

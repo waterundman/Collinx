@@ -1,0 +1,142 @@
+/* ============================================================
+   Collinx Light Theme
+   ============================================================ */
+
+[data-theme="light"] {
+  /* ---- Background ---- */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f7;
+  --bg-elevated: #ffffff;
+
+  /* ---- Text ---- */
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+
+  /* ---- Border ---- */
+  --border-primary: #e5e7eb;
+  --border-secondary: #d1d5db;
+
+  /* ---- Accent ---- */
+  --accent-primary: #0284c7;
+  --accent-secondary: #0ea5e9;
+  --accent-red: #dc2626;
+  --accent-green: #16a34a;
+  --accent-yellow: #d97706;
+  --accent-cyan: #0284c7;
+
+  /* ---- Component ---- */
+  --button-bg: #f3f4f6;
+  --button-text: #1a1a2e;
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+
+  /* ---- Semantic Colors (for canvas/charts) ---- */
+  --canvas-bg: #ffffff;
+  --canvas-grid: #e5e7eb;
+  --canvas-node-default: #9ca3af;
+  --canvas-highlight: #0284c7;
+
+  /* ---- Section Colors (ArrangementView) ---- */
+  --section-verse: #3b82f6;
+  --section-chorus: #d97706;
+  --section-bridge: #10b981;
+  --section-intro: #6b7280;
+  --section-outro: #8b5cf6;
+  --section-prechorus: #ef4444;
+  --section-breakdown: #06b6d4;
+  --section-interlude: #f97316;
+  --section-outro-chorus: #ea580c;
+  --section-build-up: #7c3aed;
+  --section-drop: #ec4899;
+  --section-solo: #eab308;
+
+  /* ---- Domain Colors (KnowledgeGraph) ---- */
+  --domain-harmony: #3b82f6;
+  --domain-melody: #d97706;
+  --domain-rhythm: #10b981;
+  --domain-texture: #8b5cf6;
+  --domain-timbre: #ec4899;
+  --domain-form: #f97316;
+  --domain-mix: #06b6d4;
+  --domain-reject: #ef4444;
+
+  /* ---- Node Type Colors (KnowledgeGraph) ---- */
+  --node-phrase: #0284c7;
+  --node-motif: #16a34a;
+  --node-track: #6b7280;
+  --node-export-version: #8b5cf6;
+  --node-taste-evidence: #d97706;
+
+  /* ---- Accent Extended ---- */
+  --accent-cyan-dark: #0284c7;
+  --accent-cyan-light: #38bdf8;
+  --accent-green-light: #4ade80;
+  --accent-red-light: #f87171;
+  --accent-red-pale: #fca5a5;
+  --accent-yellow-light: #facc15;
+  --accent-purple-dark: #7c3aed;
+  --accent-purple-light: #a78bfa;
+  --accent-blue: #2563eb;
+  --accent-blue-light: #60a5fa;
+  --accent-orange: #ea580c;
+  --accent-orange-dark: #c2410c;
+  --accent-amber: #d97706;
+  --accent-pink: #ec4899;
+  --accent-gold: #ca8a04;
+  --accent-peach: #fb923c;
+  --accent-mint: #34d399;
+  --accent-teal: #14b8a6;
+  --accent-sky: #0ea5e9;
+  --accent-sky-light: #7dd3fc;
+  --accent-lavender: #a78bfa;
+  --accent-lavender-light: #c4b5fd;
+  --accent-cyan-pale: #67e8f9;
+  --accent-hot-pink: #f43f5e;
+  --accent-peach-light: #fca5a5;
+  --accent-magenta: #d946ef;
+
+  /* ---- Gradient Stops ---- */
+  --gradient-blue-start: #60a5fa;
+  --gradient-blue-end: #2563eb;
+  --gradient-green-start: #4ade80;
+  --gradient-green-end: #16a34a;
+  --gradient-yellow-start: #facc15;
+  --gradient-yellow-end: #ca8a04;
+  --gradient-orange-start: #fb923c;
+  --gradient-orange-end: #c2410c;
+  --gradient-red-start: #f87171;
+  --gradient-red-end: #dc2626;
+
+  /* ---- Piano Keys ---- */
+  --piano-white: #f5f5f5;
+  --piano-white-playing: #fef3c7;
+  --piano-black: #1f2937;
+  --piano-black-border: #111827;
+  --piano-black-playing: #d97706;
+
+  /* ---- ABPlayer States ---- */
+  --ab-reference: #059669;
+  --ab-compare: #7c3aed;
+  --ab-different: #dc2626;
+  --ab-same: #2563eb;
+  --ab-unknown: #9ca3af;
+  --ab-reference-bg: rgba(5, 150, 105, 0.1);
+  --ab-compare-bg: rgba(124, 58, 237, 0.1);
+  --ab-different-bg: rgba(220, 38, 38, 0.1);
+  --ab-same-bg: rgba(37, 99, 235, 0.1);
+  --ab-unknown-bg: rgba(156, 163, 175, 0.1);
+
+  /* ---- Plugin Mockup ---- */
+  --mockup-bg-start: #e5e7eb;
+  --mockup-bg-end: #d1d5db;
+  --mockup-surface-start: #f3f4f6;
+  --mockup-surface-end: #e5e7eb;
+
+  /* ---- Permission Badge States ---- */
+  --accent-green-bg: rgba(22, 163, 74, 0.1);
+  --accent-yellow-bg: rgba(217, 119, 6, 0.1);
+  --accent-red-bg: rgba(220, 38, 38, 0.1);
+}

@@ -1,0 +1,204 @@
+.dashboard {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3);
+  cursor: pointer;
+  transition: background var(--transition-normal);
+}
+
+.header:hover {
+  background: var(--bg-elevated);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.miniIndicators {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.miniDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  transition: background var(--transition-normal);
+}
+
+.expandIcon {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.content {
+  padding: var(--space-3);
+  padding-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  animation: slideDown var(--transition-normal) ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Metric Row */
+.metricRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.metricLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.metricName {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.metricValue {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.metricBar {
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.metricFill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease-out;
+}
+
+/* Status Colors */
+.statusGood {
+  color: var(--accent-green);
+}
+
+.statusGood.metricFill,
+.statusGood.miniDot {
+  background: var(--accent-green);
+}
+
+.statusWarning {
+  color: var(--accent-yellow);
+}
+
+.statusWarning.metricFill,
+.statusWarning.miniDot {
+  background: var(--accent-yellow);
+}
+
+.statusCritical {
+  color: var(--accent-red);
+}
+
+.statusCritical.metricFill,
+.statusCritical.miniDot {
+  background: var(--accent-red);
+}
+
+/* Stats Grid */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-primary);
+}
+
+.statValue {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.statLabel {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* History Section */
+.historySection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.historyLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 32px;
+  padding: var(--space-1) 0;
+}
+
+.sparklineBar {
+  flex: 1;
+  min-height: 2px;
+  background: var(--accent-cyan);
+  border-radius: 1px 1px 0 0;
+  opacity: 0.6;
+  transition: height 0.2s ease-out;
+}
+
+.sparklineBar:last-child {
+  opacity: 1;
+}

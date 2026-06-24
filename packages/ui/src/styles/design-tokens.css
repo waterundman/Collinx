@@ -1,0 +1,182 @@
+/* ============================================================
+   Collinx Design Tokens — Unified Dark Theme
+   ============================================================ */
+
+:root {
+  /* ---- Background ---- */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111118;
+  --bg-surface: #16161e;
+  --bg-elevated: #1c1c26;
+  --bg-overlay: #22222e;
+  --bg-active: #1a2332;
+  --bg-error: #271515;
+  --bg-warning: #1e1a10;
+
+  /* ---- Component ---- */
+  --button-bg: #2a2a36;
+  --button-text: #e8e8ec;
+
+  /* ---- Text ---- */
+  --text-primary: #e8e8ec;
+  --text-secondary: #a0a0a8;
+  --text-muted: #66666e;
+  --text-disabled: #44444e;
+
+  /* ---- Accent ---- */
+  --accent-cyan: #00d4ff;
+  --accent-cyan-hover: #33ddff;
+  --accent-cyan-dark: #006680;
+  --accent-cyan-light: #33dfff;
+  --accent-green: #22c55e;
+  --accent-green-light: #2ecc71;
+  --accent-red: #ef4444;
+  --accent-red-light: #e74c3c;
+  --accent-red-pale: #f87171;
+  --accent-yellow: #f59e0b;
+  --accent-yellow-light: #f1c40f;
+  --accent-purple: #a29bfe;
+  --accent-purple-dark: #6c5ce7;
+  --accent-purple-light: #7c6cf7;
+  --accent-blue: #0984e3;
+  --accent-blue-light: #3498db;
+  --accent-orange: #e17055;
+  --accent-orange-dark: #e67e22;
+  --accent-amber: #f39c12;
+  --accent-pink: #fd79a8;
+  --accent-gold: #fdcb6e;
+  --accent-peach: #fab1a0;
+  --accent-mint: #55efc4;
+  --accent-teal: #00cec9;
+  --accent-sky: #00b8e0;
+  --accent-sky-light: #74b9ff;
+  --accent-lavender: #7c7cf7;
+  --accent-lavender-light: #b8a9fe;
+  --accent-cyan-pale: #81ecec;
+  --accent-hot-pink: #ff0040;
+  --accent-peach-light: #ff7675;
+  --accent-magenta: #fd79a8;
+
+  /* ---- Semantic Colors (for canvas/charts) ---- */
+  --canvas-bg: #0a0a0a;
+  --canvas-grid: #3a3a48;
+  --canvas-node-default: #66666e;
+  --canvas-highlight: #00d4ff;
+
+  /* ---- Section Colors (ArrangementView) ---- */
+  --section-verse: #74b9ff;
+  --section-chorus: #fdcb6e;
+  --section-bridge: #55efc4;
+  --section-intro: #b2bec3;
+  --section-outro: #a29bfe;
+  --section-prechorus: #ff7675;
+  --section-breakdown: #00cec9;
+  --section-interlude: #fab1a0;
+  --section-outro-chorus: #e17055;
+  --section-build-up: #6c5ce7;
+  --section-drop: #fd79a8;
+  --section-solo: #ffeaa7;
+
+  /* ---- Domain Colors (KnowledgeGraph) ---- */
+  --domain-harmony: #74b9ff;
+  --domain-melody: #fdcb6e;
+  --domain-rhythm: #55efc4;
+  --domain-texture: #a29bfe;
+  --domain-timbre: #fd79a8;
+  --domain-form: #fab1a0;
+  --domain-mix: #81ecec;
+  --domain-reject: #e74c3c;
+
+  /* ---- Node Type Colors (KnowledgeGraph) ---- */
+  --node-phrase: #00d4ff;
+  --node-motif: #22c55e;
+  --node-track: #a0a0a8;
+  --node-export-version: #a29bfe;
+  --node-taste-evidence: #f59e0b;
+
+  /* ---- Gradient Stops ---- */
+  --gradient-blue-start: #3498db;
+  --gradient-blue-end: #2471a3;
+  --gradient-green-start: #2ecc71;
+  --gradient-green-end: #1e8449;
+  --gradient-yellow-start: #f1c40f;
+  --gradient-yellow-end: #b7950b;
+  --gradient-orange-start: #e67e22;
+  --gradient-orange-end: #a05a17;
+  --gradient-red-start: #e74c3c;
+  --gradient-red-end: #a93226;
+
+  /* ---- Piano Keys ---- */
+  --piano-white: #e8e8e8;
+  --piano-white-playing: #ffeaa7;
+  --piano-black: #222222;
+  --piano-black-border: #111111;
+  --piano-black-playing: #fdcb6e;
+
+  /* ---- ABPlayer States ---- */
+  --ab-reference: #00b894;
+  --ab-compare: #7c7cf7;
+  --ab-different: #e17055;
+  --ab-same: #0984e3;
+  --ab-unknown: #636e72;
+  --ab-reference-bg: rgba(0, 184, 148, 0.13);
+  --ab-compare-bg: rgba(124, 124, 247, 0.13);
+  --ab-different-bg: rgba(225, 112, 85, 0.13);
+  --ab-same-bg: rgba(9, 132, 227, 0.13);
+  --ab-unknown-bg: rgba(99, 110, 114, 0.13);
+
+  /* ---- Permission Badge States ---- */
+  --accent-green-bg: rgba(34, 197, 94, 0.15);
+  --accent-yellow-bg: rgba(245, 158, 11, 0.15);
+  --accent-red-bg: rgba(239, 68, 68, 0.15);
+
+  /* ---- Plugin Mockup ---- */
+  --mockup-bg-start: #1a1f2e;
+  --mockup-bg-end: #0d1117;
+  --mockup-surface-start: #2a3040;
+  --mockup-surface-end: #1a1f2e;
+
+  /* ---- Border ---- */
+  --border-primary: #2a2a36;
+  --border-secondary: #3a3a48;
+  --border-focus: #00d4ff;
+
+  /* ---- Spacing ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---- Radius ---- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* ---- Shadow ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* ---- Transition ---- */
+  --transition-fast: 100ms;
+  --transition-normal: 200ms;
+  --transition-slow: 300ms;
+
+  /* ---- Easing ---- */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* ---- Font Families ---- */
+  --font-display: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+}

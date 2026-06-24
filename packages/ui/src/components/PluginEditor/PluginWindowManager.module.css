@@ -1,0 +1,146 @@
+.manager {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 900;
+}
+
+.windowLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.windowWrapper {
+  position: absolute;
+  inset: 0;
+}
+
+/* Taskbar for minimized windows */
+.taskbar {
+  position: fixed;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--space-2);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  z-index: 1100;
+}
+
+.taskbarItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.taskbarItem:hover {
+  border-color: var(--accent-cyan);
+  background: var(--bg-primary);
+}
+
+.taskbarIcon {
+  font-size: 14px;
+}
+
+.taskbarLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Window list sidebar */
+.windowList {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 200px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  z-index: 1100;
+}
+
+.windowListTitle {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: var(--space-2);
+}
+
+.windowListItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.windowListItem:hover {
+  background: var(--bg-elevated);
+}
+
+.windowListItemActive {
+  background: var(--bg-elevated);
+}
+
+.windowListItemMinimized {
+  opacity: 0.6;
+}
+
+.windowListDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--accent-cyan);
+  flex-shrink: 0;
+}
+
+.windowListItemMinimized .windowListDot {
+  background: var(--text-muted);
+}
+
+.windowListName {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.windowListBadge {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+}

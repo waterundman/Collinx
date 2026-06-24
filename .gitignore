@@ -1,0 +1,18 @@
+node_modules
+dist
+build
+.turbo
+*.log
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+coverage
+test-results
+playwright-report
+
+# Test screenshots
+*.png
+!icon.png
+
+# Docs
+docs/

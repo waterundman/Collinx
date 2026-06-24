@@ -1,0 +1,27 @@
+{
+  "name": "@collinx/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/pdfkit": "^0.13.0",
+    "eslint": "^8.57.0",
+    "tsup": "^8.0.0",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "pdfkit": "^0.19.1",
+    "zod": "^3.23.0"
+  }
+}

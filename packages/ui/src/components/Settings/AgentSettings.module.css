@@ -1,0 +1,277 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.settingRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.settingHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.settingLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settingDescription {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.settingControl {
+  min-width: 200px;
+}
+
+/* Select Control */
+.selectControl {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast) var(--ease-standard);
+}
+
+.selectControl:focus {
+  border-color: var(--accent-cyan);
+}
+
+/* Checkbox Control */
+.checkboxControl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.checkboxInput {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.checkboxLabel {
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* Range Control */
+.rangeControl {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-full);
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.rangeControl::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--accent-cyan);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.rangeControl::-webkit-slider-thumb:hover {
+  background: var(--accent-blue);
+}
+
+.rangeControl::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent-cyan);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  border: none;
+  transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.rangeControl::-moz-range-thumb:hover {
+  background: var(--accent-blue);
+}
+
+.rangeLabels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-1);
+}
+
+.rangeLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Info Box */
+.infoBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.infoLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.infoValue {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-cyan);
+}
+
+/* Permission Badge */
+.permissionBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  background: var(--bg-overlay);
+  color: var(--text-secondary);
+}
+
+.permissionBadgeSafe {
+  background: var(--accent-green-bg);
+  color: var(--accent-green);
+}
+
+.permissionBadgeWarning {
+  background: var(--accent-yellow-bg);
+  color: var(--accent-yellow);
+}
+
+.permissionBadgeDanger {
+  background: var(--accent-red-bg);
+  color: var(--accent-red);
+}
+
+/* Reset Button */
+.resetButton {
+  padding: var(--space-2) var(--space-4);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast) var(--ease-standard);
+  align-self: flex-start;
+}
+
+.resetButton:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-red);
+}
+
+/* Export/Import Buttons */
+.actionButtons {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.actionButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast) var(--ease-standard);
+}
+
+.actionButton:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-cyan);
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actionIcon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .settingHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .settingControl {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .actionButtons {
+    flex-direction: column;
+  }
+
+  .actionButton {
+    width: 100%;
+  }
+}

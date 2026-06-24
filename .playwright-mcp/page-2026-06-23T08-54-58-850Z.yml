@@ -1,0 +1,134 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]: Collinx
+    - generic [ref=e6]: v0.6.0
+    - generic [ref=e7]:
+      - button "编曲" [ref=e8] [cursor=pointer]
+      - button "编排" [ref=e9] [cursor=pointer]
+      - button "编制" [ref=e10] [cursor=pointer]
+      - button "混音" [ref=e11] [cursor=pointer]
+      - button "乐谱" [ref=e12] [cursor=pointer]
+      - button "口味档案" [ref=e13] [cursor=pointer]
+      - button "教学" [ref=e14] [cursor=pointer]
+      - button "Agent" [ref=e15] [cursor=pointer]
+      - button "Graph" [ref=e16] [cursor=pointer]
+    - generic [ref=e17]: 21 音符
+  - generic [ref=e18]:
+    - generic [ref=e21]:
+      - generic [ref=e39]: "1"
+      - generic [ref=e40]: "5"
+      - generic [ref=e41]: "9"
+      - generic [ref=e42]: "13"
+      - generic [ref=e43]: "17"
+      - 'generic "Intro (引子) 小节: 1-1 能量: —" [ref=e44] [cursor=pointer]':
+        - generic: Intro
+        - generic [ref=e45]: 引子
+      - 'generic "Verse A (主歌) 小节: 2-3 能量: —" [ref=e46] [cursor=pointer]':
+        - generic [ref=e47]: Verse A
+        - generic [ref=e48]: 主歌
+      - 'generic "Chorus (副歌) 小节: 4-5 能量: —" [ref=e49] [cursor=pointer]':
+        - generic [ref=e50]: Chorus
+        - generic [ref=e51]: 副歌
+      - 'generic "Verse B (主歌) 小节: 6-7 能量: —" [ref=e52] [cursor=pointer]':
+        - generic [ref=e53]: Verse B
+        - generic [ref=e54]: 主歌
+      - 'generic "Bridge (桥段) 小节: 8-9 能量: —" [ref=e55] [cursor=pointer]':
+        - generic [ref=e56]: Bridge
+        - generic [ref=e57]: 桥段
+      - 'generic "Final Chorus (尾副歌) 小节: 10-12 能量: —" [ref=e58] [cursor=pointer]':
+        - generic [ref=e59]: Final Chorus
+        - generic [ref=e60]: 尾副歌
+      - 'generic "Outro (尾奏) 小节: 13-14 能量: —" [ref=e61] [cursor=pointer]':
+        - generic [ref=e62]: Outro
+        - generic [ref=e63]: 尾奏
+    - generic [ref=e64]:
+      - generic [ref=e66]:
+        - generic [ref=e67]:
+          - generic [ref=e68]:
+            - button "数据视图" [ref=e69] [cursor=pointer]
+            - button "渲染视图" [ref=e70] [cursor=pointer]
+          - generic [ref=e71]: 21 音符 · 2 谱表
+        - generic [ref=e73]:
+          - generic [ref=e74]:
+            - generic [ref=e75]: 五线谱预览
+            - generic [ref=e76]: 210×297mm
+          - generic [ref=e78]:
+            - generic [ref=e79]: ♯
+            - generic [ref=e80]: 渲染引擎处理中 — 21 个音符已加载
+            - generic [ref=e81]: 使用 VexFlow 渲染引擎进行完整乐谱渲染
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]: Tools
+          - button "Select" [ref=e86] [cursor=pointer]
+          - button "Draw" [ref=e87] [cursor=pointer]
+          - generic [ref=e88]: Quantize
+          - combobox [ref=e89]:
+            - option "1/4" [selected]
+            - option "1/8"
+            - option "1/16"
+          - generic [ref=e90]: Zoom
+          - button "-" [ref=e91] [cursor=pointer]
+          - button "+" [ref=e92] [cursor=pointer]
+          - generic [ref=e93]: 1-8
+        - generic [ref=e95]:
+          - generic:
+            - generic "C1" [ref=e96]
+            - generic "D1" [ref=e98]
+            - generic "E1" [ref=e100]
+            - generic "F1" [ref=e101]
+            - generic "G1" [ref=e103]
+            - generic "A1" [ref=e105]
+            - generic "B1" [ref=e107]
+            - generic "C2" [ref=e108]
+            - generic "D2" [ref=e110]
+            - generic "E2" [ref=e112]
+            - generic "F2" [ref=e113]
+            - generic "G2" [ref=e115]
+            - generic "A2" [ref=e117]
+            - generic "B2" [ref=e119]
+            - generic "C3" [ref=e120]
+            - generic "D3" [ref=e122]
+            - generic "E3" [ref=e124]
+            - generic "F3" [ref=e125]
+            - generic "G3" [ref=e127]
+            - generic "A3" [ref=e129]
+            - generic "B3" [ref=e131]
+            - generic "C4" [ref=e132]
+            - generic "D4" [ref=e134]
+            - generic "E4" [ref=e136]
+            - generic "F4" [ref=e137]
+            - generic "G4" [ref=e139]
+            - generic "A4" [ref=e141]
+            - generic "B4" [ref=e143]
+            - generic "C5" [ref=e144]
+            - generic "D5" [ref=e146]
+            - generic "E5" [ref=e148]
+            - generic "F5" [ref=e149]
+            - generic "G5" [ref=e151]
+            - generic "A5" [ref=e153]
+            - generic "B5" [ref=e155]
+            - generic "C6" [ref=e156]
+            - generic "D6" [ref=e158]
+            - generic "E6" [ref=e160]
+            - generic "F6" [ref=e161]
+            - generic "G6" [ref=e163]
+            - generic "A6" [ref=e165]
+            - generic "B6" [ref=e167]
+            - generic "C7" [ref=e168]
+            - generic "D7" [ref=e170]
+            - generic "E7" [ref=e172]
+            - generic "F7" [ref=e173]
+            - generic "G7" [ref=e175]
+            - generic "A7" [ref=e177]
+            - generic "B7" [ref=e179]
+            - generic "C8" [ref=e180]
+        - generic [ref=e183]:
+          - generic [ref=e184]: "1"
+          - generic [ref=e188]: "2"
+          - generic [ref=e192]: "3"
+          - generic [ref=e196]: "4"
+          - generic [ref=e200]: "5"
+          - generic [ref=e204]: "6"
+          - generic [ref=e208]: "7"
+          - generic [ref=e212]: "8"
+          - generic [ref=e216]: "9"

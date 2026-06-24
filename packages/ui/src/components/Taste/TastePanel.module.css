@@ -1,0 +1,663 @@
+.tastePanel {
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  overflow: hidden;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+/* ---------- Domain List (Left Sidebar) ---------- */
+.domainList {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-primary);
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.domainItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background var(--transition-normal), color var(--transition-normal);
+  border-left: 3px solid transparent;
+}
+
+.domainItem:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.domainItemActive {
+  background: var(--bg-elevated);
+  color: var(--accent-cyan);
+  border-left-color: var(--accent-cyan);
+}
+
+.domainIcon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.domainBadge {
+  margin-left: auto;
+  background: var(--border-primary);
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-lg);
+}
+
+/* ---------- Parameter Panel (Right Area) ---------- */
+.paramPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.paramHeader {
+  padding: var(--space-2) var(--space-4);
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.paramList {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+}
+
+/* ---------- Parameter Card ---------- */
+.paramCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  transition: border-color var(--transition-normal);
+}
+
+.paramCard:hover {
+  border-color: var(--border-secondary);
+}
+
+.paramCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.paramCardTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.paramCardMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.paramCardBody {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ---------- Value Bar ---------- */
+.valueBar {
+  height: 8px;
+  background: linear-gradient(90deg, var(--accent-red-light) 0%, var(--accent-amber) 30%, var(--accent-green-light) 70%, var(--accent-green) 100%);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.valueBarFill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.3);
+  position: absolute;
+  right: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.valueBarLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.valueEdit {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.valueEdit input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 3px var(--space-1);
+  width: 80px;
+  font-size: 12px;
+}
+
+.valueEdit button {
+  background: var(--border-primary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 3px var(--space-2);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.valueEdit button:hover {
+  background: var(--border-secondary);
+}
+
+/* ---------- Confidence Stars ---------- */
+.confidenceStars {
+  display: flex;
+  gap: 1px;
+}
+
+.confidenceStar {
+  color: var(--border-secondary);
+  font-size: 12px;
+}
+
+.confidenceStarFilled {
+  color: var(--accent-gold);
+  font-size: 12px;
+}
+
+/* ---------- Tags & Badges ---------- */
+.distTag {
+  background: var(--bg-surface);
+  color: var(--accent-sky-light);
+  font-size: 10px;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-primary);
+}
+
+.evidenceBadge {
+  background: var(--bg-surface);
+  color: var(--accent-mint);
+  font-size: 10px;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-primary);
+}
+
+.rejectTag {
+  background: rgba(231, 76, 60, 0.15);
+  color: var(--accent-red-light);
+  font-size: 11px;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-red-light);
+}
+
+/* ---------- Empty State ---------- */
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-10);
+  color: var(--text-disabled);
+  text-align: center;
+}
+
+.emptyStateIcon {
+  font-size: 48px;
+  margin-bottom: var(--space-4);
+  opacity: 0.4;
+}
+
+.emptyStateText {
+  font-size: 14px;
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+/* ---------- Diff Panel ---------- */
+.diffPanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.diffPanelOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.diffPanelModal {
+  width: 800px;
+  max-width: 90vw;
+  max-height: 85vh;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.diffHeader {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+}
+
+.diffTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+.diffSubtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+.diffStats {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.diffStat {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.diffStatCount {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diffBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.diffGroup {
+  margin-bottom: var(--space-3);
+}
+
+.diffGroupHeader {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.diffItem {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.diffItemCheck {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.diffDomainBadge {
+  font-size: 10px;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.diffParamLabel {
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 80px;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Compare Bar ---------- */
+.compareBar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.compareBarRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compareBarLabel {
+  font-size: 9px;
+  color: var(--text-muted);
+  width: 42px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.compareBarTrack {
+  flex: 1;
+  height: 6px;
+  background: var(--border-primary);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.compareBarFill {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.compareBarFillExport {
+  background: var(--accent-cyan);
+  opacity: 0.8;
+}
+
+.compareBarFillGenome {
+  background: var(--accent-purple);
+  opacity: 0.8;
+}
+
+.compareBarValue {
+  font-size: 10px;
+  color: var(--text-primary);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+/* ---------- Deviation Badge ---------- */
+.deviationBadge {
+  font-size: 10px;
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.deviationHigh {
+  background: rgba(231, 76, 60, 0.15);
+  color: var(--accent-red-light);
+  border: 1px solid var(--accent-red-light);
+}
+
+.deviationModerate {
+  background: rgba(243, 156, 18, 0.15);
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber);
+}
+
+.deviationMild {
+  background: rgba(241, 196, 15, 0.15);
+  color: var(--accent-yellow-light);
+  border: 1px solid var(--accent-yellow-light);
+}
+
+.deviationNone {
+  background: rgba(46, 204, 113, 0.15);
+  color: var(--accent-green-light);
+  border: 1px solid var(--accent-green-light);
+}
+
+/* ---------- Diff Actions ---------- */
+.diffActions {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.diffActionBtn {
+  background: var(--border-primary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.diffActionBtn:hover {
+  background: var(--border-secondary);
+  color: var(--text-primary);
+}
+
+.diffActionConfirm {
+  background: rgba(0, 212, 255, 0.15);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.diffActionConfirm:hover {
+  background: rgba(0, 212, 255, 0.25);
+  color: var(--accent-cyan);
+}
+
+.diffActionReject {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.diffActionReject:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+}
+
+.diffDescription {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+  padding-left: var(--space-6);
+}
+
+/* ---------- Diff Footer ---------- */
+.diffFooter {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.diffFooterLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.diffFooterLeft label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diffSubmitBtn {
+  background: var(--accent-cyan);
+  color: var(--bg-surface);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-5);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.diffSubmitBtn:hover {
+  background: var(--accent-sky);
+}
+
+.diffSubmitBtn:disabled {
+  background: var(--border-primary);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+/* ---------- Timeline Node ---------- */
+.timelineNode {
+  cursor: pointer;
+}
+
+.timelineTooltip {
+  position: absolute;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: 11px;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 140px;
+}
+
+.timelineTooltipTitle {
+  font-weight: 600;
+  color: var(--accent-cyan);
+  margin-bottom: var(--space-1);
+}
+
+.timelineTooltipRow {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ---------- Import/Export buttons ---------- */
+.timelineActions {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.timelineActionBtn {
+  background: var(--border-primary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.timelineActionBtn:hover {
+  background: var(--border-secondary);
+}
+
+.timelineRevertBtn {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--accent-red);
+  color: var(--accent-red);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.timelineRevertBtn:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* ---------- Evidence Timeline ---------- */
+.evidenceList {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border-primary);
+  padding-top: var(--space-2);
+}
+
+.evidenceItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.evidenceItemDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.evidenceItemType {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.evidenceItemTimestamp {
+  margin-left: auto;
+  color: var(--text-disabled);
+  font-size: 9px;
+}
+
+.deleteEvidenceBtn {
+  background: none;
+  border: none;
+  color: var(--text-disabled);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+}
+
+.deleteEvidenceBtn:hover {
+  color: var(--accent-red);
+}
