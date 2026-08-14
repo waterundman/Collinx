@@ -1,0 +1,32 @@
+.header {
+  padding: var(--space-1) var(--space-4);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: var(--ink);
+}
+
+.tabBar {
+  display: flex;
+  gap: 4px;
+  margin-left: var(--space-4);
+  overflow-x: auto;
+  max-width: calc(100vw - 320px);
+}
+
+.status {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-disabled);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+}

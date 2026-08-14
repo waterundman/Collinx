@@ -7,68 +7,6 @@
   font-family: var(--font-ui);
 }
 
-.header {
-  padding: var(--space-1) var(--space-4);
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-primary);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.headerBrand {
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 2px;
-  color: var(--ink);
-}
-
-.tabBar {
-  display: flex;
-  gap: 4px;
-  margin-left: var(--space-4);
-  overflow-x: auto;
-  max-width: calc(100vw - 320px);
-}
-
-.tabButton {
-  background: transparent;
-  color: var(--body-mid);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-3);
-  font-size: 12px;
-  cursor: pointer;
-  font-weight: 400;
-  white-space: nowrap;
-  transition: background var(--transition-fast) var(--ease-standard),
-    color var(--transition-fast) var(--ease-standard),
-    border-color var(--transition-fast) var(--ease-standard);
-}
-
-.tabButton:hover {
-  color: var(--ink);
-  border-color: rgba(255, 255, 255, 0.25);
-  background: var(--canvas-soft);
-}
-
-.tabButtonActive,
-.tabButtonActive:hover {
-  background: var(--ink);
-  color: var(--canvas);
-  border-color: var(--ink);
-  font-weight: 500;
-}
-
-.headerStatus {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-disabled);
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  letter-spacing: 1px;
-}
-
 .composeLayout {
   display: flex;
   flex: 1;

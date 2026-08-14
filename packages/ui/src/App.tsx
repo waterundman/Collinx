@@ -27,6 +27,7 @@ import type { UserLevel } from "./components/Teaching";
 import { AgentPanel, AgentChat, ToolCallTimeline } from "./components/Agent";
 import { GraphView, NodeDetail } from "./components/KnowledgeGraph";
 import type { ConnectedNode, GraphData } from "./components/KnowledgeGraph";
+import { TopBar, TabPill } from "./components/Shell";
 import styles from "./App.module.css";
 import {
   demoPhrases,
@@ -389,26 +390,18 @@ export function App() {
 
   return (
     <div className={styles.appRoot}>
-      <header className={styles.header}>
-        <span className={styles.headerBrand}>Collinx</span>
-
-        <div className={styles.tabBar} data-testid="tab-bar">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              data-testid={`tab-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
-              className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabButtonActive : ""}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <span className={styles.headerStatus} data-testid="header-status">
-          {headerStatus}
-        </span>
-      </header>
+      <TopBar brand="Collinx" status={headerStatus}>
+        {tabs.map((tab) => (
+          <TabPill
+            key={tab.id}
+            id={tab.id}
+            active={activeTab === tab.id}
+            onSelect={setActiveTab}
+          >
+            {tab.label}
+          </TabPill>
+        ))}
+      </TopBar>
 
       {activeTab === "compose" && (
         <div className={styles.composeLayout} data-testid="compose-layout">

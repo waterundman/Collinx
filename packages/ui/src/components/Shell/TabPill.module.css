@@ -1,0 +1,28 @@
+.pill {
+  background: transparent;
+  color: var(--body-mid);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 400;
+  white-space: nowrap;
+  transition: background var(--transition-fast) var(--ease-standard),
+    color var(--transition-fast) var(--ease-standard),
+    border-color var(--transition-fast) var(--ease-standard);
+}
+
+.pill:hover {
+  color: var(--ink);
+  border-color: rgba(255, 255, 255, 0.25);
+  background: var(--canvas-soft);
+}
+
+.pillActive,
+.pillActive:hover {
+  background: var(--ink);
+  color: var(--canvas);
+  border-color: var(--ink);
+  font-weight: 500;
+}
