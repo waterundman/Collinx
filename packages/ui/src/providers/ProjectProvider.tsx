@@ -36,6 +36,12 @@ import {
   type OrchestratorConflict,
   type OrchestratorConfigInput,
   type OrchestratorRunResult,
+  type EngravingRunResult,
+  type TeachingConfigInput,
+  type TeachingRunResult,
+  convertAgentCollisions,
+  convertAgentExplanation,
+  EMPTY_UI_EXPLANATION,
 } from "../store/project-store";
 import { createDemoNotes } from "../data/demoData";
 import { createBrowserTasteFsAdapter } from "../services/tasteFsAdapter";
@@ -524,6 +530,58 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           confidence:
             typeof result.confidence === "number" ? result.confidence : undefined,
           diffs,
+        };
+      },
+      // Stage 0 (v1.14): Score panel closed loop. Routes the auto-layout
+      // request through the real engraving.reportCollisions tool on the shared
+      // ToolRegistry, so the invocation (running + success) shows up in the
+      // tool-call timeline. The agent-side collisions are converted to the UI
+      // UiCollisionWarning shape (see convertAgentCollisions); suggestions are
+      // passed through unchanged.
+      runEngraving: async (layoutId: string): Promise<EngravingRunResult> => {
+        const result = await toolRegistry.call(
+          "engraving.reportCollisions",
+          { layoutId },
+          { type: "user", name: "score-panel" },
+        );
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        return {
+          status: result.status,
+          collisions: convertAgentCollisions(data.collisions),
+          suggestions: Array.isArray(data.suggestions)
+            ? (data.suggestions as string[])
+            : [],
+          confidence:
+            typeof result.confidence === "number" ? result.confidence : undefined,
+          raw: data,
+        };
+      },
+      // v1.14 Stage 1: Teaching panel closed loop. Routes the panel request
+      // through the real teaching.explainDecision tool on the shared
+      // ToolRegistry, so the invocation (running + success) shows up in the
+      // tool-call timeline. The agent-side Explanation is converted to the UI
+      // UiExplanation shape (see convertAgentExplanation); on failure the
+      // result carries EMPTY_UI_EXPLANATION + status "error" so the panel can
+      // render an explicit error state instead of template content.
+      runTeaching: async (
+        config: TeachingConfigInput,
+      ): Promise<TeachingRunResult> => {
+        const result = await toolRegistry.call(
+          "teaching.explainDecision",
+          {
+            diffId: config.diffId,
+            userLevel: config.userLevel,
+            compareWithAlt: config.compareWithAlt ?? false,
+          },
+          { type: "user", name: "teaching-panel" },
+        );
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        return {
+          status: result.status,
+          explanation: convertAgentExplanation(data) ?? EMPTY_UI_EXPLANATION,
+          confidence:
+            typeof result.confidence === "number" ? result.confidence : undefined,
+          raw: data,
         };
       },
       // TasteStore mutations run imperatively on the shared instance (it is a

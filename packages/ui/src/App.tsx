@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useI18n } from "./i18n";
 import {
   NoteEvent,
@@ -38,7 +38,9 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import type {
   ArrangerConfigInput,
   ArrangerRunResult,
+  UiExplanation,
 } from "./store/project-store";
+import { mapUiLevelToAgent } from "./store/project-store";
 
 type TabId = "compose" | "arrange" | "orchestrate" | "mixer" | "score" | "taste" | "teaching" | "agent" | "graph";
 
@@ -68,6 +70,14 @@ export function App() {
     toolCalls,
     actions,
   } = useProjectStore();
+
+  // v1.14: the store rebuilds `actions` whenever its state changes (RECORD_TOOL_CALL
+  // from a tool run mutates state), so the actions reference is unstable across
+  // renders. Reading it through a ref keeps the teaching effect's dependency
+  // array stable — otherwise actions.runTeaching -> RECORD_TOOL_CALL -> state
+  // change -> actions rebuilt -> effect re-run forms an infinite loop.
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
 
   // Stage 2: global Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) composite undo/redo.
   // Input/textarea/contentEditable targets are excluded inside the hook, so
@@ -99,7 +109,15 @@ export function App() {
   const [arrangerDiff, setArrangerDiff] = useState<DiffEnvelope | null>(null);
   const [orchestratorConflicts, setOrchestratorConflicts] = useState<RegisterConflict[] | undefined>(undefined);
   const [scoreCollisions, setScoreCollisions] = useState<CollisionWarning[]>([]);
+  // v1.14: transient status line for the Score panel (auto-layout results,
+  // pending part-extraction / MusicXML export notices). Null hides it.
+  const [scoreNotice, setScoreNotice] = useState<string | null>(null);
   const [userLevel, setUserLevel] = useState<UserLevel>("intermediate");
+  // v1.14 Stage 1: Teaching panel state, fed by the real teaching.explainDecision
+  // tool run in the effect below (never template content).
+  const [teachingExplanation, setTeachingExplanation] = useState<UiExplanation | null>(null);
+  const [teachingLoading, setTeachingLoading] = useState(false);
+  const [teachingError, setTeachingError] = useState<string | null>(null);
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
 
   const defaultLayout = useMemo(() => createDefaultLayout(), []);
@@ -272,35 +290,77 @@ export function App() {
     setActiveTab("agent");
   }, [actions]);
 
-  const handleAutoLayout = useCallback(() => {
-    const sampleCollisions: CollisionWarning[] = [
-      {
-        type: "symbol_overlap",
-        staveIndex: 0,
-        bar: 2,
-        beat: 1,
-        description: "F#4 notehead collides with B4 notehead",
-        severity: "error",
-        fixSuggestion: "Offset F#4 by +1 unit or adjust width",
-      },
-      {
-        type: "slur_cross",
-        staveIndex: 0,
-        bar: 1,
-        beat: 3,
-        description: "Slur crosses rest, creating ambiguity",
-        severity: "warning",
-        fixSuggestion: "Split slur into two segments to avoid crossing rest",
-      },
-    ];
-    setScoreCollisions(sampleCollisions);
-  }, []);
+  // Stage 0 (v1.14): the Score panel runs the real Engraving agent through the
+  // shared ToolRegistry (engraving.reportCollisions). The returned collisions
+  // come from the agent's EngravingEngine (converted to the UI shape by the
+  // store action), not from sample data; suggestions are surfaced as a status
+  // line, and a tool failure keeps the panel alive with a hint instead of a
+  // crash.
+  const handleAutoLayout = useCallback(async () => {
+    setScoreNotice(null);
+    const result = await actions.runEngraving(defaultLayout.id);
+    if (result.status === "ok") {
+      setScoreCollisions(result.collisions);
+      if (result.suggestions.length > 0) {
+        setScoreNotice(result.suggestions.join(" · "));
+      }
+    } else {
+      setScoreCollisions([]);
+      setScoreNotice(t("app.score.runFailed"));
+    }
+  }, [actions, defaultLayout.id, t]);
 
+  // v1.14: part extraction / MusicXML export are not wired to a real tool yet.
+  // Keep the buttons alive with an explicit notice so the user is never
+  // silently left with nothing happening (no bare no-op stubs).
   const handleExtractParts = useCallback(() => {
-  }, []);
+    setScoreNotice(t("app.score.extractPartsPending"));
+  }, [t]);
 
   const handleExportMusicXML = useCallback(() => {
-  }, []);
+    setScoreNotice(t("app.score.exportMusicXMLPending"));
+  }, [t]);
+
+  // v1.14 Stage 1: Teaching panel real tool loop. Whenever the active diff or
+  // the user level changes, re-run teaching.explainDecision through the store
+  // action (userLevel mapped from the UI enum: professional -> expert) and
+  // surface loading/error/explanation to the panel. Without an active diff the
+  // panel falls back to its empty-state guidance instead of template content.
+  useEffect(() => {
+    if (!arrangerDiff) {
+      setTeachingExplanation(null);
+      setTeachingLoading(false);
+      setTeachingError(null);
+      return;
+    }
+    let cancelled = false;
+    setTeachingExplanation(null);
+    setTeachingLoading(true);
+    setTeachingError(null);
+    actionsRef.current
+      .runTeaching({
+        diffId: arrangerDiff.diffId,
+        userLevel: mapUiLevelToAgent(userLevel),
+        compareWithAlt: true,
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setTeachingLoading(false);
+        if (result.status === "ok") {
+          setTeachingExplanation(result.explanation);
+        } else {
+          setTeachingError(t("app.teaching.runFailed"));
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTeachingLoading(false);
+        setTeachingError(t("app.teaching.runFailed"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [arrangerDiff, userLevel, t]);
 
   const headerStatus = useMemo(() => {
     switch (activeTab) {
@@ -471,6 +531,14 @@ export function App() {
 
       {activeTab === "score" && (
         <div className={styles.mixerFill} data-testid="score-layout">
+          {scoreNotice && (
+            <div className={styles.diffInfoBox} data-testid="score-notice">
+              <div className={styles.diffInfoTitle}>
+                {t("app.score.noticeTitle")}
+              </div>
+              <div className={styles.diffInfoSummary}>{scoreNotice}</div>
+            </div>
+          )}
           <ScorePanel
             layout={defaultLayout}
             notes={notes}
@@ -520,6 +588,11 @@ export function App() {
             activeDiff={arrangerDiff ?? undefined}
             userLevel={userLevel}
             onLevelChange={setUserLevel}
+            explanation={teachingExplanation}
+            alternatives={teachingExplanation?.alternatives ?? []}
+            relatedConcepts={teachingExplanation?.conceptTags ?? []}
+            loading={teachingLoading}
+            error={teachingError}
           />
         </div>
       )}

@@ -203,6 +203,264 @@ export interface ArrangerRunResult {
   diffs: DiffEnvelope[];
 }
 
+// ---------------------------------------------------------------------------
+// Stage 0 (v1.14): Score panel -> real Engraving tool bridge
+// ---------------------------------------------------------------------------
+
+/** UI-facing collision warning shape. Structurally identical to the
+ *  CollisionWarning exported by components/Score; the store keeps its own copy
+ *  so it never imports a component module. */
+export interface UiCollisionWarning {
+  type: "symbol_overlap" | "slur_cross" | "dynamic_clash" | "articulation_conflict";
+  staveIndex: number;
+  bar: number;
+  beat: number;
+  description: string;
+  severity: "warning" | "error";
+  fixSuggestion: string;
+}
+
+/** Parsed outcome of a real Engraving run (engraving.reportCollisions tool).
+ *  `collisions` are the agent-side CollisionWarnings converted to the UI
+ *  UiCollisionWarning shape (see convertAgentCollisions); `suggestions` are
+ *  passed through unchanged. */
+export interface EngravingRunResult {
+  status: "ok" | "error";
+  collisions: UiCollisionWarning[];
+  suggestions: string[];
+  confidence: number | undefined;
+  raw: unknown;
+}
+
+/** Fallback suggestion text when the agent's CollisionWarning carries no fix. */
+export const DEFAULT_FIX_SUGGESTION = "（无自动修复建议）";
+
+// ---------------------------------------------------------------------------
+// v1.14 Stage 1: Teaching panel -> real Teaching tool bridge
+// ---------------------------------------------------------------------------
+
+/** Store-facing teaching config. userLevel is already the agent enum: the UI
+ *  side only knows "professional", which the caller maps to agent "expert"
+ *  before invoking this action (see mapUiLevelToAgent). */
+export interface TeachingConfigInput {
+  diffId: string;
+  userLevel: "beginner" | "intermediate" | "advanced" | "expert";
+  compareWithAlt?: boolean;
+}
+
+/** UI-facing alternative approach produced by the Teaching agent. Structural
+ *  mirror of the TeachingPanel's AlternativeApproach (the agent's
+ *  `description` becomes `name`). */
+export interface UiAlternativeApproach {
+  name: string;
+  pros: string[];
+  cons: string[];
+}
+
+/** UI-facing explanation produced by the Teaching agent. Structural mirror of
+ *  the TeachingPanel's ExplanationSection plus its alternatives, so App.tsx
+ *  can hand `explanation` straight to the panel. */
+export interface UiExplanation {
+  title: string;
+  overview: string;
+  detail: string;
+  conceptTags: string[];
+  examples: string[];
+  alternatives: UiAlternativeApproach[];
+}
+
+/** Parsed outcome of a real Teaching run (teaching.explainDecision tool).
+ *  `explanation` is the agent-side Explanation converted to the UI
+ *  UiExplanation shape (see convertAgentExplanation); on failure it is the
+ *  EMPTY_UI_EXPLANATION so consumers only need to branch on status. */
+export interface TeachingRunResult {
+  status: "ok" | "error";
+  explanation: UiExplanation;
+  confidence: number | undefined;
+  raw: unknown;
+}
+
+/** Empty explanation surfaced on tool failure / malformed payload so the
+ *  TeachingPanel never has to render a half-built explanation. */
+export const EMPTY_UI_EXPLANATION: UiExplanation = {
+  title: "",
+  overview: "",
+  detail: "",
+  conceptTags: [],
+  examples: [],
+  alternatives: [],
+};
+
+/**
+ * Maps the UI-side UserLevel to the agent's UserLevel enum. The UI exposes
+ * four levels ending in "professional", while the agent only knows four
+ * levels ending in "expert", so professional -> expert and everything else
+ * passes through unchanged. Unknown values fall back to "intermediate" (the
+ * agent's default) so a future UI level can never crash the tool call.
+ */
+export function mapUiLevelToAgent(
+  level: unknown
+): TeachingConfigInput["userLevel"] {
+  if (level === "professional") return "expert";
+  if (
+    level === "beginner" ||
+    level === "intermediate" ||
+    level === "advanced"
+  ) {
+    return level;
+  }
+  return "intermediate";
+}
+
+/**
+ * Converts ONE agent-side AlternativeApproach (teaching-agent.ts) to the UI
+ * UiAlternativeApproach shape. `description` becomes `name`; `example` is
+ * dropped (the UI panel does not render it). Returns null when the payload is
+ * not a valid alternative object.
+ */
+export function convertAgentAlternative(
+  raw: unknown
+): UiAlternativeApproach | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const a = raw as Record<string, unknown>;
+  if (typeof a.description !== "string") return null;
+  return {
+    name: a.description,
+    pros: Array.isArray(a.pros)
+      ? a.pros.filter((p): p is string => typeof p === "string")
+      : [],
+    cons: Array.isArray(a.cons)
+      ? a.cons.filter((c): c is string => typeof c === "string")
+      : [],
+  };
+}
+
+/**
+ * Converts the raw `data` payload of the teaching.explainDecision tool into
+ * the UI UiExplanation shape. Field mapping (agent -> UI):
+ *   title        -> title
+ *   summary      -> overview
+ *   detail       -> detail
+ *   concepts     -> conceptTags
+ *   alternatives -> alternatives (description -> name; example dropped)
+ *   level        -> NOT written back (the UI explanation has no level field)
+ * Returns null when the payload is not a valid explanation object, so the
+ * caller can fall back to EMPTY_UI_EXPLANATION instead of crashing.
+ */
+export function convertAgentExplanation(raw: unknown): UiExplanation | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const e = raw as Record<string, unknown>;
+  if (
+    typeof e.title !== "string" ||
+    typeof e.summary !== "string" ||
+    typeof e.detail !== "string"
+  ) {
+    return null;
+  }
+  return {
+    title: e.title,
+    overview: e.summary,
+    detail: e.detail,
+    conceptTags: Array.isArray(e.concepts)
+      ? e.concepts.filter((c): c is string => typeof c === "string")
+      : [],
+    examples: Array.isArray(e.examples)
+      ? e.examples.filter((x): x is string => typeof x === "string")
+      : [],
+    alternatives: Array.isArray(e.alternatives)
+      ? e.alternatives
+          .map(convertAgentAlternative)
+          .filter((a): a is UiAlternativeApproach => a !== null)
+      : [],
+  };
+}
+
+/**
+ * Semantic mapping from the agent-side collision types (EngravingAgent's
+ * CollisionWarning in @collinx/agent) to the UI-side ScorePanel collision
+ * types. The agent emits six fine-grained categories while the UI panel only
+ * knows four visual categories, so several agent types converge onto one UI
+ * type:
+ *
+ * | agent type              | UI type                 | rationale                          |
+ * |-------------------------|-------------------------|------------------------------------|
+ * | overlap                 | symbol_overlap          | 音符/符号重叠                      |
+ * | accidental_conflict     | symbol_overlap          | 临时记号冲突也是符号重叠           |
+ * | voice_crossing          | slur_cross              | 声部/线条交叉冲突                  |
+ * | spacing                 | articulation_conflict   | 间距/符干问题归类为发音法冲突      |
+ * | stem_direction          | articulation_conflict   | 符干方向即发音法排版               |
+ * | range_violation         | dynamic_clash           | 音域越界属演奏层面冲突             |
+ *
+ * Unknown types fall back to symbol_overlap (defensive; the agent type union
+ * is closed, so this is only reachable with hand-crafted payloads).
+ */
+export const AGENT_TYPE_TO_UI_TYPE: Record<string, UiCollisionWarning["type"]> = {
+  voice_crossing: "slur_cross",
+  range_violation: "dynamic_clash",
+  overlap: "symbol_overlap",
+  spacing: "articulation_conflict",
+  stem_direction: "articulation_conflict",
+  accidental_conflict: "symbol_overlap",
+};
+
+/**
+ * Severity mapping: the agent also emits "info"; the UI panel only knows
+ * "warning" / "error", so info is escalated to warning.
+ */
+export function mapAgentSeverity(
+  severity: unknown
+): UiCollisionWarning["severity"] {
+  if (severity === "error") return "error";
+  return "warning"; // "warning" | "info" | unknown -> warning
+}
+
+/**
+ * Converts ONE agent-side collision payload (from the
+ * engraving.reportCollisions tool) to the UI UiCollisionWarning shape.
+ * Returns null when the payload is not a valid collision object. fix -> 
+ * fixSuggestion, severity info -> warning, staveIndex defaults to 0 (the agent
+ * collisions carry no stave information).
+ */
+export function convertAgentCollision(raw: unknown): UiCollisionWarning | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const c = raw as Record<string, unknown>;
+  if (
+    typeof c.bar !== "number" ||
+    typeof c.beat !== "number" ||
+    typeof c.description !== "string"
+  ) {
+    return null;
+  }
+  const typeName = typeof c.type === "string" ? c.type : "";
+  return {
+    type: AGENT_TYPE_TO_UI_TYPE[typeName] ?? "symbol_overlap",
+    staveIndex: 0,
+    bar: c.bar,
+    beat: c.beat,
+    description: c.description,
+    severity: mapAgentSeverity(c.severity),
+    fixSuggestion:
+      typeof c.fix === "string" && c.fix.length > 0
+        ? c.fix
+        : DEFAULT_FIX_SUGGESTION,
+  };
+}
+
+/**
+ * Converts the raw `collisions` payload of the engraving.reportCollisions tool
+ * into UI-shaped UiCollisionWarning[]. Non-object / malformed entries are
+ * dropped so a partially malformed tool payload cannot crash the panel.
+ */
+export function convertAgentCollisions(data: unknown): UiCollisionWarning[] {
+  if (!Array.isArray(data)) return [];
+  const out: UiCollisionWarning[] = [];
+  for (const item of data) {
+    const converted = convertAgentCollision(item);
+    if (converted) out.push(converted);
+  }
+  return out;
+}
+
 export interface ProjectStoreActions {
   applyDiff: (diff: DiffEnvelope) => string;
   rejectDiff: (diffId: string) => void;
@@ -233,6 +491,24 @@ export interface ProjectStoreActions {
    * (ToolRegistry.call surfaces handler failures as status: "error").
    */
   runArranger: (config: ArrangerConfigInput) => Promise<ArrangerRunResult>;
+  /**
+   * Stage 0 (v1.14): run the real Engraving agent through the ToolRegistry
+   * (engraving.reportCollisions). Agent-side collisions are converted to the
+   * UI UiCollisionWarning shape (see convertAgentCollisions); suggestions are
+   * passed through. Resolves to an EngravingRunResult, never throws
+   * (ToolRegistry.call surfaces handler failures as status: "error").
+   */
+  runEngraving: (layoutId: string) => Promise<EngravingRunResult>;
+  /**
+   * v1.14 Stage 1: run the real Teaching agent through the ToolRegistry
+   * (teaching.explainDecision). The agent-side Explanation is converted to the
+   * UI UiExplanation shape (see convertAgentExplanation); `userLevel` is
+   * already mapped from the UI enum (professional -> expert, see
+   * mapUiLevelToAgent) before this action is called. Resolves to a
+   * TeachingRunResult, never throws (ToolRegistry.call surfaces handler
+   * failures as status: "error").
+   */
+  runTeaching: (config: TeachingConfigInput) => Promise<TeachingRunResult>;
   /**
    * Stage 2: record an applied (or arbitrary) Agent decision as a graph
    * evidence node so the Knowledge Graph can show the decision rationale.

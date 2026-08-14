@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -13,15 +13,18 @@ import {
   type MixerState,
   type TasteEvidence,
 } from "@collinx/core";
-import { Orchestrator } from "@collinx/agent";
+import { Orchestrator, EngravingAgent, TeachingAgent } from "@collinx/agent";
 import { ProjectProvider } from "../../providers/ProjectProvider";
 import { useProjectStore } from "../../hooks/useProjectStore";
 import { createBrowserTasteFsAdapter } from "../../services/tasteFsAdapter";
 import {
   isMixerDiff,
   MAX_UNDO,
+  EMPTY_UI_EXPLANATION,
   type ArrangerRunResult,
   type OrchestratorRunResult,
+  type EngravingRunResult,
+  type TeachingRunResult,
   type ProjectStoreValue,
 } from "../../store/project-store";
 
@@ -2222,6 +2225,228 @@ describe("project-store arranger (Stage 1)", () => {
       added.some((d) => d.ops.some((o) => o.op === "add_note_group")),
     ).toBe(true);
     expect(added.every((d) => d.summary.length > 0)).toBe(true);
+
+    s.cleanup();
+  });
+});
+
+// ── v1.14 Stage 0: Score panel -> real Engraving tool bridge ───────────────
+describe("project-store engraving (v1.14 Stage 0)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  // T02 (unit, critical): runEngraving routes through the real
+  // engraving.reportCollisions tool and converts the agent collisions into the
+  // UI ScorePanel shape (not the raw agent shape).
+  it("T02: runEngraving 调用真实 reportCollisions 并转换为 UI 形状 (critical)", async () => {
+    const s = setup(makeNotes());
+    let result: EngravingRunResult | undefined;
+
+    await act(async () => {
+      result = await s.value.actions.runEngraving("main");
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.status).toBe("ok");
+    // Real EngravingEngine output on the demo layout: collisions exist.
+    expect(result!.collisions.length).toBeGreaterThan(0);
+    // Every collision is fully converted to the UI shape.
+    for (const c of result!.collisions) {
+      expect([
+        "symbol_overlap",
+        "slur_cross",
+        "dynamic_clash",
+        "articulation_conflict",
+      ]).toContain(c.type);
+      expect(c.staveIndex).toBe(0); // agent 无谱表索引 -> 默认 0
+      expect(typeof c.bar).toBe("number");
+      expect(typeof c.beat).toBe("number");
+      expect(typeof c.description).toBe("string");
+      expect(["warning", "error"]).toContain(c.severity);
+      expect(typeof c.fixSuggestion).toBe("string");
+      expect(c.fixSuggestion.length).toBeGreaterThan(0);
+    }
+    // Suggestions are passed through unchanged.
+    expect(Array.isArray(result!.suggestions)).toBe(true);
+    expect(result!.suggestions.length).toBeGreaterThan(0);
+    expect(typeof result!.confidence).toBe("number");
+    // raw payload preserved for debugging/audit.
+    expect(result!.raw).toBeDefined();
+
+    s.cleanup();
+  });
+
+  // T02 (critical) part 2: the score-panel invocation leaves a visible trace in
+  // the Agent tool timeline (running + success upserted into one record).
+  it("T02b: 时间线出现 engraving.reportCollisions 工具调用(合并为一条 success)", async () => {
+    const s = setup(makeNotes());
+    expect(s.value.toolCalls).toEqual([]);
+
+    await act(async () => {
+      await s.value.actions.runEngraving("main");
+    });
+
+    const calls = s.value.toolCalls.filter(
+      (r) => r.toolName === "engraving.reportCollisions",
+    );
+    expect(calls.length).toBe(1);
+    expect(calls[0].status).toBe("success");
+    expect(calls[0].agentName).toBe("score-panel");
+    expect(calls[0].params).toEqual({ layoutId: "main" });
+    expect(calls[0].correlationId).toBeDefined();
+    expect(calls[0].resultSummary.length).toBeGreaterThan(0);
+
+    s.cleanup();
+  });
+
+  // T04 (unit, non-critical): a failing tool must surface as status:"error"
+  // without crashing the store action or the UI.
+  it("T04: reportCollisions 工具失败时 runEngraving 返回 status:error 不抛异常", async () => {
+    const s = setup(makeNotes());
+    const spy = vi.spyOn(EngravingAgent.prototype, "reportCollisions");
+    spy.mockImplementation(() => {
+      throw new Error("engraving engine down");
+    });
+
+    let result: EngravingRunResult | undefined;
+    let threw = false;
+    try {
+      await act(async () => {
+        try {
+          result = await s.value.actions.runEngraving("main");
+        } catch {
+          threw = true;
+        }
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(threw).toBe(false);
+    expect(result!.status).toBe("error");
+    expect(result!.collisions).toEqual([]);
+    expect(result!.suggestions).toEqual([]);
+    // The failure is recorded in the tool timeline as an error entry.
+    const calls = s.value.toolCalls.filter(
+      (r) => r.toolName === "engraving.reportCollisions",
+    );
+    expect(calls.length).toBe(1);
+    expect(calls[0].status).toBe("error");
+
+    s.cleanup();
+  });
+});
+
+// ── v1.14 Stage 1: Teaching panel -> real Teaching tool bridge ──────────────
+describe("project-store teaching (v1.14 Stage 1)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  // T02 (unit, critical): runTeaching routes through the real
+  // teaching.explainDecision tool and converts the agent Explanation into the
+  // UI UiExplanation shape (overview/conceptTags/alternatives.name).
+  it("T02: runTeaching 调用真实 explainDecision 并转换为 UI 形状 (critical)", async () => {
+    const s = setup(makeNotes());
+    let result: TeachingRunResult | undefined;
+
+    await act(async () => {
+      result = await s.value.actions.runTeaching({
+        diffId: "reflow-layout-main",
+        userLevel: "intermediate",
+        compareWithAlt: true,
+      });
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.status).toBe("ok");
+    // Conversion layer output: agent summary -> UI overview.
+    expect(result!.explanation.overview.length).toBeGreaterThan(0);
+    expect(result!.explanation.detail.length).toBeGreaterThan(0);
+    expect(Array.isArray(result!.explanation.conceptTags)).toBe(true);
+    expect(Array.isArray(result!.explanation.examples)).toBe(true);
+    // compareWithAlt=true on a reflow diff -> real alternatives with a name.
+    expect(result!.explanation.alternatives.length).toBeGreaterThan(0);
+    for (const alt of result!.explanation.alternatives) {
+      expect(typeof alt.name).toBe("string");
+      expect(Array.isArray(alt.pros)).toBe(true);
+      expect(Array.isArray(alt.cons)).toBe(true);
+    }
+    // agent level is NOT written back to the UI explanation.
+    expect(result!.explanation).not.toHaveProperty("level");
+    expect(typeof result!.confidence).toBe("number");
+    expect(result!.raw).toBeDefined();
+
+    s.cleanup();
+  });
+
+  // T02 (critical) part 2: the teaching-panel invocation leaves a visible
+  // trace in the Agent tool timeline (running + success upserted into one).
+  it("T02b: 时间线出现 teaching.explainDecision 工具调用(合并为一条 success)", async () => {
+    const s = setup(makeNotes());
+    expect(s.value.toolCalls).toEqual([]);
+
+    await act(async () => {
+      await s.value.actions.runTeaching({
+        diffId: "motif-compose-1",
+        userLevel: "beginner",
+        compareWithAlt: false,
+      });
+    });
+
+    const calls = s.value.toolCalls.filter(
+      (r) => r.toolName === "teaching.explainDecision",
+    );
+    expect(calls.length).toBe(1);
+    expect(calls[0].status).toBe("success");
+    expect(calls[0].agentName).toBe("teaching-panel");
+    expect(calls[0].params).toEqual({
+      diffId: "motif-compose-1",
+      userLevel: "beginner",
+      compareWithAlt: false,
+    });
+    expect(calls[0].correlationId).toBeDefined();
+    expect(calls[0].resultSummary.length).toBeGreaterThan(0);
+
+    s.cleanup();
+  });
+
+  // T02 (unit, non-critical): a failing tool must surface as status:"error"
+  // with the empty explanation (never template content) and never throw.
+  it("T02c: explainDecision 失败时 runTeaching 返回 status:error(空解释,不抛异常)", async () => {
+    const s = setup(makeNotes());
+    const spy = vi.spyOn(TeachingAgent.prototype, "explainDecision");
+    spy.mockImplementation(() => {
+      throw new Error("teaching engine down");
+    });
+
+    let result: TeachingRunResult | undefined;
+    let threw = false;
+    try {
+      await act(async () => {
+        try {
+          result = await s.value.actions.runTeaching({
+            diffId: "reflow-layout-main",
+            userLevel: "advanced",
+          });
+        } catch {
+          threw = true;
+        }
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(threw).toBe(false);
+    expect(result!.status).toBe("error");
+    expect(result!.explanation).toEqual(EMPTY_UI_EXPLANATION);
+    // The failure is recorded in the tool timeline as an error entry.
+    const calls = s.value.toolCalls.filter(
+      (r) => r.toolName === "teaching.explainDecision",
+    );
+    expect(calls.length).toBe(1);
+    expect(calls[0].status).toBe("error");
 
     s.cleanup();
   });

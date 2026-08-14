@@ -1550,6 +1550,15 @@
     },
     "loading": "Loading...",
     "ready": "Ready",
-    "error": "Error"
+    "error": "Error",
+    "score": {
+      "noticeTitle": "Score Panel",
+      "runFailed": "Layout analysis failed, please retry",
+      "extractPartsPending": "Part extraction is not implemented yet and will arrive in a future release",
+      "exportMusicXMLPending": "MusicXML export is not implemented yet and will arrive in a future release"
+    },
+    "teaching": {
+      "runFailed": "Teaching explanation failed, please retry"
+    }
   }
 }

@@ -1582,6 +1582,15 @@
     },
     "loading": "加载中...",
     "ready": "就绪",
-    "error": "错误"
+    "error": "错误",
+    "score": {
+      "noticeTitle": "乐谱面板",
+      "runFailed": "排版分析失败，请重试",
+      "extractPartsPending": "分谱提取尚未实现，将在后续版本提供",
+      "exportMusicXMLPending": "MusicXML 导出尚未实现，将在后续版本提供"
+    },
+    "teaching": {
+      "runFailed": "教学解释生成失败，请重试"
+    }
   }
 }

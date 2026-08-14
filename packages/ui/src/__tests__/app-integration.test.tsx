@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeAll } from "vitest";
+import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { App } from "../App";
@@ -7,6 +7,7 @@ import { SettingsProvider } from "../contexts/SettingsContext";
 import { ThemeProvider } from "../providers/ThemeProvider";
 import { ProjectProvider } from "../providers/ProjectProvider";
 import { useProjectStore } from "../hooks/useProjectStore";
+import { EngravingAgent, TeachingAgent } from "@collinx/agent";
 
 // ---------------------------------------------------------------------------
 // Real App integration test (Stage 4).
@@ -95,38 +96,43 @@ function findCardByText(container: HTMLElement, text: string): Element {
   throw new Error(`no diff card containing "${text}"`);
 }
 
+/** Stubs the browser APIs jsdom lacks (matchMedia / ResizeObserver /
+ *  scrollIntoView) so the real App can render under vitest. Called from every
+ *  describe's beforeAll because -t filtering skips a skipped describe's
+ *  beforeAll entirely, leaving a later describe without the stubs. */
+function stubBrowserApis() {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: () => ({
+      matches: false,
+      media: "",
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+  Object.defineProperty(window, "ResizeObserver", {
+    configurable: true,
+    writable: true,
+    value: class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  });
+  // jsdom does not implement scrollIntoView (used by AgentChat).
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
+}
+
 describe("app-integration (real App under ProjectProvider)", () => {
   beforeAll(() => {
-    // jsdom lacks working implementations of these browser APIs used by
-    // ThemeProvider / PianoRollView. jsdom declares matchMedia but it is not a
-    // callable function, so force-replace both unconditionally.
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      writable: true,
-      value: () => ({
-        matches: false,
-        media: "",
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        addListener: () => {},
-        removeListener: () => {},
-        dispatchEvent: () => false,
-      }),
-    });
-    Object.defineProperty(window, "ResizeObserver", {
-      configurable: true,
-      writable: true,
-      value: class ResizeObserver {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    });
-    // jsdom does not implement scrollIntoView (used by AgentChat).
-    if (!Element.prototype.scrollIntoView) {
-      Element.prototype.scrollIntoView = () => {};
-    }
+    stubBrowserApis();
   });
 
   afterEach(() => {
@@ -217,6 +223,215 @@ describe("app-integration (real App under ProjectProvider)", () => {
     expect(readProbe(container, "applied")).toBe("0");
     expect(readNum(container, "nodes")).toBe(nodesBefore);
     expect(readNum(container, "notes")).toBe(notesBefore);
+
+    cleanup();
+  });
+});
+
+// ── v1.14 Stage 0: Score panel auto-layout real tool loop ──────────────────
+function findToolbarButton(container: HTMLElement, labels: string[]): Element {
+  const btn = Array.from(container.querySelectorAll("button")).find((b) =>
+    labels.some((label) => b.textContent?.includes(label)),
+  );
+  if (!btn) throw new Error(`no toolbar button containing "${labels.join("/")}"`);
+  return btn;
+}
+
+function containsAny(text: string, ...needles: string[]): boolean {
+  return needles.some((n) => text.includes(n));
+}
+
+function countCollisionCards(container: HTMLElement): number {
+  // CSS modules hash class names, so match on the base name suffix (same
+  // convention as the Orchestrator panel tests).
+  return (
+    container.querySelectorAll('[class*="collisionCardError"]').length +
+    container.querySelectorAll('[class*="collisionCardWarn"]').length
+  );
+}
+
+describe("app-integration score auto-layout (v1.14 Stage 0)", () => {
+  // T01 (integration, critical): clicking "自动排版" on the real App must run
+  // the real engraving.reportCollisions tool (not sample data) and render the
+  // returned collisions as conflict cards in the Score panel sidebar.
+  it("T01: 点击自动排版后 Score 面板出现真实冲突卡 (critical)", async () => {
+    const { container, cleanup } = renderApp();
+
+    // Navigate to the score tab.
+    click(container.querySelector('[data-testid="tab-score"]'));
+    expect(container.querySelector('[data-testid="score-layout"]')).not.toBeNull();
+    // No collisions before the run.
+    expect(countCollisionCards(container)).toBe(0);
+
+    // Click the real auto-layout button.
+    const autoLayoutBtn = findToolbarButton(container, ["自动排版", "Auto Layout"]);
+    click(autoLayoutBtn);
+    await act(async () => {}); // flush the async tool call + setState
+
+    // Real EngravingEngine collisions surfaced as conflict cards.
+    const cards = countCollisionCards(container);
+    expect(cards).toBeGreaterThan(0);
+    // Cards carry the real agent data: bar/beat locations + fix suggestions.
+    expect(container.textContent).toContain("Stave 0");
+    expect(
+      containsAny(container.textContent ?? "", "修复建议", "Fix Suggestion"),
+    ).toBe(true);
+
+    cleanup();
+  });
+
+  // T01 part 2: the auto-layout run leaves a visible engraving tool trace in
+  // the Agent tool timeline (one upserted success record).
+  it("T01b: 自动排版后时间线出现 engraving.reportCollisions 记录", async () => {
+    const { container, cleanup } = renderApp();
+
+    click(container.querySelector('[data-testid="tab-score"]'));
+    click(findToolbarButton(container, ["自动排版", "Auto Layout"]));
+    await act(async () => {});
+
+    click(container.querySelector('[data-testid="tab-agent"]'));
+    const timeline = container.querySelector(
+      '[data-testid="tool-call-timeline"]',
+    );
+    expect(timeline).not.toBeNull();
+    expect(timeline?.textContent).toContain("engraving.reportCollisions");
+
+    cleanup();
+  });
+
+  // T04 (non-critical): a failing reportCollisions tool must not crash the App
+  // and must surface a visible hint instead of a bare no-op.
+  it("T04: reportCollisions 失败时自动排版不崩溃且显示提示", async () => {
+    const spy = vi.spyOn(EngravingAgent.prototype, "reportCollisions");
+    spy.mockImplementation(() => {
+      throw new Error("engraving engine down");
+    });
+
+    let container: HTMLElement | undefined;
+    try {
+      const rendered = renderApp();
+      container = rendered.container;
+      click(container.querySelector('[data-testid="tab-score"]'));
+      click(findToolbarButton(container, ["自动排版", "Auto Layout"]));
+      await act(async () => {});
+
+      // App chrome still alive (no crash).
+      expect(container.querySelector('[data-testid="score-layout"]')).not.toBeNull();
+      // Visible failure hint.
+      const notice = container.querySelector('[data-testid="score-notice"]');
+      expect(notice).not.toBeNull();
+      expect(
+        containsAny(
+          notice?.textContent ?? "",
+          "排版分析失败",
+          "Layout analysis failed",
+        ),
+      ).toBe(true);
+      // No stale collisions are shown.
+      expect(countCollisionCards(container)).toBe(0);
+      rendered.cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // v1.14: part extraction / MusicXML export buttons must not be silent no-ops.
+  it("T05: 分谱/MusicXML 导出按钮给出提示而非裸 no-op", async () => {
+    const { container, cleanup } = renderApp();
+    click(container.querySelector('[data-testid="tab-score"]'));
+
+    click(findToolbarButton(container, ["分谱", "Parts"]));
+    let notice = container.querySelector('[data-testid="score-notice"]');
+    expect(notice).not.toBeNull();
+    expect(
+      containsAny(notice?.textContent ?? "", "尚未实现", "not implemented yet"),
+    ).toBe(true);
+
+    click(
+      findToolbarButton(container, ["导出 MusicXML", "Export MusicXML"]),
+    );
+    notice = container.querySelector('[data-testid="score-notice"]');
+    expect(notice).not.toBeNull();
+    expect(
+      containsAny(notice?.textContent ?? "", "尚未实现", "not implemented yet"),
+    ).toBe(true);
+
+    cleanup();
+  });
+});
+
+// ── v1.14 Stage 1: Teaching panel real tool loop ────────────────────────────
+describe("app-integration teaching (v1.14 Stage 1)", () => {
+  beforeAll(() => {
+    // Standalone stub so this describe works even when -t-filtered away from
+    // the first describe (whose beforeAll would otherwise be skipped).
+    stubBrowserApis();
+  });
+
+  // T04 (component/integration, critical): with an activeDiff the teaching tab
+  // runs the real teaching.explainDecision tool and renders the real
+  // explanation; switching the user level re-generates it with the new level
+  // (UI "professional" mapped to agent "expert").
+  it("T04: userLevel 切换 → 重新生成解释(professional→expert) (critical)", async () => {
+    const spy = vi.spyOn(TeachingAgent.prototype, "explainDecision");
+
+    try {
+      const { container, cleanup } = renderApp();
+
+      // 1. Activate an activeDiff: run the real Arranger and confirm a plan.
+      click(container.querySelector('[data-testid="tab-arrange"]'));
+      expect(container.querySelector('[data-testid="arranger-panel"]')).not.toBeNull();
+      click(container.querySelector('[data-testid="arranger-generate"]'));
+      await act(async () => {});
+      click(findToolbarButton(container, ["确认编排方案", "Confirm Arrangement"]));
+
+      // 2. Switch to the teaching tab: the effect runs teaching.explainDecision
+      //    for the active diff and renders the real explanation.
+      click(container.querySelector('[data-testid="tab-teaching"]'));
+      await act(async () => {});
+
+      const panel = container.querySelector('[data-testid="teaching-panel"]');
+      expect(panel).not.toBeNull();
+      // Real explanation rendered: no error state, no old template content.
+      expect(container.querySelector('[data-testid="teaching-error"]')).toBeNull();
+      expect(container.textContent).not.toContain("方案 A: 密集和声排列");
+      expect(container.textContent).not.toContain(
+        "选择一个编曲方案或差异操作来查看详细的教学解释",
+      );
+      // The real explanation body is present (examples / concepts rendered).
+      expect(container.textContent).toContain("示例");
+
+      // 3. userLevel 切换 → 重新生成解释:agent 侧收到新 level。
+      click(container.querySelector('[data-testid="teaching-level-advanced"]'));
+      await act(async () => {});
+      expect(spy.mock.calls.some((c) => c[1] === "advanced")).toBe(true);
+
+      // 4. UI "professional" 映射为 agent "expert"(UI 无 expert,agent 无 professional)。
+      click(container.querySelector('[data-testid="teaching-level-professional"]'));
+      await act(async () => {});
+      expect(spy.mock.calls.some((c) => c[1] === "expert")).toBe(true);
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // T05 (component, non-critical): without an activeDiff the teaching tab
+  // shows the empty-state guidance — never template content.
+  it("T05: 无 activeDiff → teaching tab 显示空态引导而非模板", () => {
+    const { container, cleanup } = renderApp();
+
+    click(container.querySelector('[data-testid="tab-teaching"]'));
+    const panel = container.querySelector('[data-testid="teaching-panel"]');
+    expect(panel).not.toBeNull();
+    // Guidance empty state (not a diff, not template explanation).
+    const empty = container.querySelector('[data-testid="teaching-empty"]');
+    expect(empty).not.toBeNull();
+    expect(container.textContent).not.toContain("方案 A: 密集和声排列");
+    expect(container.textContent).not.toContain(
+      "选择一个编曲方案或差异操作来查看详细的教学解释",
+    );
 
     cleanup();
   });

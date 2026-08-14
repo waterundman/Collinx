@@ -287,3 +287,51 @@
 .emptyText {
   line-height: 1.6;
 }
+
+/* v1.14 Stage 1: loading / error / no-data status states. Centered in the
+ * body area, replacing the old hardcoded DEFAULT_EXPLANATION template. */
+.statusState {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+}
+
+.statusSpinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: teachingSpin 0.8s linear infinite;
+}
+
+@keyframes teachingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.statusIcon {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--accent-red);
+  border-radius: 50%;
+  color: var(--accent-red);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebarEmpty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+}
