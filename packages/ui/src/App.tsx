@@ -9,9 +9,7 @@ import {
   ReportGenerator,
   ExportAnalyzer,
   DiffEnvelope,
-  MixerState,
   MixerTrack,
-  createTrack,
 } from "@collinx/core";
 import { PianoRollView } from "./components/PianoRoll/PianoRollView";
 import { ScorePanel } from "./components/Score";
@@ -26,22 +24,21 @@ import { TasteLibraryPanel } from "./components/Taste/TasteLibraryPanel";
 import { TasteDiffPanel } from "./components/Taste/TasteDiffPanel";
 import { TeachingPanel } from "./components/Teaching";
 import type { UserLevel } from "./components/Teaching";
-import { AgentPanel, AgentChat } from "./components/Agent";
-import type { ChatMessage } from "./components/Agent";
+import { AgentPanel, AgentChat, ToolCallTimeline } from "./components/Agent";
 import { GraphView, NodeDetail } from "./components/KnowledgeGraph";
-import type { ConnectedNode } from "./components/KnowledgeGraph";
+import type { ConnectedNode, GraphData } from "./components/KnowledgeGraph";
 import styles from "./App.module.css";
 import {
-  createDemoMixer,
-  createDemoNotes,
   demoPhrases,
   createDefaultLayout,
   defaultHouseStyle,
-  createDemoGraph,
-  agentPendingDiffs,
-  agentHistoryDiffs,
-  createTasteStore,
 } from "./data/demoData";
+import { useProjectStore } from "./hooks/useProjectStore";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import type {
+  ArrangerConfigInput,
+  ArrangerRunResult,
+} from "./store/project-store";
 
 type TabId = "compose" | "arrange" | "orchestrate" | "mixer" | "score" | "taste" | "teaching" | "agent" | "graph";
 
@@ -56,112 +53,137 @@ export function App() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<TabId>("compose");
 
+  // Stage 1/2: real diff/rollback state + AgentBus + notes/graph from the
+  // project store. Notes and graph are single source of truth in ProjectGraph.
+  // TasteStore and genomeVersion also come from the store (Stage 1): the
+  // store owns the TasteStore instance and bumps genomeVersion on mutation.
+  const {
+    notes,
+    graph,
+    pendingDiffs,
+    appliedDiffs,
+    mixer,
+    tasteStore,
+    genomeVersion,
+    toolCalls,
+    actions,
+  } = useProjectStore();
+
+  // Stage 2: global Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) composite undo/redo.
+  // Input/textarea/contentEditable targets are excluded inside the hook, so
+  // text editing keeps the native browser undo.
+  useKeyboardShortcuts({ onUndo: actions.undo, onRedo: actions.redo });
+
   const tabs: TabDef[] = useMemo(
     () => TAB_IDS.map((id) => ({ id, label: t(`app.tabs.${id}`) })),
     [t],
   );
 
-  const translatedMotifs = useMemo(
-    () => [
-      { id: "motif_a", name: t("app.motifs.melody"), notes: [] },
-      { id: "motif_b", name: t("app.motifs.bass"), notes: [] },
-      { id: "motif_c", name: t("app.motifs.harmony"), notes: [] },
-    ],
-    [t],
-  );
-  const [notes, setNotes] = useState<NoteEvent[]>(createDemoNotes);
+  // Stage 1: the Arranger panel receives real source material, not empty note
+  // arrays. Notes are segmented by track into melody/bass/harmony motifs;
+  // when no trackId matches (e.g. a custom import) the full note set backs the
+  // melody slot so the real Arranger still has notes to expand.
+  const translatedMotifs = useMemo(() => {
+    const byTrack = (trackId: string) =>
+      notes.filter((n) => n.trackId === trackId);
+    const melody = byTrack("melody");
+    const fallback = notes.length > 0 ? notes : [];
+    return [
+      { id: "motif_a", name: t("app.motifs.melody"), notes: melody.length > 0 ? melody : fallback },
+      { id: "motif_b", name: t("app.motifs.bass"), notes: byTrack("bass") },
+      { id: "motif_c", name: t("app.motifs.harmony"), notes: byTrack("chords") },
+    ];
+  }, [t, notes]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [diffReport, setDiffReport] = useState<TasteDiffReport | null>(null);
   const [arrangerDiff, setArrangerDiff] = useState<DiffEnvelope | null>(null);
   const [orchestratorConflicts, setOrchestratorConflicts] = useState<RegisterConflict[] | undefined>(undefined);
   const [scoreCollisions, setScoreCollisions] = useState<CollisionWarning[]>([]);
-  const [storeVersion, setStoreVersion] = useState(0);
-  const [mixer, setMixer] = useState<MixerState>(createDemoMixer);
   const [userLevel, setUserLevel] = useState<UserLevel>("intermediate");
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [isAgentTyping, setIsAgentTyping] = useState(false);
 
-  const tasteStore = useMemo(() => createTasteStore(), []);
   const defaultLayout = useMemo(() => createDefaultLayout(), []);
   const analyzer = useMemo(() => new ExportAnalyzer(), []);
   const generator = useMemo(() => new ReportGenerator(), []);
 
-  const demoGraph = useMemo(() => createDemoGraph(translatedMotifs, t), [translatedMotifs, t]);
+  // Stage 2: adapt the store's ProjectGraph (core class) to the pure-data
+  // GraphData shape consumed by GraphView. GraphView itself is untouched.
+  const graphData: GraphData = useMemo(
+    () => ({
+      nodes: graph.getAllNodes().map((n) => ({
+        id: n.id,
+        type: n.type,
+        data: n.data as Record<string, unknown>,
+      })),
+      edges: graph.getAllEdges().map((e) => ({
+        source: e.source_id,
+        target: e.target_id,
+        type: e.type,
+      })),
+    }),
+    [graph],
+  );
 
   const graphConnectedNodes: ConnectedNode[] = useMemo(() => {
     if (!selectedGraphNode) return [];
     const result: ConnectedNode[] = [];
-    for (const edge of demoGraph.edges) {
+    for (const edge of graphData.edges) {
       if (edge.source === selectedGraphNode) {
-        const target = demoGraph.nodes.find((n) => n.id === edge.target);
+        const target = graphData.nodes.find((n) => n.id === edge.target);
         if (target) result.push({ id: target.id, type: target.type, edgeType: edge.type });
       }
       if (edge.target === selectedGraphNode) {
-        const source = demoGraph.nodes.find((n) => n.id === edge.source);
+        const source = graphData.nodes.find((n) => n.id === edge.source);
         if (source) result.push({ id: source.id, type: source.type, edgeType: edge.type });
       }
     }
     return result;
-  }, [selectedGraphNode, demoGraph]);
+  }, [selectedGraphNode, graphData]);
 
-  const handleAgentApply = useCallback((diffId: string) => {
-    console.log("Apply diff:", diffId);
-  }, []);
-  const handleAgentReject = useCallback((diffId: string) => {
-    console.log("Reject diff:", diffId);
-  }, []);
-  const handleAgentRollback = useCallback((rollbackToken: string) => {
-    console.log("Rollback:", rollbackToken);
-  }, []);
+  const handleAgentApply = useCallback(
+    (diffId: string) => {
+      const diff = pendingDiffs.find((d) => d.diffId === diffId);
+      if (diff) actions.applyDiff(diff);
+    },
+    [pendingDiffs, actions]
+  );
+  const handleAgentReject = useCallback(
+    (diffId: string) => {
+      actions.rejectDiff(diffId);
+    },
+    [actions]
+  );
+  const handleAgentRollback = useCallback(
+    (rollbackToken: string) => {
+      try {
+        actions.rollbackDiff(rollbackToken);
+      } catch {
+        // Invalid/expired token: DiffEngine.rollback may throw. The reducer
+        // guards this as well; we simply keep the current graph state.
+      }
+    },
+    [actions]
+  );
 
-  const handleSendMessage = useCallback((content: string) => {
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content,
-      timestamp: new Date(),
-    };
-    setChatMessages((prev) => [...prev, userMessage]);
-    setIsAgentTyping(true);
-
-    setTimeout(() => {
-      const agentResponse: ChatMessage = {
-        id: `agent-${Date.now()}`,
-        role: "agent",
-        content: `我收到了你的消息："${content}"。作为音乐创作助手，我可以帮助你处理和弦进行、旋律生成、编曲建议等任务。请告诉我你需要什么帮助？`,
-        timestamp: new Date(),
-        agentName: "HarmonyBot",
-      };
-      setChatMessages((prev) => [...prev, agentResponse]);
-      setIsAgentTyping(false);
-    }, 1500);
-  }, []);
   const tempoMap = useMemo(() => TempoMap.default(), []);
 
-  const genome = useMemo(() => tasteStore.getCurrentGenome(), [storeVersion, tasteStore]);
+  const genome = useMemo(() => tasteStore.getCurrentGenome(), [genomeVersion, tasteStore]);
 
   const handleNoteAdd = (note: Omit<NoteEvent, "id">) => {
     const newNote = createNoteEvent(note);
-    setNotes((prev) => [...prev, newNote]);
+    actions.addNote(newNote);
   };
 
   const handleNoteMove = (noteId: string, newBar: number, newBeat: number, newPitch: number) => {
-    setNotes((prev) =>
-      prev.map((n) =>
-        n.id === noteId ? { ...n, bar: newBar, beat: newBeat, pitchMidi: newPitch, pitchSpelling: "" } : n
-      )
-    );
+    actions.moveNote(noteId, newBar, newBeat, newPitch);
   };
 
   const handleNoteResize = (noteId: string, newDurQn: number) => {
-    setNotes((prev) =>
-      prev.map((n) => (n.id === noteId ? { ...n, durQn: newDurQn } : n))
-    );
+    actions.resizeNote(noteId, newDurQn);
   };
 
   const handleNoteDelete = (noteId: string) => {
-    setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    actions.deleteNote(noteId);
     setSelectedIds((prev) => prev.filter((id) => id !== noteId));
   };
 
@@ -169,26 +191,16 @@ export function App() {
   }, []);
 
   const handleRevertTo = useCallback((version: number) => {
-    const restored = tasteStore.revertTo(version);
-    if (restored) {
-      setStoreVersion((v) => v + 1);
-    }
-  }, [tasteStore]);
+    actions.revertTasteTo(version);
+  }, [actions]);
 
   const handleParameterEdit = useCallback((paramKey: string, value: string) => {
-    const current = tasteStore.getCurrentGenome();
-    if (!current) return;
-    const param = current.getParameter(paramKey);
-    if (!param) return;
-    current.setParameter(paramKey, { ...param, value });
-    tasteStore.save(current);
-    setStoreVersion((v) => v + 1);
-  }, [tasteStore]);
+    actions.updateTasteParameter(paramKey, value);
+  }, [actions]);
 
   const handleDeleteEvidence = useCallback((paramKey: string, evidenceId: string) => {
-    tasteStore.deleteEvidence(paramKey, evidenceId);
-    setStoreVersion((v) => v + 1);
-  }, [tasteStore]);
+    actions.deleteTasteEvidence(paramKey, evidenceId);
+  }, [actions]);
 
   const handleExportAnalysis = useCallback(() => {
     const current = tasteStore.getCurrentGenome();
@@ -200,43 +212,37 @@ export function App() {
 
   const handleConfirmWrite = useCallback((_evidenceIds: string[]) => {
     setDiffReport(null);
-    setStoreVersion((v) => v + 1);
   }, []);
 
   const handleIgnore = useCallback((_evidenceIds: string[]) => {
   }, []);
 
   const handleWriteToReject = useCallback((_evidenceIds: string[]) => {
-    setStoreVersion((v) => v + 1);
   }, []);
 
   const handleApplyArrangerDiff = useCallback((diff: DiffEnvelope) => {
     setArrangerDiff(diff);
   }, []);
 
-  const handleOrchestrate = useCallback((_config: OrchestratorConfig) => {
-    const sampleConflicts: RegisterConflict[] = [
-      {
-        type: "range_violation",
-        players: ["violin", ""],
-        bar: 1,
-        beat: 1,
-        description: "Violin: note 50 below lowest register 55",
-        severity: "error",
-        suggestion: "Move note up 5 semitones, or assign to another instrument",
-      },
-      {
-        type: "overlap",
-        players: ["violin", "viola"],
-        bar: 2,
-        beat: 1,
-        description: "Violin and Viola register overlap (28 semitones)",
-        severity: "warning",
-        suggestion: "Separate Violin and Viola by at least one octave",
-      },
-    ];
-    setOrchestratorConflicts(sampleConflicts);
-  }, []);
+  // Stage 0: the Orchestrator panel runs the real Orchestrator agent through
+  // the shared ToolRegistry (orchestrator.voicingPlan). The returned conflicts
+  // come from the agent's RegisterConflictDetector, not from sample data; the
+  // proposal diffs are already enqueued into pendingDiffs by the action.
+  const handleOrchestrate = useCallback(async (config: OrchestratorConfig) => {
+    const result = await actions.runOrchestrator(config);
+    setOrchestratorConflicts(result.conflicts);
+  }, [actions]);
+
+  // Stage 1: the Arranger panel runs the real Arranger agent through the
+  // shared ToolRegistry (arranger.expandSection). Returned variants come from
+  // the agent's Arranger, not the panel's local demo generator; the proposal
+  // diffs are already enqueued into pendingDiffs by the action.
+  const handleRunArranger = useCallback(
+    async (config: ArrangerConfigInput): Promise<ArrangerRunResult> => {
+      return actions.runArranger(config);
+    },
+    [actions],
+  );
 
   const handleSectionDoubleClick = useCallback((phraseId: string) => {
     const phrase = demoPhrases.find((p) => p.id === phraseId);
@@ -247,30 +253,24 @@ export function App() {
 
   const handleMixerTrackChange = useCallback(
     (trackId: string, changes: Partial<MixerTrack>) => {
-      setMixer((prev) => {
-        if (prev.masterTrack.id === trackId) {
-          return { ...prev, masterTrack: { ...prev.masterTrack, ...changes } };
-        }
-        return {
-          ...prev,
-          tracks: prev.tracks.map((t) =>
-            t.id === trackId ? { ...t, ...changes } : t,
-          ),
-        };
-      });
+      actions.updateMixerTrack(trackId, changes);
     },
-    [],
+    [actions],
   );
 
   const handleMixerAddTrack = useCallback(
     (name: string, sourceId: string) => {
-      setMixer((prev) => ({
-        ...prev,
-        tracks: [...prev.tracks, createTrack(name, sourceId)],
-      }));
+      actions.addMixerTrack(name, sourceId);
     },
-    [],
+    [actions],
   );
+
+  // Stage 2: Mixing Agent trigger. Generates the proposal into pendingDiffs,
+  // then jumps to the Agent Panel so the user sees and reviews it.
+  const handleSuggestFxChain = useCallback(() => {
+    actions.suggestMixingChain();
+    setActiveTab("agent");
+  }, [actions]);
 
   const handleAutoLayout = useCallback(() => {
     const sampleCollisions: CollisionWarning[] = [
@@ -313,25 +313,24 @@ export function App() {
       case "mixer":
         return t("app.status.tracksCount", { count: mixer.tracks.length });
       case "score":
-        return t("app.status.stavesInfo", { count: defaultLayout.staffConfig.length, format: "A4" });
+        return t("app.status.stavesInfo", { count: defaultLayout.staffConfig?.length ?? 0, format: "A4" });
       case "taste":
         return t("app.status.genomeVersion", { version: tasteStore.getVersion() });
       case "teaching":
         return arrangerDiff ? t("app.status.activePlan") : t("app.status.pendingActivation");
       case "agent":
-        return t("app.status.pending", { count: agentPendingDiffs.length });
+        return t("app.status.pending", { count: pendingDiffs.length });
       case "graph":
-        return t("app.status.nodes", { count: demoGraph.nodes.length });
+        return t("app.status.nodes", { count: graphData.nodes.length });
       default:
         return "";
     }
-  }, [activeTab, notes.length, mixer.tracks.length, tasteStore, arrangerDiff, defaultLayout.staffConfig.length, t, demoGraph.nodes.length]);
+  }, [activeTab, notes.length, mixer.tracks.length, tasteStore, genomeVersion, arrangerDiff, defaultLayout.staffConfig?.length ?? 0, t, graphData.nodes.length, pendingDiffs.length]);
 
   return (
     <div className={styles.appRoot}>
       <header className={styles.header}>
         <span className={styles.headerBrand}>Collinx</span>
-        <span className={styles.headerVersion}>v0.6.0</span>
 
         <div className={styles.tabBar} data-testid="tab-bar">
           {tabs.map((tab) => (
@@ -346,7 +345,7 @@ export function App() {
           ))}
         </div>
 
-        <span className={styles.headerStatus}>
+        <span className={styles.headerStatus} data-testid="header-status">
           {headerStatus}
         </span>
       </header>
@@ -416,6 +415,7 @@ export function App() {
             motifs={translatedMotifs}
             genome={genome}
             onApplyDiff={handleApplyArrangerDiff}
+            onRunArranger={handleRunArranger}
           />
         </div>
       )}
@@ -464,6 +464,7 @@ export function App() {
             mixer={mixer}
             onTrackChange={handleMixerTrackChange}
             onAddTrack={handleMixerAddTrack}
+            onSuggestFxChain={handleSuggestFxChain}
           />
         </div>
       )}
@@ -526,21 +527,21 @@ export function App() {
       {activeTab === "agent" && (
         <div className={styles.agentLayout} data-testid="agent-layout">
           <div className={styles.agentChatContainer}>
-            <AgentChat
-              messages={chatMessages}
-              onSendMessage={handleSendMessage}
-              isTyping={isAgentTyping}
-              agentName="HarmonyBot"
-            />
+            <AgentChat agentName="HarmonyBot" />
           </div>
           <div className={styles.agentPanelContainer}>
-            <AgentPanel
-              pendingDiffs={agentPendingDiffs}
-              historyDiffs={agentHistoryDiffs}
-              onApply={handleAgentApply}
-              onReject={handleAgentReject}
-              onRollback={handleAgentRollback}
-            />
+            <div className={styles.agentPanelSection}>
+              <AgentPanel
+                pendingDiffs={pendingDiffs}
+                historyDiffs={appliedDiffs}
+                onApply={handleAgentApply}
+                onReject={handleAgentReject}
+                onRollback={handleAgentRollback}
+              />
+            </div>
+            <div className={styles.agentTimelineSection}>
+              <ToolCallTimeline toolCalls={toolCalls} />
+            </div>
           </div>
         </div>
       )}
@@ -548,11 +549,11 @@ export function App() {
       {activeTab === "graph" && (
         <div className={styles.graphLayout} data-testid="graph-layout">
           <GraphView
-            graph={demoGraph}
+            graph={graphData}
             onNodeClick={setSelectedGraphNode}
           />
           {selectedGraphNode && (() => {
-            const node = demoGraph.nodes.find((n) => n.id === selectedGraphNode);
+            const node = graphData.nodes.find((n) => n.id === selectedGraphNode);
             if (!node) return null;
             return (
               <NodeDetail

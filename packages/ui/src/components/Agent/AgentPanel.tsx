@@ -17,16 +17,6 @@ interface HistoryEntry {
   status: "applied" | "rejected" | "rolled-back";
 }
 
-function inferStatus(diff: DiffEnvelope, _historyDiffs: DiffEnvelope[]): HistoryEntry["status"] {
-  void _historyDiffs;
-  // In a real implementation, the status would come from the diff store.
-  // For demo purposes, we use a simple heuristic based on diffId suffix.
-  const last = diff.diffId.charAt(diff.diffId.length - 1);
-  if (last < "4") return "applied";
-  if (last < "8") return "rejected";
-  return "rolled-back";
-}
-
 export function AgentPanel({
   pendingDiffs,
   historyDiffs,
@@ -35,9 +25,12 @@ export function AgentPanel({
   onRollback,
 }: AgentPanelProps) {
   const { t } = useI18n();
+  // Stage 1: history comes from the real store's appliedDiffs list, which only
+  // keeps diffs that are currently applied (rejected diffs never enter it and
+  // rolled-back diffs are removed by rollback). No demo heuristic needed.
   const historyEntries: HistoryEntry[] = historyDiffs.map((diff) => ({
     diff,
-    status: inferStatus(diff, historyDiffs),
+    status: "applied",
   }));
 
   const appliedCount = historyEntries.filter((e) => e.status === "applied").length;

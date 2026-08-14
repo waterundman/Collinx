@@ -23,6 +23,7 @@ const NODE_COLOR_VARS: Record<string, string> = {
   Track: "--node-track",
   ExportVersion: "--node-export-version",
   TasteEvidence: "--node-taste-evidence",
+  AgentDecision: "--node-agent-decision",
 };
 
 function getNodeColor(type: string): string {

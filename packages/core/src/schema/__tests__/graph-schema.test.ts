@@ -144,10 +144,11 @@ describe("GraphSchema", () => {
       "RenderArtifact",
       "TasteEvidence",
       "ExportVersion",
+      "AgentDecision",
     ] as const;
 
-    it("should have exactly 12 node types", () => {
-      expect(allNodeTypes.length).toBe(12);
+    it("should have exactly 13 node types", () => {
+      expect(allNodeTypes.length).toBe(13);
     });
 
     it("should accept each valid NodeType", () => {

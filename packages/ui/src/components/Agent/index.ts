@@ -5,3 +5,5 @@ export type { DiffCardProps } from "./DiffCard";
 export { ExplanationView } from "./ExplanationView";
 export { AgentChat } from "./AgentChat";
 export type { AgentChatProps, ChatMessage } from "./AgentChat";
+export { ToolCallTimeline } from "./ToolCallTimeline";
+export type { ToolCallTimelineProps } from "./ToolCallTimeline";

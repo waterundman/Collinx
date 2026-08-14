@@ -16,6 +16,8 @@ interface MixerConsoleProps {
   onTrackChange?: (trackId: string, changes: Partial<MixerTrack>) => void;
   onAddTrack?: (name: string, sourceId: string) => void;
   onRemoveTrack?: (trackId: string) => void;
+  /** Stage 2: trigger the Mixing Agent to propose an FX chain / mix setting. */
+  onSuggestFxChain?: () => void;
 }
 
 interface FXEditorState {
@@ -92,6 +94,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
   onTrackChange,
   onAddTrack,
   onRemoveTrack,
+  onSuggestFxChain,
 }) => {
   const { t } = useI18n();
   const [fxEditor, setFxEditor] = useState<FXEditorState | null>(null);
@@ -264,6 +267,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
       <div className={styles.faderSection}>
         <div
           className={styles.faderTrack}
+          data-testid={`mixer-fader-${track.id}`}
           ref={(el) => {
             if (el) {
               faderRefs.current.set(track.id, el);
@@ -276,7 +280,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
           <div className={styles.faderFill} style={{ height: `${pct}%` }} />
           <div className={styles.faderThumb} style={{ bottom: `${pct}%` }} />
         </div>
-        <div className={styles.faderValue}>{displayDb}</div>
+        <div className={styles.faderValue} data-testid={`mixer-gain-${track.id}`}>{displayDb}</div>
       </div>
     );
   };
@@ -528,6 +532,16 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
         <button className={styles.addTrackBtn} data-testid="mixer-add-track" onClick={handleAddTrackClick}>
           {t('mixer.addTrack')}
         </button>
+        {onSuggestFxChain && (
+          <button
+            className={styles.addTrackBtn}
+            data-testid="mixer-suggest-fx"
+            onClick={onSuggestFxChain}
+            title={t('mixer.suggestFxChainHint')}
+          >
+            {t('mixer.suggestFxChain')}
+          </button>
+        )}
       </div>
 
       <div className={styles.stripsContainer} data-testid="mixer-strips" ref={containerRef}>

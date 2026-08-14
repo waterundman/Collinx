@@ -5,6 +5,7 @@ export * from "./graph/serialization";
 export * from "./model";
 export * from "./diff";
 export * from "./agent/tool-registry";
+export * from "./agent/tool-call";
 export * from "./agent/agent-bus";
 export { randomUUID } from "./util/random-uuid";
 export * from "./io";

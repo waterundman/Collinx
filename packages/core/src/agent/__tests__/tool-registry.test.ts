@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ToolRegistry } from "../tool-registry";
 import type { ToolDefinition, ToolResult } from "../tool-registry";
+import type { ToolCallRecord } from "../tool-call";
 
 const testActor = { type: "agent" as const, name: "test-agent" };
 
@@ -188,6 +189,201 @@ describe("ToolRegistry", () => {
       const result = await registry.call("test.error", {}, testActor);
       expect(result.status).toBe("error");
       expect(result.data).toBe("handler failure");
+    });
+  });
+
+  describe("onToolCall callback", () => {
+    it("T01: call 成功 → onToolCall 收到 running + success 两条记录", async () => {
+      const records: ToolCallRecord[] = [];
+      registry = new ToolRegistry({ onToolCall: (r) => records.push(r) });
+      registry.register(
+        makeTool({
+          name: "test.echo",
+          permission: "read_only",
+          handler: async (params) => ({
+            status: "ok",
+            resultType: "data",
+            data: params.message,
+            requiresUserConfirmation: false,
+            auditRef: "",
+          }),
+        })
+      );
+
+      const result = await registry.call(
+        "test.echo",
+        { message: "hello" },
+        testActor
+      );
+
+      expect(result.status).toBe("ok");
+      expect(records).toHaveLength(2);
+
+      const [running, success] = records;
+      expect(running.status).toBe("running");
+      expect(running.toolName).toBe("test.echo");
+      expect(running.params).toEqual({ message: "hello" });
+      expect(running.agentName).toBe("test-agent");
+      expect(running.resultSummary).toBe("执行中");
+      expect(running.id.length).toBeGreaterThan(0);
+      expect(new Date(running.timestamp).getTime()).not.toBeNaN();
+
+      expect(success.status).toBe("success");
+      expect(success.toolName).toBe("test.echo");
+      expect(success.params).toEqual({ message: "hello" });
+      expect(success.agentName).toBe("test-agent");
+      // success 摘要从 ToolResult.data 提取
+      expect(success.resultSummary).toContain("hello");
+    });
+
+    it("T02: call 失败(工具不存在)→ onToolCall 收到 error 记录", async () => {
+      const records: ToolCallRecord[] = [];
+      registry = new ToolRegistry({ onToolCall: (r) => records.push(r) });
+
+      const result = await registry.call("nonexistent", { foo: "bar" }, testActor);
+
+      expect(result.status).toBe("error");
+      expect(records).toHaveLength(1);
+
+      const errorRecord = records[0];
+      expect(errorRecord.status).toBe("error");
+      expect(errorRecord.toolName).toBe("nonexistent");
+      expect(errorRecord.params).toEqual({ foo: "bar" });
+      expect(errorRecord.agentName).toBe("test-agent");
+      expect(errorRecord.resultSummary).toContain("not found");
+    });
+
+    it("T03: 不传 onToolCall → 原行为不变(无回调调用)", async () => {
+      // registry 已由 beforeEach 用无参构造创建
+      registry.register(
+        makeTool({
+          name: "test.echo",
+          permission: "read_only",
+          handler: async (params) => ({
+            status: "ok",
+            resultType: "data",
+            data: params.message,
+            requiresUserConfirmation: false,
+            auditRef: "",
+          }),
+        })
+      );
+      const ok = await registry.call(
+        "test.echo",
+        { message: "hello" },
+        testActor
+      );
+      expect(ok.status).toBe("ok");
+      expect(ok.data).toBe("hello");
+      // audit 照常记录
+      expect(registry.getAuditTrail()).toHaveLength(1);
+    });
+
+    it("T04: 参数验证失败 → 只收到 error 记录(不 emit running)", async () => {
+      const records: ToolCallRecord[] = [];
+      registry = new ToolRegistry({ onToolCall: (r) => records.push(r) });
+      registry.register(makeTool({ name: "test.tool", permission: "read_only" }));
+
+      const result = await registry.call("test.tool", {}, testActor);
+
+      expect(result.status).toBe("error");
+      expect(records).toHaveLength(1);
+      expect(records[0].status).toBe("error");
+      expect(records[0].resultSummary).toContain("Missing required parameter");
+    });
+
+    it("T05: handler 抛错 → onToolCall 收到 running + error 两条记录", async () => {
+      const records: ToolCallRecord[] = [];
+      registry = new ToolRegistry({ onToolCall: (r) => records.push(r) });
+      registry.register(
+        makeTool({
+          name: "test.error",
+          permission: "read_only",
+          parameters: [],
+          handler: async () => {
+            throw new Error("handler failure");
+          },
+        })
+      );
+
+      const result = await registry.call("test.error", {}, testActor);
+
+      expect(result.status).toBe("error");
+      expect(records).toHaveLength(2);
+      expect(records[0].status).toBe("running");
+      expect(records[1].status).toBe("error");
+      expect(records[1].resultSummary).toBe("handler failure");
+    });
+
+    it("T06: 同一次调用 running 与 success 记录共享同一 correlationId", async () => {
+      const records: ToolCallRecord[] = [];
+      registry = new ToolRegistry({ onToolCall: (r) => records.push(r) });
+      registry.register(
+        makeTool({
+          name: "test.echo",
+          permission: "read_only",
+          handler: async (params) => ({
+            status: "ok",
+            resultType: "data",
+            data: params.message,
+            requiresUserConfirmation: false,
+            auditRef: "",
+          }),
+        })
+      );
+
+      const result = await registry.call(
+        "test.echo",
+        { message: "hello" },
+        testActor
+      );
+
+      expect(result.status).toBe("ok");
+      expect(records).toHaveLength(2);
+      const [running, success] = records;
+      expect(running.status).toBe("running");
+      expect(success.status).toBe("success");
+      // v1.13 Stage 2: both records carry the same per-invocation id so the
+      // UI store can upsert the running entry in place.
+      expect(running.correlationId).toBeDefined();
+      expect(running.correlationId!.length).toBeGreaterThan(0);
+      expect(running.correlationId).toBe(success.correlationId);
+    });
+
+    it("T07: 同一次调用 running 与 error 记录共享同一 correlationId(handler 抛错)", async () => {
+      const records: ToolCallRecord[] = [];
+      registry = new ToolRegistry({ onToolCall: (r) => records.push(r) });
+      registry.register(
+        makeTool({
+          name: "test.error",
+          permission: "read_only",
+          parameters: [],
+          handler: async () => {
+            throw new Error("handler failure");
+          },
+        })
+      );
+
+      await registry.call("test.error", {}, testActor);
+
+      expect(records).toHaveLength(2);
+      expect(records[0].status).toBe("running");
+      expect(records[1].status).toBe("error");
+      expect(records[0].correlationId).toBeDefined();
+      expect(records[0].correlationId).toBe(records[1].correlationId);
+    });
+
+    it("T08: 验证失败的单条 error 记录也带 correlationId", async () => {
+      const records: ToolCallRecord[] = [];
+      registry = new ToolRegistry({ onToolCall: (r) => records.push(r) });
+      registry.register(makeTool({ name: "test.tool", permission: "read_only" }));
+
+      await registry.call("test.tool", {}, testActor);
+
+      expect(records).toHaveLength(1);
+      expect(records[0].status).toBe("error");
+      expect(records[0].correlationId).toBeDefined();
+      expect(records[0].correlationId!.length).toBeGreaterThan(0);
     });
   });
 

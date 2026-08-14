@@ -1,5 +1,10 @@
 import { randomUUID } from "../util/random-uuid";
 import type { DiffEnvelope, Actor, PermissionScope } from "../diff/diff-envelope";
+import {
+  createToolCallRecord,
+  type ToolCallRecord,
+  type NewToolCallRecord,
+} from "./tool-call";
 
 export type ToolPermission = PermissionScope;
 
@@ -39,9 +44,66 @@ export interface AuditEntry {
   actorName: string;
 }
 
+/**
+ * Options accepted by the ToolRegistry constructor. `onToolCall` is an
+ * optional sink that receives a UI-facing ToolCallRecord for every invocation
+ * that passes through `call()`: a "running" record once validation succeeds
+ * and execution starts, then either a "success" or an "error" record with the
+ * outcome. The running record and its outcome record share the same
+ * `correlationId` (minted once per call), so a consumer may upsert the
+ * in-flight record in place rather than append two independent entries.
+ * Failures before execution (unknown tool, failed parameter validation) emit
+ * a single "error" record only.
+ */
+export interface ToolRegistryOptions {
+  onToolCall?: (record: ToolCallRecord) => void;
+}
+
+/** Cap for the human-readable result summary produced for the timeline. */
+const MAX_SUMMARY_LENGTH = 200;
+
+function truncate(text: string): string {
+  if (text.length <= MAX_SUMMARY_LENGTH) return text;
+  return text.slice(0, MAX_SUMMARY_LENGTH) + "...";
+}
+
+/** Derives a short, human-readable summary from a ToolResult. */
+function summarizeResult(result: ToolResult): string {
+  const data = result.data;
+  if (data === undefined || data === null) {
+    return result.status;
+  }
+  if (typeof data === "string") {
+    return truncate(data);
+  }
+  try {
+    const json = JSON.stringify(data);
+    return truncate(json ?? String(data));
+  } catch {
+    return truncate(String(data));
+  }
+}
+
 export class ToolRegistry {
   private tools: Map<string, ToolDefinition> = new Map();
   private auditTrail: AuditEntry[] = [];
+  private onToolCall: ((record: ToolCallRecord) => void) | undefined;
+
+  constructor(options: ToolRegistryOptions = {}) {
+    this.onToolCall = options.onToolCall;
+  }
+
+  /** Replace the tool-call sink (e.g. after the UI store becomes available). */
+  setOnToolCall(
+    callback: ((record: ToolCallRecord) => void) | undefined
+  ): void {
+    this.onToolCall = callback;
+  }
+
+  private emitToolCall(record: NewToolCallRecord): void {
+    if (!this.onToolCall) return;
+    this.onToolCall(createToolCallRecord(record));
+  }
 
   register(tool: ToolDefinition): void {
     if (this.tools.has(tool.name)) {
@@ -76,6 +138,10 @@ export class ToolRegistry {
     params: Record<string, unknown>,
     actor: Actor
   ): Promise<ToolResult> {
+    // One correlationId per invocation: every ToolCallRecord this call emits
+    // (running then success/error) shares it, so the UI store can upsert the
+    // in-flight record in place instead of appending two independent entries.
+    const correlationId = randomUUID();
     const tool = this.tools.get(name);
     if (!tool) {
       const errorResult: ToolResult = {
@@ -85,6 +151,14 @@ export class ToolRegistry {
         data: `Tool "${name}" not found`,
       };
       this.recordAudit(name, params, errorResult, actor.name);
+      this.emitToolCall({
+        toolName: name,
+        params,
+        resultSummary: summarizeResult(errorResult),
+        status: "error",
+        agentName: actor.name,
+        correlationId,
+      });
       return errorResult;
     }
 
@@ -97,8 +171,27 @@ export class ToolRegistry {
         data: validationError,
       };
       this.recordAudit(name, params, errorResult, actor.name);
+      this.emitToolCall({
+        toolName: name,
+        params,
+        resultSummary: summarizeResult(errorResult),
+        status: "error",
+        agentName: actor.name,
+        correlationId,
+      });
       return errorResult;
     }
+
+    // Execution is about to start: emit the in-flight record so the timeline
+    // shows the call as running while the handler is awaited.
+    this.emitToolCall({
+      toolName: name,
+      params,
+      resultSummary: "执行中",
+      status: "running",
+      agentName: actor.name,
+      correlationId,
+    });
 
     try {
       let result = await tool.handler(params);
@@ -113,6 +206,14 @@ export class ToolRegistry {
       }
 
       this.recordAudit(name, params, result, actor.name);
+      this.emitToolCall({
+        toolName: name,
+        params,
+        resultSummary: summarizeResult(result),
+        status: "success",
+        agentName: actor.name,
+        correlationId,
+      });
       return result;
     } catch (err) {
       const errorResult: ToolResult = {
@@ -122,6 +223,14 @@ export class ToolRegistry {
         data: err instanceof Error ? err.message : String(err),
       };
       this.recordAudit(name, params, errorResult, actor.name);
+      this.emitToolCall({
+        toolName: name,
+        params,
+        resultSummary: summarizeResult(errorResult),
+        status: "error",
+        agentName: actor.name,
+        correlationId,
+      });
       return errorResult;
     }
   }

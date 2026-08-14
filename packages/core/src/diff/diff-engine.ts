@@ -52,6 +52,28 @@ export class DiffEngine {
     return ProjectGraph.fromJSON(JSON.parse(snapshotJson));
   }
 
+  /**
+   * Exports the internal rollback snapshot map as a plain JSON-serializable
+   * record (rollbackToken -> graph snapshot JSON). Values are strings, so the
+   * returned record is a shallow copy that round-trips through JSON without
+   * mutation of the live map. Stage 0 persistence relies on this to carry the
+   * rollback chain across a refresh.
+   */
+  exportSnapshots(): Record<string, string> {
+    return Object.fromEntries(this.rollbackSnapshots);
+  }
+
+  /**
+   * Merges persisted snapshots back into the internal map (overwriting any
+   * token that already exists, keeping tokens that do not). Safe to call
+   * multiple times; idempotent with respect to apply()'s snapshot writes.
+   */
+  importSnapshots(snapshots: Record<string, string>): void {
+    for (const [token, snapshotJson] of Object.entries(snapshots)) {
+      this.rollbackSnapshots.set(token, snapshotJson);
+    }
+  }
+
   validate(diff: DiffEnvelope, graph: ProjectGraph): DiffValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];

@@ -155,6 +155,7 @@ export const OrchestratorPanel: React.FC<OrchestratorPanelProps> = ({
             <button
               key={key}
               className={`${styles.presetBtn} ${key === selectedPreset ? styles.presetBtnActive : ""}`}
+              data-testid={`orchestrator-preset-${key}`}
               onClick={() => applyPreset(key)}
             >
               {label}
@@ -278,7 +279,11 @@ export const OrchestratorPanel: React.FC<OrchestratorPanelProps> = ({
 
       {selectedPlayers.size > 0 && (
         <div className={styles.section}>
-          <button className={styles.orchestrateBtn} onClick={handleOrchestrate}>
+          <button
+            className={styles.orchestrateBtn}
+            data-testid="orchestrator-run"
+            onClick={handleOrchestrate}
+          >
             {t('orchestrator.orchestrate')} ({selectedPlayers.size} {t('orchestrator.instruments')})
           </button>
         </div>

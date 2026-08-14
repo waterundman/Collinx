@@ -13,6 +13,7 @@ export const NodeType = z.enum([
   "RenderArtifact",
   "TasteEvidence",
   "ExportVersion",
+  "AgentDecision",
 ]);
 
 export type NodeType = z.infer<typeof NodeType>;

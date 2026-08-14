@@ -1,6 +1,7 @@
-import type { ToolRegistry, AgentBus } from "@collinx/core";
-import { randomUUID, TempoMap } from "@collinx/core";
+import type { ToolRegistry, AgentBus, NoteEvent } from "@collinx/core";
+import { randomUUID, TempoMap, createSection, FormRole } from "@collinx/core";
 import { Composer } from "./composer";
+import { Arranger } from "./arranger";
 import { Planner } from "./planner";
 import { Orchestrator } from "./orchestrator";
 import { EngravingAgent } from "./engraving";
@@ -8,15 +9,26 @@ import { TeachingAgent } from "./teaching";
 import { TasteMemoryAgent } from "./taste-memory";
 import { MixingAgent } from "./mixing/mixing-agent";
 
-function stubResult(description: string) {
-  return {
-    status: "ok" as const,
-    resultType: "proposal" as const,
-    data: { message: `${description} (stub - v0.1.0)` },
-    confidence: 0.3,
-    requiresUserConfirmation: true,
-    auditRef: randomUUID(),
-  };
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+/** Maps a coarse style hint to a target energy level for the Arranger. */
+function styleToEnergy(style: string | undefined): number {
+  switch (style) {
+    case "cinematic":
+      return 0.8;
+    case "pop":
+      return 0.6;
+    case "jazz":
+      return 0.45;
+    case "classical":
+      return 0.4;
+    case "ambient":
+      return 0.25;
+    default:
+      return 0.6;
+  }
 }
 
 export function registerBuiltinTools(
@@ -81,7 +93,7 @@ export function registerBuiltinTools(
         data: graph,
         confidence: 0.8,
         requiresUserConfirmation: false,
-        auditRef: stubResult("").auditRef,
+        auditRef: randomUUID(),
       };
     },
   });
@@ -345,9 +357,79 @@ export function registerBuiltinTools(
     description: "展开/扩展乐段",
     permission: "proposal_only",
     parameters: [
+      { name: "source", type: "array", required: false, description: "源乐句音符(NoteEvent[])" },
       { name: "bars", type: "number", required: false, description: "扩展小节数" },
       { name: "style", type: "string", required: false, description: "风格提示" },
+      { name: "formTemplate", type: "string", required: false, description: "曲式模板(如 pop_ababcb)" },
+      { name: "energyTarget", type: "number", required: false, description: "目标能量 0-1" },
+      { name: "variantCount", type: "number", required: false, description: "变体数量" },
     ],
-    handler: async () => stubResult("段落扩展"),
+    handler: async (params) => {
+      const arranger = new Arranger();
+      const source = Array.isArray(params.source)
+        ? (params.source as NoteEvent[])
+        : [];
+      const bars =
+        typeof params.bars === "number" ? Math.max(1, params.bars) : 4;
+      const energyTarget =
+        typeof params.energyTarget === "number"
+          ? clamp01(params.energyTarget)
+          : styleToEnergy(params.style as string | undefined);
+
+      const target = createSection({
+        id: `section-${randomUUID()}`,
+        name: `Section (${bars} bars)`,
+        formRole: FormRole.Verse,
+        startBar: 1,
+        endBar: bars,
+        energyLevel: energyTarget,
+        motifIds: [],
+        phraseIds: [],
+      });
+
+      const result = arranger.expandSection(source, target, {
+        formTemplate:
+          typeof params.formTemplate === "string" && params.formTemplate.length > 0
+            ? params.formTemplate
+            : "pop_ababcb",
+        barCount: bars,
+        energyTarget,
+        variantCount:
+          typeof params.variantCount === "number" ? params.variantCount : 3,
+      });
+
+      const variants = result.variants.map((v) => ({
+        id: v.id,
+        notes: v.notes,
+        operations: v.operations,
+        variationScore: v.variationScore,
+        description: v.description,
+      }));
+
+      const selectedIndex = Math.max(
+        0,
+        result.variants.findIndex((v) => v.id === result.selectedVariant.id)
+      );
+
+      return {
+        status: "ok",
+        resultType: "proposal",
+        data: {
+          variants,
+          selectedVariant: variants[selectedIndex] ?? variants[0] ?? null,
+          formStructure: result.formStructure,
+          section: target,
+          energyCurvePoints: result.energyCurve.getPoints(),
+          confidence: result.confidence,
+        },
+        // DiffEnvelope[] proposals for Agent-panel review (same plural-key
+        // convention the orchestrator.voicingPlan handler uses).
+        diffs: result.diffs,
+        diff: result.diffs[selectedIndex],
+        confidence: result.confidence,
+        requiresUserConfirmation: true,
+        auditRef: randomUUID(),
+      };
+    },
   });
 }

@@ -3,7 +3,7 @@ import {
   createDiffEnvelope,
   type DiffEnvelope,
 } from "../diff/diff-envelope";
-import type { MixerTrack, MixerState, FXSlot, SendConfig } from "./audio-routes";
+import { addSlotToChain, type MixerTrack, type MixerState, type FXSlot, type FXType, type SendConfig } from "./audio-routes";
 import { MixerChangeSchema } from "./zod-schemas";
 
 export interface FXPreset {
@@ -73,8 +73,24 @@ export function diffToMixer(
 
     if (change.fxChanges) {
       for (const fxChange of change.fxChanges) {
-        const slot = track.fxChain.slots[fxChange.slotIndex];
-        if (slot) Object.assign(slot, fxChange.changes);
+        const existing = track.fxChain.slots[fxChange.slotIndex];
+        if (existing) {
+          Object.assign(existing, fxChange.changes);
+          continue;
+        }
+        // The change targets a slot that does not exist yet (e.g. a mixing
+        // proposal that installs a fresh FX chain on an empty track). Append
+        // a new slot so proposals can actually change the chain.
+        const raw = (fxChange.changes ?? {}) as Record<string, unknown>;
+        const slot: FXSlot = {
+          id: randomUUID(),
+          type: (raw.type as FXType) ?? "eq",
+          preset: (raw.preset as string) ?? "default",
+          params: (raw.params as Record<string, string>) ?? {},
+          enabled: (raw.enabled as boolean | undefined) ?? true,
+        };
+        Object.assign(slot, fxChange.changes);
+        addSlotToChain(track.fxChain, slot);
       }
     }
 

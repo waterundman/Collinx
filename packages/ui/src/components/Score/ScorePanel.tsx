@@ -2,30 +2,12 @@ import React, { useMemo, useState } from "react";
 import type {
   NoteEvent,
   TempoMap,
-  Layout as CoreLayout,
-  HouseStyle as CoreHouseStyle,
+  Layout,
+  HouseStyle,
 } from "@collinx/core";
 import { useI18n } from "../../i18n";
 import { ScoreRenderer } from "./ScoreRenderer";
 import styles from "./ScorePanel.module.css";
-
-export interface ScorePanelLayout extends CoreLayout {
-  stavesPerPage: number;
-  staffDistance: number;
-  staffConfig: { clef: "treble" | "bass" | "alto" | "tenor"; name: string; bars: number }[];
-}
-
-export type Layout = ScorePanelLayout;
-
-export interface ScorePanelHouseStyle extends CoreHouseStyle {
-  fontFamily: string;
-  stemDirection: "auto" | "up" | "down";
-  beamStyle: "modern" | "traditional";
-  tieStyle: "curved" | "straight";
-  notationSize: number;
-}
-
-export type HouseStyle = ScorePanelHouseStyle;
 
 export interface CollisionWarning {
   type: "symbol_overlap" | "slur_cross" | "dynamic_clash" | "articulation_conflict";
@@ -38,9 +20,9 @@ export interface CollisionWarning {
 }
 
 export interface ScorePanelProps {
-  layout: ScorePanelLayout;
+  layout: Layout;
   notes: NoteEvent[];
-  houseStyle?: ScorePanelHouseStyle;
+  houseStyle?: HouseStyle;
   collisions?: CollisionWarning[];
   tempoMap?: TempoMap;
   onExtractParts?: () => void;
@@ -72,6 +54,11 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
 }) => {
   const { t } = useI18n();
   const [viewMode, setViewMode] = useState<"data" | "rendered">("data");
+  // Layout/Staff config fields are optional on the core Layout type; fall back
+  // to safe defaults so a pure core layout still renders gracefully.
+  const staffConfig = layout.staffConfig ?? [];
+  const staffDistance = layout.staffDistance ?? 0;
+  const stavesPerPage = layout.stavesPerPage ?? 0;
   const errors = useMemo(
     () => collisions?.filter((c) => c.severity === "error") ?? [],
     [collisions],
@@ -82,7 +69,7 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   );
 
   const stavesWithNotes = useMemo(() => {
-    return layout.staffConfig.map((staff, idx) => {
+    return staffConfig.map((staff, idx) => {
       const staffNotes = notes.filter((n) => {
         if (staff.clef === "treble") return n.pitchMidi >= 60;
         if (staff.clef === "bass") return n.pitchMidi < 60;
@@ -90,7 +77,7 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
       });
       return { ...staff, staveIndex: idx, noteCount: staffNotes.length };
     });
-  }, [layout.staffConfig, notes]);
+  }, [staffConfig, notes]);
 
   return (
     <div className={styles.scorePanel} data-testid="score-panel">
@@ -126,7 +113,7 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
         </div>
         <span className={styles.toolbarSpacer} />
         <span className={styles.toolbarBadge}>
-          {t('score.notesCount', { count: notes.length })} · {t('score.stavesCount', { count: layout.staffConfig.length })}
+          {t('score.notesCount', { count: notes.length })} · {t('score.stavesCount', { count: staffConfig.length })}
         </span>
       </div>
 
@@ -158,11 +145,11 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
                 </div>
                 <div className={styles.layoutItem}>
                   <span className={styles.layoutKey}>{t('score.staffDistance')}</span>
-                  <span className={styles.layoutValue}>{layout.staffDistance}mm</span>
+                  <span className={styles.layoutValue}>{staffDistance}mm</span>
                 </div>
                 <div className={styles.layoutItem}>
                   <span className={styles.layoutKey}>{t('score.stavesPerPage')}</span>
-                  <span className={styles.layoutValue}>{layout.stavesPerPage}</span>
+                  <span className={styles.layoutValue}>{stavesPerPage}</span>
                 </div>
               </div>
             </div>
@@ -268,7 +255,7 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
               <ScoreRenderer
                 notes={notes}
                 layout={{
-                  staffConfig: layout.staffConfig.map((s) => ({
+                  staffConfig: staffConfig.map((s) => ({
                     clef: s.clef as "treble" | "bass",
                     name: s.name,
                     bars: s.bars,

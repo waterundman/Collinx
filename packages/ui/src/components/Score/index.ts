@@ -1,10 +1,6 @@
 export { ScorePanel } from "./ScorePanel";
 export type {
   ScorePanelProps,
-  ScorePanelLayout,
-  ScorePanelHouseStyle,
-  Layout,
-  HouseStyle,
   CollisionWarning,
 } from "./ScorePanel";
 export { ScoreRenderer } from "./ScoreRenderer";

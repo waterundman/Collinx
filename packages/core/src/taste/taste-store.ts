@@ -30,7 +30,16 @@ export interface FileSystemAdapter {
   writeFile(path: string, data: string, encoding: string): void;
 }
 
-function createNodeFsAdapter(): FileSystemAdapter {
+function createNodeFsAdapter(): FileSystemAdapter | null {
+  // Guard for non-Node runtimes (browser bundles, workers): `require` is
+  // undefined there, so calling it would throw a ReferenceError at store
+  // construction time. When unavailable we return null and the TasteStore
+  // degrades to in-memory mode (callers that want persistence in the browser
+  // inject a FileSystemAdapter explicitly).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  if (typeof require !== "function") {
+    return null;
+  }
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const fs = require("fs") as typeof import("fs");
   // eslint-disable-next-line @typescript-eslint/no-require-imports

@@ -18,6 +18,12 @@ export interface SystemBreak {
   type: "system" | "page";
 }
 
+export interface ScoreStaffConfig {
+  clef: "treble" | "bass" | "alto" | "tenor";
+  name: string;
+  bars: number;
+}
+
 export interface Layout {
   id: string;
   name: string;
@@ -29,6 +35,10 @@ export interface Layout {
   margins: { top: number; bottom: number; left: number; right: number };
   systemBreaks: SystemBreak[];
   globalStaffSize: number;
+  /** Optional presentation hints consumed by the UI score panel. */
+  stavesPerPage?: number;
+  staffDistance?: number;
+  staffConfig?: ScoreStaffConfig[];
 }
 
 export interface EngravingRule {
@@ -41,6 +51,12 @@ export interface HouseStyle {
   name: string;
   rules: EngravingRule[];
   smuflFont: string;
+  /** Optional presentation hints consumed by the UI score panel. */
+  fontFamily?: string;
+  stemDirection?: "auto" | "up" | "down";
+  beamStyle?: "modern" | "traditional";
+  tieStyle?: "curved" | "straight";
+  notationSize?: number;
 }
 
 export interface PartExtractionResult {

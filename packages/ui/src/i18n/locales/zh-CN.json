@@ -1403,7 +1403,9 @@
     "trackName": "轨道名称",
     "trackNamePlaceholder": "例如: Synth Lead",
     "sourceId": "源轨道 ID",
-    "sourceIdPlaceholder": "例如: melody"
+    "sourceIdPlaceholder": "例如: melody",
+    "suggestFxChain": "AI 建议 FX 链",
+    "suggestFxChainHint": "让 Mixing Agent 建议 FX 链/混音设置,提案将出现在 Agent 面板供审阅。"
   },
   "orchestrator": {
     "title": "编制器",
@@ -1482,7 +1484,8 @@
     "startConversation": "开始与 {{name}} 对话",
     "inputHint": "输入消息或询问音乐创作相关的问题",
     "inputPlaceholder": "输入消息...",
-    "send": "发送"
+    "send": "发送",
+    "errorResponse": "{{name}} 暂时无法响应,请稍后再试"
   },
   "agentPanel": {
     "title": "Agent 面板",
@@ -1493,6 +1496,21 @@
     "noPendingDiffs": "无待处理的差异",
     "history": "历史记录",
     "noHistory": "暂无历史记录"
+  },
+  "toolCalls": {
+    "title": "工具调用时间线",
+    "empty": "暂无工具调用记录",
+    "showParams": "查看参数",
+    "hideParams": "收起参数",
+    "status": {
+      "running": "运行中",
+      "success": "成功",
+      "error": "失败"
+    },
+    "result": {
+      "waiting": "等待回复",
+      "responseReceived": "已收到回复"
+    }
   },
   "diffCard": {
     "operation": "操作",

@@ -8,6 +8,7 @@ export { MixerConsole } from "./components/Mixer";
 export { TeachingPanel } from "./components/Teaching";
 export * from "./components/Taste";
 
-export type { Layout, HouseStyle, CollisionWarning, ScorePanelProps } from "./components/Score";
+export type { Layout, HouseStyle } from "@collinx/core";
+export type { CollisionWarning, ScorePanelProps } from "./components/Score";
 export type { OrchestratorConfig, RegisterConflict, Player } from "./components/Orchestrator";
 export type { UserLevel, ExplanationSection, AlternativeApproach, TeachingPanelProps } from "./components/Teaching";

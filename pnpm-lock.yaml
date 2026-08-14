@@ -64,6 +64,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@collinx/agent':
+        specifier: workspace:*
+        version: link:../agent
       '@collinx/core':
         specifier: workspace:*
         version: link:../core

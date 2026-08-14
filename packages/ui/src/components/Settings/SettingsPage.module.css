@@ -57,15 +57,15 @@
   font-size: 13px;
   font-family: var(--font-ui);
   color: var(--text-primary);
-  background: var(--bg-surface);
+  background: var(--canvas-soft);
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   outline: none;
   transition: border-color var(--transition-fast) var(--ease-standard);
 }
 
 .searchInput:focus {
-  border-color: var(--accent-cyan);
+  border-color: var(--accent-sunset);
 }
 
 .searchInput::placeholder {
@@ -127,6 +127,7 @@
   color: var(--text-secondary);
   background: none;
   border: none;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-standard),
     background var(--transition-fast) var(--ease-standard);
@@ -134,16 +135,17 @@
 
 .navigationItem:hover {
   color: var(--text-primary);
-  background: var(--bg-surface);
+  background: var(--canvas-soft);
 }
 
 .navigationItemActive {
-  color: var(--accent-cyan);
-  background: var(--bg-surface);
+  color: var(--canvas);
+  background: var(--ink);
 }
 
 .navigationItemActive:hover {
-  color: var(--accent-cyan);
+  color: var(--canvas);
+  background: var(--ink);
 }
 
 .navigationIcon {
@@ -180,9 +182,9 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
-  background: var(--bg-surface);
+  background: transparent;
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: color var(--transition-fast) var(--ease-standard),
     background var(--transition-fast) var(--ease-standard),
@@ -191,7 +193,8 @@
 
 .sidebarFooterButton:hover {
   color: var(--text-primary);
-  border-color: var(--border-secondary);
+  border-color: rgba(255, 255, 255, 0.25);
+  background: var(--canvas-soft);
 }
 
 /* ---- Content Area ---- */

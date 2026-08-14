@@ -9,11 +9,15 @@ import {
   TasteGenome,
   DiffEnvelope,
   createDiffEnvelope,
-  FormRole,
-  listTemplates,
+  createFormStructure,
+  FORM_TEMPLATES,
   applyTemplate,
 } from "@collinx/core";
 import { useI18n } from "../../i18n";
+import type {
+  ArrangerConfigInput,
+  ArrangerRunResult,
+} from "../../store/project-store";
 import styles from "./ArrangerPanel.module.css";
 
 interface ArrangerVariant {
@@ -30,9 +34,32 @@ interface ArrangerPanelProps {
   genome?: TasteGenome | null;
   onArrange?: (result: ArrangerVariant[]) => void;
   onApplyDiff?: (diff: DiffEnvelope) => void;
+  /** Stage 1: real Arranger agent runner. When provided, "生成编排" routes
+   *  through arranger.expandSection instead of the local demo generator. */
+  onRunArranger?: (config: ArrangerConfigInput) => Promise<ArrangerRunResult>;
 }
 
-const TEMPLATES = listTemplates();
+/** Maps a real ArrangerRunResult (Variant[] + formStructure + energy curve)
+ *  onto the panel's display shape. The real Arranger produces one section per
+ *  expandSection run; the timeline/energy-curve renderers consume that same
+ *  structure, so the result renders without the local demo generator. */
+function mapRealVariants(
+  result: ArrangerRunResult,
+  templateName: string
+): ArrangerVariant[] {
+  const structure = result.formStructure as FormStructure | null;
+  const curve = new EnergyCurve(result.energyCurvePoints);
+  return (result.variants ?? []).map((v, i) => ({
+    id: v.id,
+    name: `${templateName} (${v.description || `Variant ${i + 1}`})`,
+    structure:
+      structure ??
+      createFormStructure(`${templateName} (${v.description || "Variant"})`),
+    score: clamp(v.variationScore, 0, 1),
+    divergence: clamp(v.variationScore, 0, 1),
+    energyCurve: curve,
+  }));
+}
 
 function getCSSVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -274,10 +301,11 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
   motifs,
   genome,
   onApplyDiff,
+  onRunArranger,
 }) => {
   const { t } = useI18n();
   const [selectedTemplate, setSelectedTemplate] = useState<string>(
-    TEMPLATES[0]?.name ? "pop_ababcb" : ""
+    Object.keys(FORM_TEMPLATES).length > 0 ? "pop_ababcb" : ""
   );
   const [variants, setVariants] = useState<ArrangerVariant[]>([]);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
@@ -285,7 +313,8 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const currentTemplate = useMemo(
-    () => TEMPLATES.find((t) => t.name === selectedTemplate),
+    () =>
+      selectedTemplate ? FORM_TEMPLATES[selectedTemplate] : undefined,
     [selectedTemplate]
   );
 
@@ -307,12 +336,35 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
     }
   }, [variant, totalBars]);
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (!currentTemplate) return;
+
+    // Stage 1: prefer the real Arranger agent (arranger.expandSection via
+    // onRunArranger) over the local demo generator. The source motif is the
+    // concatenation of all non-empty motif notes available to the panel.
+    if (onRunArranger) {
+      const source = motifs
+        .filter((m) => m.notes.length > 0)
+        .flatMap((m) => m.notes);
+      const bars =
+        source.length > 0 ? Math.max(1, Math.max(...source.map((n) => n.bar))) : 4;
+      const result = await onRunArranger({
+        source,
+        bars,
+        formTemplate: selectedTemplate,
+        variantCount: 4,
+      });
+      if (result.status !== "ok") return;
+      const mapped = mapRealVariants(result, currentTemplate.name);
+      setVariants(mapped);
+      setSelectedVariant(mapped[0]?.id ?? null);
+      return;
+    }
+
     const result = generateVariants(currentTemplate, motifs, genome);
     setVariants(result);
     setSelectedVariant(result[0]?.id ?? null);
-  }, [currentTemplate, motifs, genome]);
+  }, [currentTemplate, motifs, genome, onRunArranger, selectedTemplate]);
 
   const handleConfirm = useCallback(() => {
     if (!variant) return;
@@ -336,14 +388,18 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
           value={selectedTemplate}
           onChange={(e) => setSelectedTemplate(e.target.value)}
         >
-          {TEMPLATES.map((t) => (
-            <option key={t.name} value={t.name}>
-              {t.name} — {t.description}
+          {Object.entries(FORM_TEMPLATES).map(([key, template]) => (
+            <option key={key} value={key}>
+              {template.name} — {template.description}
             </option>
           ))}
         </select>
 
-        <button className={styles.generateBtn} onClick={handleGenerate}>
+        <button
+          className={styles.generateBtn}
+          data-testid="arranger-generate"
+          onClick={handleGenerate}
+        >
           {t('arranger.generate')}
         </button>
       </div>
@@ -357,6 +413,7 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
             {variants.map((v) => (
               <div
                 key={v.id}
+                data-testid={`arranger-variant-${v.id}`}
                 className={`${styles.variantCard} ${v.id === selectedVariant ? styles.variantCardActive : ""}`}
                 onClick={() => setSelectedVariant(v.id)}
               >

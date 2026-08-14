@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useI18n } from "../../i18n";
+import { useProjectStore } from "../../hooks/useProjectStore";
 import styles from "./AgentChat.module.css";
 
 export interface ChatMessage {
@@ -11,19 +12,29 @@ export interface ChatMessage {
 }
 
 export interface AgentChatProps {
-  messages: ChatMessage[];
-  onSendMessage: (message: string) => void;
-  isTyping?: boolean;
+  /** Optional seed messages shown when the chat first renders. */
+  initialMessages?: ChatMessage[];
   agentName?: string;
 }
 
-export function AgentChat({
-  messages,
-  onSendMessage,
-  isTyping = false,
-  agentName = "Agent",
-}: AgentChatProps) {
+const USER_AGENT_ID = "user";
+const COMPOSE_AGENT_ID = "compose";
+
+function extractAgentText(response: unknown, fallback: string): string {
+  if (response && typeof response === "object") {
+    const text = (response as { text?: unknown }).text;
+    if (typeof text === "string" && text.length > 0) return text;
+  }
+  if (typeof response === "string" && response.length > 0) return response;
+  return fallback;
+}
+
+export function AgentChat({ initialMessages, agentName = "Agent" }: AgentChatProps) {
   const { t } = useI18n();
+  // Stage 1: the chat talks through the real AgentBus owned by the project store.
+  const { bus, actions } = useProjectStore();
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
+  const [isTyping, setIsTyping] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -36,23 +47,87 @@ export function AgentChat({
     scrollToBottom();
   }, [messages, isTyping, scrollToBottom]);
 
+  const pushMessage = useCallback((msg: ChatMessage) => {
+    setMessages((prev) => [...prev, msg]);
+  }, []);
+
   const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
       const trimmed = inputValue.trim();
       if (!trimmed) return;
-      onSendMessage(trimmed);
+
       setInputValue("");
       inputRef.current?.focus();
+
+      pushMessage({
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: trimmed,
+        timestamp: new Date(),
+      });
+      setIsTyping(true);
+
+      // Stage 1: leave a "running" trace entry so the timeline shows the
+      // request as in-flight while the AgentBus round-trips.
+      actions.recordToolCall({
+        toolName: "agent.chat",
+        params: { prompt: trimmed },
+        resultSummary: t("toolCalls.result.waiting"),
+        status: "running",
+        agentName: COMPOSE_AGENT_ID,
+      });
+
+      try {
+        // Real request/response round-trip through the AgentBus. The "compose"
+        // agent is pre-registered by ProjectProvider and answers with a rule-based
+        // response carried in the response payload.
+        const response = await bus.request(USER_AGENT_ID, COMPOSE_AGENT_ID, {
+          prompt: trimmed,
+        });
+        // Stage 1: append the success entry (the timeline is append-only, so
+        // the running entry above stays visible as the in-flight snapshot).
+        actions.recordToolCall({
+          toolName: "agent.chat",
+          params: { prompt: trimmed },
+          resultSummary: t("toolCalls.result.responseReceived"),
+          status: "success",
+          agentName: COMPOSE_AGENT_ID,
+        });
+        pushMessage({
+          id: `agent-${Date.now()}`,
+          role: "agent",
+          content: extractAgentText(response, trimmed),
+          timestamp: new Date(),
+          agentName,
+        });
+      } catch {
+        actions.recordToolCall({
+          toolName: "agent.chat",
+          params: { prompt: trimmed },
+          resultSummary: t("agentChat.errorResponse", { name: agentName }),
+          status: "error",
+          agentName: COMPOSE_AGENT_ID,
+        });
+        pushMessage({
+          id: `agent-${Date.now()}`,
+          role: "agent",
+          content: t("agentChat.errorResponse", { name: agentName }),
+          timestamp: new Date(),
+          agentName,
+        });
+      } finally {
+        setIsTyping(false);
+      }
     },
-    [inputValue, onSendMessage]
+    [bus, actions, inputValue, pushMessage, agentName, t]
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSubmit(e);
+        void handleSubmit(e);
       }
     },
     [handleSubmit]

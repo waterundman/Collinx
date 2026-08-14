@@ -9,6 +9,10 @@ Thumbs.db
 coverage
 test-results
 playwright-report
+.e2e-results*/
+.e2e-stage3-*/
+*.timestamp-*.mjs
+_tmp_*/
 
 # Test screenshots
 *.png
@@ -16,3 +20,6 @@ playwright-report
 
 # Docs
 docs/
+
+# Agent workspace memory
+.workbuddy/

@@ -1371,7 +1371,9 @@
     "trackName": "Track Name",
     "trackNamePlaceholder": "e.g. Synth Lead",
     "sourceId": "Source Track ID",
-    "sourceIdPlaceholder": "e.g. melody"
+    "sourceIdPlaceholder": "e.g. melody",
+    "suggestFxChain": "AI Suggest FX Chain",
+    "suggestFxChainHint": "Ask the Mixing Agent to propose an FX chain / mix setting. The proposal will appear in the Agent Panel for review."
   },
   "orchestrator": {
     "title": "Orchestrator",
@@ -1450,7 +1452,8 @@
     "startConversation": "Start a conversation with {{name}}",
     "inputHint": "Type a message or ask about music creation",
     "inputPlaceholder": "Type a message...",
-    "send": "Send"
+    "send": "Send",
+    "errorResponse": "{{name}} is currently unavailable, please try again later"
   },
   "agentPanel": {
     "title": "Agent Panel",
@@ -1461,6 +1464,21 @@
     "noPendingDiffs": "No pending diffs",
     "history": "History",
     "noHistory": "No history yet"
+  },
+  "toolCalls": {
+    "title": "Tool Call Timeline",
+    "empty": "No tool calls yet",
+    "showParams": "Show params",
+    "hideParams": "Hide params",
+    "status": {
+      "running": "Running",
+      "success": "Success",
+      "error": "Error"
+    },
+    "result": {
+      "waiting": "Waiting for reply",
+      "responseReceived": "Reply received"
+    }
   },
   "diffCard": {
     "operation": "operation",

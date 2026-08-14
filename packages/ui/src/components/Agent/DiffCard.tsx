@@ -88,19 +88,19 @@ export function DiffCard({ diff, status = "pending", onApply, onReject, onRollba
           {status === "pending" && (
             <>
               {onApply && (
-                <button type="button" className={`${styles.btn} ${styles.btnApply}`} onClick={onApply}>
+                <button type="button" className={`${styles.btn} ${styles.btnApply}`} data-testid={`diff-apply-${diff.diffId}`} onClick={onApply}>
                   {t('diffCard.apply')}
                 </button>
               )}
               {onReject && (
-                <button type="button" className={`${styles.btn} ${styles.btnReject}`} onClick={onReject}>
+                <button type="button" className={`${styles.btn} ${styles.btnReject}`} data-testid={`diff-reject-${diff.diffId}`} onClick={onReject}>
                   {t('diffCard.reject')}
                 </button>
               )}
             </>
           )}
           {status === "applied" && onRollback && (
-            <button type="button" className={`${styles.btn} ${styles.btnRollback}`} onClick={onRollback}>
+            <button type="button" className={`${styles.btn} ${styles.btnRollback}`} data-testid={`diff-rollback-${diff.diffId}`} onClick={onRollback}>
               {t('diffCard.rollback')}
             </button>
           )}

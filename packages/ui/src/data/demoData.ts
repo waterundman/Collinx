@@ -9,9 +9,8 @@ import {
   DiffEnvelope,
   randomUUID,
 } from "@collinx/core";
+import type { Layout, HouseStyle, FileSystemAdapter } from "@collinx/core";
 import i18n from "../i18n";
-import type { Layout } from "../components/Score";
-import type { HouseStyle } from "../components/Score";
 import type { GraphData } from "../components/KnowledgeGraph";
 import type { ChatMessage } from "../components/Agent";
 
@@ -218,8 +217,12 @@ export const agentHistoryDiffs: DiffEnvelope[] = [
   },
 ];
 
-export function createTasteStore(): TasteStore {
-  const tasteStore = new TasteStore();
+export function createTasteStore(fsAdapter?: FileSystemAdapter): TasteStore {
+  // When an fs adapter is injected (browser localStorage adapter) we give the
+  // store a virtual storage path so it persists through _saveToDisk. Without
+  // an adapter the store runs in memory mode (default Node/unit-test path,
+  // no fs module access).
+  const tasteStore = new TasteStore(fsAdapter ? "collinx/taste" : undefined, fsAdapter);
   const defaultGenome = TasteGenome.createDefault();
   tasteStore.save(defaultGenome.clone());
   return tasteStore;

@@ -240,6 +240,18 @@ describe("DiffEngine", () => {
       expect(result.skippedOps).toBe(1);
       expect(result.graph.getAllNodes()).toHaveLength(2);
     });
+
+    it("should apply an add_note_group with an empty notes array as a no-op success", () => {
+      const diff = makeEnvelope({
+        baseRevision: graph.getRevisionId(),
+        ops: [{ op: "add_note_group", path: "/", notes: [] }],
+      });
+
+      const result = engine.apply(diff, graph);
+      expect(result.appliedOps).toBe(1);
+      expect(result.skippedOps).toBe(0);
+      expect(result.graph.getNodesByType("NoteSpan")).toHaveLength(0);
+    });
   });
 
   describe("validate", () => {
@@ -356,6 +368,84 @@ describe("DiffEngine", () => {
     it("should throw for unknown rollback token", () => {
       expect(() => engine.rollback(graph, "unknown-token")).toThrow("Rollback snapshot not found");
     });
+
+    it("should be idempotent: replaying the same rollback token restores the same snapshot", () => {
+      const diff = makeEnvelope({
+        baseRevision: graph.getRevisionId(),
+        ops: [{ op: "add_node", path: "/", nodeType: "Phrase", data: { name: "once" } }],
+      });
+
+      const result = engine.apply(diff, graph);
+      expect(result.graph.getAllNodes()).toHaveLength(1);
+
+      // First rollback restores the pre-apply state.
+      const restored = engine.rollback(graph, result.rollbackToken);
+      expect(restored.getAllNodes()).toHaveLength(0);
+
+      // Replaying the same token is safe: snapshots are never consumed.
+      const replayed = engine.rollback(graph, result.rollbackToken);
+      expect(replayed.getAllNodes()).toHaveLength(0);
+      expect(replayed.toJSON().nodes).toEqual(restored.toJSON().nodes);
+    });
+  });
+
+  describe("exportSnapshots/importSnapshots (Stage 0)", () => {
+    it("exportSnapshots returns a JSON-serializable shallow copy of the rollback map", () => {
+      const diff = makeEnvelope({
+        baseRevision: graph.getRevisionId(),
+        ops: [{ op: "add_node", path: "/", nodeType: "Phrase", data: { name: "A" } }],
+        rollbackToken: "token-a",
+      });
+      engine.apply(diff, graph);
+
+      const exported = engine.exportSnapshots();
+      expect(exported).toEqual({ "token-a": expect.any(String) });
+
+      // JSON round-trip keeps the snapshot string byte-for-byte.
+      const revived = JSON.parse(JSON.stringify(exported)) as Record<string, string>;
+      expect(revived["token-a"]).toBe(exported["token-a"]);
+
+      // The exported record is a shallow copy: mutating it does not touch the live map.
+      delete exported["token-a"];
+      expect(engine.exportSnapshots()["token-a"]).toBe(revived["token-a"]);
+    });
+
+    it("importSnapshots restores snapshots into a fresh engine so rollback works after refresh", () => {
+      const diff = makeEnvelope({
+        baseRevision: graph.getRevisionId(),
+        ops: [{ op: "add_node", path: "/", nodeType: "Phrase", data: { name: "A" } }],
+        rollbackToken: "token-b",
+      });
+      const result = engine.apply(diff, graph);
+      expect(result.graph.getAllNodes()).toHaveLength(1);
+
+      // Simulate a refresh: a brand-new engine hydrated from persisted data.
+      const exported = engine.exportSnapshots();
+      const fresh = new DiffEngine();
+      fresh.importSnapshots(JSON.parse(JSON.stringify(exported)) as Record<string, string>);
+
+      const restored = fresh.rollback(result.graph, result.rollbackToken);
+      expect(restored.getAllNodes()).toHaveLength(0);
+    });
+
+    it("importSnapshots merges over existing tokens and keeps unknown tokens", () => {
+      const diff = makeEnvelope({
+        baseRevision: graph.getRevisionId(),
+        ops: [{ op: "add_node", path: "/", nodeType: "Phrase", data: { name: "A" } }],
+        rollbackToken: "token-c",
+      });
+      engine.apply(diff, graph);
+      engine.importSnapshots({ "token-c": "{\"replaced\":true}", "token-d": "{}" });
+
+      const exported = engine.exportSnapshots();
+      expect(exported["token-c"]).toBe("{\"replaced\":true}");
+      expect(exported["token-d"]).toBe("{}");
+    });
+
+    it("importSnapshots with an empty record is a no-op", () => {
+      engine.importSnapshots({});
+      expect(engine.exportSnapshots()).toEqual({});
+    });
   });
 
   describe("merge", () => {
@@ -376,6 +466,30 @@ describe("DiffEngine", () => {
       expect(merged.ops).toHaveLength(2);
       expect(merged.summary).toContain("Merged");
       expect(merged.actor.name).toBe("merge");
+    });
+
+    it("should concatenate ops for conflicting diffs without throwing (conflict is a hasConflict concern)", () => {
+      const diffA = makeEnvelope({
+        baseRevision: graph.getRevisionId(),
+        ops: [{ op: "update_node", path: "/", nodeId: "shared-node", data: { name: "A" } }],
+        summary: "Touch shared-node from A",
+      });
+
+      const diffB = makeEnvelope({
+        baseRevision: graph.getRevisionId(),
+        ops: [{ op: "remove_node", path: "/", nodeId: "shared-node" }],
+        summary: "Touch shared-node from B",
+      });
+
+      // The two diffs touch the same node, so they conflict...
+      expect(engine.hasConflict(diffA, diffB)).toBe(true);
+
+      // ...but merge itself does not reject them: it concatenates the ops.
+      expect(() => engine.merge(diffA, diffB)).not.toThrow();
+      const merged = engine.merge(diffA, diffB);
+      expect(merged.ops).toHaveLength(2);
+      expect(merged.ops[0]).toMatchObject({ op: "update_node", nodeId: "shared-node" });
+      expect(merged.ops[1]).toMatchObject({ op: "remove_node", nodeId: "shared-node" });
     });
   });
 

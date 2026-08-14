@@ -37,9 +37,9 @@ button {
   font-family: var(--font-ui);
   font-size: 13px;
   color: var(--button-text);
-  background: var(--button-bg);
+  background: transparent;
   border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   padding: var(--space-1) var(--space-3);
   cursor: pointer;
   transition: background var(--transition-fast) var(--ease-standard),
@@ -48,8 +48,8 @@ button {
 }
 
 button:hover {
-  background: var(--bg-overlay);
-  border-color: var(--border-secondary);
+  background: var(--canvas-soft);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 button:disabled {
@@ -58,12 +58,12 @@ button:disabled {
 }
 
 a {
-  color: var(--accent-cyan);
+  color: var(--accent-breeze);
   text-decoration: none;
 }
 
 a:hover {
-  color: var(--accent-cyan-hover);
+  color: var(--ink);
 }
 
 :focus-visible {
