@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { randomUUID } from "@collinx/core";
 import { useI18n } from "../../i18n";
 import { useProjectStore } from "../../hooks/useProjectStore";
 import styles from "./AgentChat.module.css";
@@ -68,14 +69,21 @@ export function AgentChat({ initialMessages, agentName = "Agent" }: AgentChatPro
       });
       setIsTyping(true);
 
-      // Stage 1: leave a "running" trace entry so the timeline shows the
-      // request as in-flight while the AgentBus round-trips.
+      // v1.14 Stage 2: mint one correlationId per chat round-trip so the
+      // running -> success/error transitions upsert into a single timeline
+      // card (the store's RECORD_TOOL_CALL case replaces the record with the
+      // same correlationId instead of appending).
+      const correlationId = randomUUID();
+
+      // Leave a "running" trace entry so the timeline shows the request as
+      // in-flight while the AgentBus round-trips.
       actions.recordToolCall({
         toolName: "agent.chat",
         params: { prompt: trimmed },
         resultSummary: t("toolCalls.result.waiting"),
         status: "running",
         agentName: COMPOSE_AGENT_ID,
+        correlationId,
       });
 
       try {
@@ -85,14 +93,15 @@ export function AgentChat({ initialMessages, agentName = "Agent" }: AgentChatPro
         const response = await bus.request(USER_AGENT_ID, COMPOSE_AGENT_ID, {
           prompt: trimmed,
         });
-        // Stage 1: append the success entry (the timeline is append-only, so
-        // the running entry above stays visible as the in-flight snapshot).
+        // Upsert the running entry to success via the shared correlationId
+        // (the store merges it in place, so the timeline stays a single card).
         actions.recordToolCall({
           toolName: "agent.chat",
           params: { prompt: trimmed },
           resultSummary: t("toolCalls.result.responseReceived"),
           status: "success",
           agentName: COMPOSE_AGENT_ID,
+          correlationId,
         });
         pushMessage({
           id: `agent-${Date.now()}`,
@@ -108,6 +117,7 @@ export function AgentChat({ initialMessages, agentName = "Agent" }: AgentChatPro
           resultSummary: t("agentChat.errorResponse", { name: agentName }),
           status: "error",
           agentName: COMPOSE_AGENT_ID,
+          correlationId,
         });
         pushMessage({
           id: `agent-${Date.now()}`,

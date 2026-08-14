@@ -8,11 +8,12 @@ import { useProjectStore } from "../../../hooks/useProjectStore";
 import type { ProjectStoreValue } from "../../../store/project-store";
 
 /**
- * Stage 4: AgentChat -> AgentBus -> recordToolCall wiring test. The chat
- * component is the ONLY place in the UI that records agent.chat tool calls,
- * so this locks the Stage 1 contract: sending a message leaves a "running"
- * entry in store.toolCalls, and the AgentBus round-trip appends a "success"
- * entry (the timeline is append-only, so both coexist).
+ * Stage 4 + v1.14 Stage 2: AgentChat -> AgentBus -> recordToolCall wiring
+ * test. The chat component is the ONLY place in the UI that records agent.chat
+ * tool calls. Sending a message records a "running" entry with a correlationId
+ * minted once per round-trip; the AgentBus round-trip upserts that entry to
+ * "success" (same correlationId), so the timeline is exactly ONE card — the
+ * running snapshot is never left behind as a second append.
  */
 function renderChat() {
   const container = document.createElement("div");
@@ -88,49 +89,72 @@ beforeAll(() => {
   }
 });
 
-describe("AgentChat (Stage 1 wiring)", () => {
-  it("T01: 发送消息后在 store.toolCalls 留下 agent.chat 记录(running 立即出现) (critical)", () => {
+describe("AgentChat (Stage 1 wiring + v1.14 Stage 2 single-card)", () => {
+  it("T01: 发送消息后时间线留下恰 1 张 agent.chat 卡(最终 success,参数完整) (critical)", async () => {
     const chat = renderChat();
     expect(chat.store.toolCalls.length).toBe(0);
 
     chat.submit("Suggest a chord progression for bars 1-4");
 
-    // The "running" entry is recorded synchronously by handleSubmit before
-    // the AgentBus round-trip resolves.
-    const running = chat.store.toolCalls.find(
-      (r) => r.toolName === "agent.chat" && r.status === "running"
-    );
-    expect(running).toBeDefined();
-    expect(running!.params).toEqual({ prompt: "Suggest a chord progression for bars 1-4" });
-    expect(running!.agentName).toBe("compose");
-    expect(typeof running!.timestamp).toBe("string");
-
-    chat.cleanup();
-  });
-
-  it("T02: AgentBus 往返后追加 success 记录(append-only) (critical)", async () => {
-    const chat = renderChat();
-
-    chat.submit("Mix the drums louder");
-    expect(chat.store.toolCalls.some((r) => r.status === "running")).toBe(true);
-
     // The compose agent answers synchronously inside AgentBus.request, so the
-    // success entry is appended right after the awaited round-trip. Poll until
-    // it lands (the state update is async through React dispatch).
-    let success: { toolName: string; status: string } | undefined;
+    // running entry is immediately upserted to success by correlationId. Poll
+    // until the settled card lands (state update is async through React).
+    let settled: {
+      toolName: string;
+      status: string;
+      params: Record<string, unknown>;
+      agentName?: string;
+      correlationId?: string;
+      timestamp?: string;
+    } | undefined;
     const deadline = Date.now() + 2000;
-    while (!success && Date.now() < deadline) {
+    while (!settled && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 10));
-      success = chat.store.toolCalls.find(
+      settled = chat.store.toolCalls.find(
         (r) => r.toolName === "agent.chat" && r.status === "success"
       );
     }
 
-    expect(success).toBeDefined();
-    expect(success!.toolName).toBe("agent.chat");
-    expect(success!.status).toBe("success");
-    // Append-only: the earlier running entry is still present.
-    expect(chat.store.toolCalls.filter((r) => r.toolName === "agent.chat").length).toBeGreaterThanOrEqual(2);
+    expect(settled).toBeDefined();
+    expect(settled!.toolName).toBe("agent.chat");
+    expect(settled!.status).toBe("success");
+    expect(settled!.params).toEqual({ prompt: "Suggest a chord progression for bars 1-4" });
+    expect(settled!.agentName).toBe("compose");
+    expect(typeof settled!.timestamp).toBe("string");
+    // Single-card contract: the running snapshot was upserted, not appended.
+    expect(chat.store.toolCalls.filter((r) => r.toolName === "agent.chat").length).toBe(1);
+
+    chat.cleanup();
+  });
+
+  it("T02: 同一 correlationId 复用,无 running 残留(时间线彻底单卡) (critical)", async () => {
+    const chat = renderChat();
+
+    chat.submit("Mix the drums louder");
+
+    let settled:
+      | { toolName: string; status: string; correlationId?: string }
+      | undefined;
+    const deadline = Date.now() + 2000;
+    while (!settled && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 10));
+      settled = chat.store.toolCalls.find(
+        (r) => r.toolName === "agent.chat" && r.status === "success"
+      );
+    }
+
+    expect(settled).toBeDefined();
+    expect(settled!.status).toBe("success");
+    // The card is associated with a correlationId minted once per round-trip.
+    expect(typeof settled!.correlationId).toBe("string");
+    expect(settled!.correlationId!.length).toBeGreaterThan(0);
+    // No stale running card survives the upsert: exactly one agent.chat entry,
+    // in its final success state.
+    const agentCalls = chat.store.toolCalls.filter(
+      (r) => r.toolName === "agent.chat"
+    );
+    expect(agentCalls.length).toBe(1);
+    expect(agentCalls[0].status).toBe("success");
 
     chat.cleanup();
   });

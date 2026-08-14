@@ -1,15 +1,16 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * E2E-E: Agent tool-call timeline (v1.11.0 Stage 3).
+ * E2E-E: Agent tool-call timeline (v1.11.0 Stage 3, v1.14.0 Stage 2 single-card).
  *
  * Locks the Stage 0/1 tool-call trace in a real browser session:
  *  1. A fresh session starts with an empty timeline (tool-call-empty,
  *     tool-call-count "0").
  *  2. Sending a chat message through AgentChat records an agent.chat entry
- *     via store.recordToolCall; the AgentBus round-trip resolves quickly, so
- *     the append-only trace ends up with the running entry plus a success
- *     entry (>= 2 cards), each rendering the tool name and a status badge.
+ *     via store.recordToolCall with a correlationId minted once per round-trip.
+ *     The AgentBus round-trip resolves quickly, so the running entry is
+ *     upserted to success in place — exactly ONE card renders (the timeline
+ *     is single-card per correlationId since v1.14.0 Stage 2).
  *
  * Selectors follow the repo convention (data-testid) and are locale-
  * independent (toolName "agent.chat" and the item count, not localized text).
@@ -38,11 +39,10 @@ test.describe("E2E-E: Agent tool-call timeline", () => {
     await page.locator('[data-testid="agent-chat-send"]').click();
 
     // The request records a "running" entry synchronously; once the AgentBus
-    // answers, a "success" entry is appended (the trace is append-only, so the
-    // running card stays visible). Allow either render order.
+    // answers, the running card is upserted to success via the shared
+    // correlationId (v1.14.0 Stage 2), so exactly ONE card renders.
     const items = page.locator('[data-testid="tool-call-item"]');
-    await expect.poll(async () => items.count()).toBeGreaterThanOrEqual(1);
-    await expect.poll(async () => items.count()).toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => items.count()).toBe(1);
 
     // Every card must show the tool name of the AgentChat call.
     await expect(
