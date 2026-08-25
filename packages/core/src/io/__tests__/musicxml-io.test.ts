@@ -296,3 +296,101 @@ describe("MusicXMLIO", () => {
     });
   });
 });
+
+// ── v1.15 Stage 0: real export path (round-trip + field fidelity) ───────────
+describe("MusicXMLIO export v1.15 (Stage 0)", () => {
+  // T01 (unit, critical): the exported XML must round-trip through
+  // importFromXML with bar/beat/pitchMidi/durQn preserved. Covers chords
+  // (same-beat pitches), gaps between attacks and multiple parts.
+  it("T01: exportToXML 可被 importFromXML 往返解析(bar/beat/pitchMidi/durQn) (critical)", () => {
+    const notes = [
+      createNoteEvent({ trackId: "P1", bar: 1, beat: 1, durQn: 1, pitchMidi: 60 }),
+      createNoteEvent({ trackId: "P1", bar: 1, beat: 1, durQn: 1, pitchMidi: 64 }), // chord
+      createNoteEvent({ trackId: "P1", bar: 1, beat: 3, durQn: 1, pitchMidi: 67 }), // gap at beat 2
+      createNoteEvent({ trackId: "P1", bar: 2, beat: 1, durQn: 2, pitchMidi: 62 }),
+      createNoteEvent({ trackId: "P1", bar: 2, beat: 3, durQn: 0.5, pitchMidi: 69 }),
+      createNoteEvent({ trackId: "P2", bar: 1, beat: 1, durQn: 4, pitchMidi: 40 }),
+    ];
+    const tempoMap = TempoMap.default();
+
+    const xml = MusicXMLIO.exportToXML(notes, tempoMap, { title: "Roundtrip-15" });
+    const imported = MusicXMLIO.importFromXML(xml);
+
+    expect(imported.notes.length).toBe(notes.length);
+    for (const original of notes) {
+      const match = imported.notes.find(
+        (n) =>
+          n.trackId === original.trackId &&
+          n.bar === original.bar &&
+          Math.abs(n.beat - original.beat) < 1e-6 &&
+          n.pitchMidi === original.pitchMidi
+      );
+      expect(match).toBeDefined();
+      expect(match!.durQn).toBeCloseTo(original.durQn, 4);
+    }
+  });
+
+  // T03 (unit, critical): XML string assertions on the exported fields —
+  // note pitch/duration/type, time signature and key signature.
+  it("T03: exportToXML 输出音符/拍号/调号字段正确 (critical)", () => {
+    const notes = [
+      createNoteEvent({
+        trackId: "P1",
+        bar: 1,
+        beat: 1,
+        durQn: 1,
+        pitchMidi: 60,
+        pitchSpelling: "C4",
+      }),
+      createNoteEvent({
+        trackId: "P1",
+        bar: 1,
+        beat: 2,
+        durQn: 0.5,
+        pitchMidi: 66,
+        pitchSpelling: "F#4",
+      }),
+    ];
+    const tempoMap = TempoMap.default();
+
+    const xml = MusicXMLIO.exportToXML(notes, tempoMap, {
+      title: "T3",
+      composer: "Test Composer",
+    });
+
+    // score-partwise skeleton + part-list + work/creator metadata.
+    expect(xml).toContain('<score-partwise version="4.0">');
+    expect(xml).toContain('<part-list>');
+    expect(xml).toContain('id="P1"');
+    expect(xml).toContain("<work-title>T3</work-title>");
+    expect(xml).toContain('<creator type="composer">Test Composer</creator>');
+
+    // 拍号: TempoMap.default() is 4/4.
+    expect(xml).toContain("<time><beats>4</beats><beat-type>4</beat-type></time>");
+    // 调号: C major -> fifths 0.
+    expect(xml).toContain("<key><fifths>0</fifths><mode>major</mode></key>");
+    // 速度方向.
+    expect(xml).toContain('<sound tempo="120"/>');
+
+    // 音符: pitch step/octave + duration + type.
+    expect(xml).toContain("<step>C</step>");
+    expect(xml).toContain("<octave>4</octave>");
+    expect(xml).toContain("<duration>480</duration>");
+    expect(xml).toContain("<type>quarter</type>");
+    // 升号音符 F#4 -> alter 1, eighth -> 240 divisions.
+    expect(xml).toContain("<alter>1</alter>");
+    expect(xml).toContain("<duration>240</duration>");
+    expect(xml).toContain("<type>eighth</type>");
+
+    // Non-default time/key from the tempo map propagate into the XML.
+    const gMajorTempo = new TempoMap(
+      [{ bar: 1, bpm: 90 }],
+      [{ bar: 1, numerator: 3, denominator: 4 }],
+      [{ bar: 1, tonic: "G", mode: "major" }]
+    );
+    const xml2 = MusicXMLIO.exportToXML(notes, gMajorTempo);
+    expect(xml2).toContain("<time><beats>3</beats><beat-type>4</beat-type></time>");
+    expect(xml2).toContain("<key><fifths>1</fifths><mode>major</mode></key>");
+    expect(xml2).toContain('<sound tempo="90"/>');
+  });
+});

@@ -1587,7 +1587,12 @@
       "noticeTitle": "乐谱面板",
       "runFailed": "排版分析失败，请重试",
       "extractPartsPending": "分谱提取尚未实现，将在后续版本提供",
-      "exportMusicXMLPending": "MusicXML 导出尚未实现，将在后续版本提供"
+      "exportMusicXMLPending": "MusicXML 导出尚未实现，将在后续版本提供",
+      "partsExtracted": "已提取 {{count}} 个声部：{{summary}}",
+      "partsEmpty": "未提取到声部",
+      "extractPartsFailed": "分谱提取失败，请重试",
+      "exportMusicXMLDone": "已导出 collinx-score.xml（{{count}} 个音符）",
+      "exportMusicXMLEmpty": "当前没有音符可导出"
     },
     "teaching": {
       "runFailed": "教学解释生成失败，请重试"

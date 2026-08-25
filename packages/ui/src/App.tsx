@@ -10,6 +10,7 @@ import {
   ExportAnalyzer,
   DiffEnvelope,
   MixerTrack,
+  MusicXMLIO,
 } from "@collinx/core";
 import { PianoRollView } from "./components/PianoRoll/PianoRollView";
 import { ScorePanel } from "./components/Score";
@@ -311,16 +312,55 @@ export function App() {
     }
   }, [actions, defaultLayout.id, t]);
 
-  // v1.14: part extraction / MusicXML export are not wired to a real tool yet.
-  // Keep the buttons alive with an explicit notice so the user is never
-  // silently left with nothing happening (no bare no-op stubs).
-  const handleExtractParts = useCallback(() => {
-    setScoreNotice(t("app.score.extractPartsPending"));
-  }, [t]);
+  // v1.15 Stage 0: part extraction runs the real engraving.extractParts tool
+  // through the store action and surfaces the extracted part list as a status
+  // line (score-notice). Tool failures keep the panel alive with a hint.
+  const handleExtractParts = useCallback(async () => {
+    setScoreNotice(null);
+    const result = await actions.runExtractParts(defaultLayout.id);
+    if (result.status === "ok") {
+      if (result.parts.length > 0) {
+        const summary = result.parts
+          .map((p) => `${p.instrumentName} (${p.barCount} 小节)`)
+          .join(" · ");
+        setScoreNotice(
+          t("app.score.partsExtracted", {
+            count: result.parts.length,
+            summary,
+          })
+        );
+      } else {
+        setScoreNotice(t("app.score.partsEmpty"));
+      }
+    } else {
+      setScoreNotice(t("app.score.extractPartsFailed"));
+    }
+  }, [actions, defaultLayout.id, t]);
 
+  // v1.15 Stage 0: MusicXML export generates a real score-partwise XML from
+  // the store's notes + tempo map and downloads it as collinx-score.xml.
   const handleExportMusicXML = useCallback(() => {
-    setScoreNotice(t("app.score.exportMusicXMLPending"));
-  }, [t]);
+    if (notes.length === 0) {
+      setScoreNotice(t("app.score.exportMusicXMLEmpty"));
+      return;
+    }
+    const xml = MusicXMLIO.exportToXML(notes, tempoMap, {
+      title: "Collinx Score",
+      composer: "Collinx",
+    });
+    const blob = new Blob([xml], { type: "application/xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "collinx-score.xml";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setScoreNotice(
+      t("app.score.exportMusicXMLDone", { count: notes.length })
+    );
+  }, [notes, tempoMap, t]);
 
   // v1.14 Stage 1: Teaching panel real tool loop. Whenever the active diff or
   // the user level changes, re-run teaching.explainDecision through the store

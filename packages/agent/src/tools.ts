@@ -1,4 +1,4 @@
-import type { ToolRegistry, AgentBus, NoteEvent } from "@collinx/core";
+import type { ToolRegistry, AgentBus, NoteEvent, DiffOperation } from "@collinx/core";
 import { randomUUID, TempoMap, createSection, FormRole } from "@collinx/core";
 import { Composer } from "./composer";
 import { Arranger } from "./arranger";
@@ -214,6 +214,47 @@ export function registerBuiltinTools(
         status: "ok",
         resultType: "data",
         data: report,
+        confidence: 0.9,
+        requiresUserConfirmation: false,
+        auditRef: randomUUID(),
+      };
+    },
+  });
+
+  registry.register({
+    name: "engraving.extractParts",
+    description: "从总谱中提取分谱声部",
+    permission: "proposal_only",
+    parameters: [
+      { name: "layoutId", type: "string", required: true, description: "总谱布局ID" },
+    ],
+    handler: async (params) => {
+      const engraving = new EngravingAgent();
+      const diffs = engraving.extractParts(params.layoutId as string);
+      const parts = diffs
+        .flatMap((d) => d.ops)
+        .filter(
+          (op): op is Extract<DiffOperation, { op: "add_node" }> =>
+            op.op === "add_node" && op.nodeType === "PartLayout"
+        )
+        .map((op) => op.data)
+        .filter(
+          (d): d is { instrumentId: string; instrumentName: string; barCount: number } =>
+            typeof d === "object" &&
+            d !== null &&
+            typeof (d as { instrumentId?: unknown }).instrumentId === "string" &&
+            typeof (d as { instrumentName?: unknown }).instrumentName === "string" &&
+            typeof (d as { barCount?: unknown }).barCount === "number"
+        );
+      return {
+        status: "ok",
+        resultType: "data",
+        data: {
+          layoutId: params.layoutId,
+          parts,
+          diffCount: diffs.length,
+        },
+        diffs,
         confidence: 0.9,
         requiresUserConfirmation: false,
         auditRef: randomUUID(),

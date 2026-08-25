@@ -236,6 +236,52 @@ export interface EngravingRunResult {
 export const DEFAULT_FIX_SUGGESTION = "（无自动修复建议）";
 
 // ---------------------------------------------------------------------------
+// v1.15 Stage 0: Score panel -> real part-extraction tool bridge
+// ---------------------------------------------------------------------------
+
+/** One extracted part (PartLayout payload from engraving.extractParts). */
+export interface ExtractPartInfo {
+  instrumentId: string;
+  instrumentName: string;
+  barCount: number;
+}
+
+/** Parsed outcome of a real part-extraction run
+ *  (engraving.extractParts tool). `parts` are the extracted PartLayout
+ *  payloads; the proposal diffs are already enqueued into pendingDiffs by the
+ *  action. */
+export interface ExtractPartsRunResult {
+  status: "ok" | "error";
+  parts: ExtractPartInfo[];
+  confidence: number | undefined;
+  raw: unknown;
+}
+
+/** Converts the raw `parts` payload of the engraving.extractParts tool into
+ *  ExtractPartInfo[]. Malformed / non-object entries are dropped so a
+ *  partially malformed tool payload cannot crash the panel. */
+export function convertExtractParts(data: unknown): ExtractPartInfo[] {
+  if (!Array.isArray(data)) return [];
+  const out: ExtractPartInfo[] = [];
+  for (const item of data) {
+    if (typeof item !== "object" || item === null) continue;
+    const p = item as Record<string, unknown>;
+    if (
+      typeof p.instrumentId === "string" &&
+      typeof p.instrumentName === "string" &&
+      typeof p.barCount === "number"
+    ) {
+      out.push({
+        instrumentId: p.instrumentId,
+        instrumentName: p.instrumentName,
+        barCount: p.barCount,
+      });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // v1.14 Stage 1: Teaching panel -> real Teaching tool bridge
 // ---------------------------------------------------------------------------
 
@@ -499,6 +545,15 @@ export interface ProjectStoreActions {
    * (ToolRegistry.call surfaces handler failures as status: "error").
    */
   runEngraving: (layoutId: string) => Promise<EngravingRunResult>;
+  /**
+   * v1.15 Stage 0: run the real Engraving agent through the ToolRegistry
+   * (engraving.extractParts). Extracted PartLayout payloads are returned as a
+   * parts summary for the panel; proposal diffs (DiffEnvelope[]) are enqueued
+   * into pendingDiffs for Agent-panel review. Resolves to an
+   * ExtractPartsRunResult, never throws (ToolRegistry.call surfaces handler
+   * failures as status: "error"). `layoutId` defaults when omitted.
+   */
+  runExtractParts: (layoutId?: string) => Promise<ExtractPartsRunResult>;
   /**
    * v1.14 Stage 1: run the real Teaching agent through the ToolRegistry
    * (teaching.explainDecision). The agent-side Explanation is converted to the

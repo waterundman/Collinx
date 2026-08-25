@@ -1555,7 +1555,12 @@
       "noticeTitle": "Score Panel",
       "runFailed": "Layout analysis failed, please retry",
       "extractPartsPending": "Part extraction is not implemented yet and will arrive in a future release",
-      "exportMusicXMLPending": "MusicXML export is not implemented yet and will arrive in a future release"
+      "exportMusicXMLPending": "MusicXML export is not implemented yet and will arrive in a future release",
+      "partsExtracted": "Extracted {{count}} parts: {{summary}}",
+      "partsEmpty": "No parts were extracted",
+      "extractPartsFailed": "Part extraction failed, please retry",
+      "exportMusicXMLDone": "Exported collinx-score.xml ({{count}} notes)",
+      "exportMusicXMLEmpty": "There are no notes to export"
     },
     "teaching": {
       "runFailed": "Teaching explanation failed, please retry"

@@ -404,66 +404,82 @@ export class MusicXMLIO {
     let currentFifths = 0;
     let currentMode = "major";
 
-    for (let i = 0; i < measures.length; i++) {
-      const measure = measures[i];
-      const bar = i + 1;
-
-      if (measure.attributes) {
-        const attr = measure.attributes;
-        currentFifths = attr.fifths;
-        currentMode = attr.mode;
-
-        const keyName = MusicXMLIO.fifthsToKeyName(attr.fifths, attr.mode);
-        keyChanges.push({ bar, tonic: keyName.tonic, mode: keyName.mode });
-
-        meterChanges.push({ bar, numerator: attr.beats, denominator: attr.beatType });
+    // Group measures by part so every part restarts its bar numbering at 1
+    // (score-partwise: each <part> numbers its own <measure>s). Without this a
+    // second part's first measure would inherit a global running index and
+    // shift that part's bars — which breaks exportToXML -> importFromXML
+    // round-trips for multi-part scores.
+    const measuresByPart = new Map<string, ParsedMeasure[]>();
+    for (const measure of measures) {
+      if (!measuresByPart.has(measure.partId)) {
+        measuresByPart.set(measure.partId, []);
       }
+      measuresByPart.get(measure.partId)!.push(measure);
+    }
 
-      for (const dir of measure.directions) {
-        if (dir.tempo) {
-          currentTempo = dir.tempo;
-          tempoChanges.push({ bar, bpm: dir.tempo });
+    for (const part of parts) {
+      const partMeasures = measuresByPart.get(part.id) ?? [];
+      for (let i = 0; i < partMeasures.length; i++) {
+        const measure = partMeasures[i];
+        const bar = i + 1;
+
+        if (measure.attributes) {
+          const attr = measure.attributes;
+          currentFifths = attr.fifths;
+          currentMode = attr.mode;
+
+          const keyName = MusicXMLIO.fifthsToKeyName(attr.fifths, attr.mode);
+          keyChanges.push({ bar, tonic: keyName.tonic, mode: keyName.mode });
+
+          meterChanges.push({ bar, numerator: attr.beats, denominator: attr.beatType });
         }
-      }
 
-      let currentBeat = 1;
-      let prevBeat = 1;
-      for (const note of measure.notes) {
-        const durQn = measure.attributes
-          ? note.duration / measure.attributes.divisions
-          : typeToDurQn(note.type);
+        for (const dir of measure.directions) {
+          if (dir.tempo) {
+            currentTempo = dir.tempo;
+            tempoChanges.push({ bar, bpm: dir.tempo });
+          }
+        }
 
-        const noteStartBeat = note.chord ? prevBeat : currentBeat;
+        let currentBeat = 1;
+        let prevBeat = 1;
+        for (const note of measure.notes) {
+          const durQn = measure.attributes
+            ? note.duration / measure.attributes.divisions
+            : typeToDurQn(note.type);
 
-        if (note.rest) {
+          const noteStartBeat = note.chord ? prevBeat : currentBeat;
+
+          if (note.rest) {
+            if (!note.chord) {
+              prevBeat = currentBeat;
+              currentBeat += durQn;
+            }
+            continue;
+          }
+
+          if (note.pitch) {
+            const pitchMidi = musicXMLPitchToMidi(note.pitch);
+            const spelling = musicXMLPitchToSpelling(note.pitch);
+
+            notes.push(createNoteEvent({
+              trackId: measure.partId,
+              bar,
+              beat: noteStartBeat,
+              durQn: Math.round(durQn * 10000) / 10000,
+              pitchMidi,
+              pitchSpelling: spelling,
+              velocity: 0.8,
+              voice: note.voice,
+            }));
+
+            partNoteCounts.set(measure.partId, (partNoteCounts.get(measure.partId) ?? 0) + 1);
+          }
+
           if (!note.chord) {
             prevBeat = currentBeat;
             currentBeat += durQn;
           }
-          continue;
-        }
-
-        if (note.pitch) {
-          const pitchMidi = musicXMLPitchToMidi(note.pitch);
-          const spelling = musicXMLPitchToSpelling(note.pitch);
-
-          notes.push(createNoteEvent({
-            trackId: measure.partId,
-            bar,
-            beat: noteStartBeat,
-            durQn: Math.round(durQn * 10000) / 10000,
-            pitchMidi,
-            pitchSpelling: spelling,
-            velocity: 0.8,
-            voice: note.voice,
-          }));
-
-          partNoteCounts.set(measure.partId, (partNoteCounts.get(measure.partId) ?? 0) + 1);
-        }
-
-        if (!note.chord) {
-          prevBeat = currentBeat;
-          currentBeat += durQn;
         }
       }
     }
@@ -540,6 +556,7 @@ export class MusicXMLIO {
     const title = options?.title ?? "Collinx Export";
     const composer = options?.composer ?? "Collinx";
 
+    // Group by trackId -> one <part> per track in the score-partwise part-list.
     const parts = new Map<string, NoteEvent[]>();
     for (const note of notes) {
       const partId = note.trackId;
@@ -564,7 +581,13 @@ export class MusicXMLIO {
     }
     xml += '  </part-list>\n';
 
+    // Bar-1 attributes (divisions/time/key) come from the tempo map so the
+    // exported XML states the real meter/signature instead of hardcoded 4/4 C.
     const divisions = 480;
+    const meter = tempoMap.meterAt(1);
+    const key = tempoMap.keyAt(1);
+    const fifths = MusicXMLIO.keyNameToFifths(key.tonic, key.mode);
+    const bpm = tempoMap.bpmAt(1);
 
     for (const partId of partIds) {
       const partNotes = parts.get(partId) ?? [];
@@ -580,38 +603,39 @@ export class MusicXMLIO {
         if (bar === 1) {
           xml += '      <attributes>\n';
           xml += `        <divisions>${divisions}</divisions>\n`;
-          xml += '        <key><fifths>0</fifths></key>\n';
-          xml += '        <time><beats>4</beats><beat-type>4</beat-type></time>\n';
+          xml += `        <key><fifths>${fifths}</fifths><mode>${MusicXMLIO.escapeXml(key.mode)}</mode></key>\n`;
+          xml += `        <time><beats>${meter.numerator}</beats><beat-type>${meter.denominator}</beat-type></time>\n`;
           xml += '        <clef><sign>G</sign><line>2</line></clef>\n';
           xml += '      </attributes>\n';
-
-          const bpm = tempoMap.bpmAt(1);
           xml += `      <direction placement="above"><sound tempo="${bpm}"/></direction>\n`;
         }
 
-        const barNotes = partNotes.filter((n) => n.bar === bar).sort((a, b) => a.beat - b.beat);
+        const barNotes = partNotes
+          .filter((n) => n.bar === bar)
+          .sort((a, b) => a.beat - b.beat);
 
+        // Walk the bar beat-by-beat so the emitted note sequence reproduces the
+        // original beats on re-import: notes at the same beat become <chord/>
+        // notes (import does not advance for chords), and gaps before the next
+        // attack become <rest/> (import advances over rests, keeping beats
+        // aligned). This makes exportToXML -> importFromXML round-trip stable.
+        let currentBeat = 1;
+        let prevNoteBeat: number | null = null;
         for (const note of barNotes) {
-          const durDivisions = Math.round(note.durQn * divisions);
-          const noteType = MusicXMLIO.durQnToType(note.durQn);
-
-          xml += '      <note>\n';
-          xml += '        <pitch>\n';
-          const spelling = note.pitchSpelling;
-          const stepMatch = spelling.match(/^([A-G])/);
-          const octaveMatch = spelling.match(/(-?\d+)$/);
-          const alterMatch = spelling.match(/[#b]/g);
-          const alter = alterMatch
-            ? alterMatch.filter((c) => c === "#").length - alterMatch.filter((c) => c === "b").length
-            : 0;
-          xml += `          <step>${stepMatch?.[1] ?? "C"}</step>\n`;
-          if (alter !== 0) xml += `          <alter>${alter}</alter>\n`;
-          xml += `          <octave>${octaveMatch?.[1] ?? "4"}</octave>\n`;
-          xml += '        </pitch>\n';
-          xml += `        <duration>${durDivisions}</duration>\n`;
-          xml += `        <voice>${note.voice}</voice>\n`;
-          xml += `        <type>${noteType}</type>\n`;
-          xml += '      </note>\n';
+          const isChord =
+            prevNoteBeat !== null && Math.abs(note.beat - prevNoteBeat) < 1e-9;
+          if (!isChord) {
+            const gap = note.beat - currentBeat;
+            if (gap > 1e-9) {
+              xml += MusicXMLIO.renderRest(gap, divisions);
+              currentBeat += gap;
+            }
+          }
+          xml += MusicXMLIO.renderNote(note, divisions, isChord);
+          if (!isChord) {
+            currentBeat += note.durQn;
+            prevNoteBeat = note.beat;
+          }
         }
 
         xml += '    </measure>\n';
@@ -622,6 +646,66 @@ export class MusicXMLIO {
 
     xml += '</score-partwise>';
     return xml;
+  }
+
+  /** Serializes one pitched note. Pitches are derived from pitchMidi via the
+   *  same midiToSpelling helper the import side uses, so the reverse direction
+   *  (musicXMLPitchToMidi on import) always lands back on the original midi. */
+  private static renderNote(
+    note: NoteEvent,
+    divisions: number,
+    isChord: boolean
+  ): string {
+    const durDivisions = Math.max(1, Math.round(note.durQn * divisions));
+    const noteType = MusicXMLIO.durQnToType(note.durQn);
+
+    const spelling = midiToSpelling(note.pitchMidi);
+    const stepMatch = spelling.match(/^([A-G])/);
+    const octaveMatch = spelling.match(/(-?\d+)$/);
+    const alterMatch = spelling.match(/[#b]/g);
+    const alter = alterMatch
+      ? alterMatch.filter((c) => c === "#").length - alterMatch.filter((c) => c === "b").length
+      : 0;
+
+    let xml = '      <note>\n';
+    if (isChord) xml += '        <chord/>\n';
+    xml += '        <pitch>\n';
+    xml += `          <step>${stepMatch?.[1] ?? "C"}</step>\n`;
+    if (alter !== 0) xml += `          <alter>${alter}</alter>\n`;
+    xml += `          <octave>${octaveMatch?.[1] ?? "4"}</octave>\n`;
+    xml += '        </pitch>\n';
+    xml += `        <duration>${durDivisions}</duration>\n`;
+    xml += `        <voice>${MusicXMLIO.escapeXml(note.voice)}</voice>\n`;
+    xml += `        <type>${noteType}</type>\n`;
+    xml += '      </note>\n';
+    return xml;
+  }
+
+  /** Serializes a silent gap (used to keep beats aligned on re-import). */
+  private static renderRest(durQn: number, divisions: number): string {
+    const durDivisions = Math.max(1, Math.round(durQn * divisions));
+    return [
+      '      <note>\n',
+      '        <rest/>\n',
+      `        <duration>${durDivisions}</duration>\n`,
+      '        <voice>1</voice>\n',
+      `        <type>${MusicXMLIO.durQnToType(durQn)}</type>\n`,
+      '      </note>\n',
+    ].join("");
+  }
+
+  /** Inverse of fifthsToKeyName: tonic + mode -> circle-of-fifths position. */
+  private static keyNameToFifths(tonic: string, mode: string): number {
+    const majorKeys: Record<string, number> = {
+      C: 0, G: 1, D: 2, A: 3, E: 4, B: 5, "F#": 6, "C#": 7,
+      F: -1, Bb: -2, Eb: -3, Ab: -4, Db: -5, Gb: -6, Cb: -7,
+    };
+    const minorKeys: Record<string, number> = {
+      A: 0, E: 1, B: 2, "F#": 3, "C#": 4, "G#": 5, "D#": 6, "A#": 7,
+      D: -1, G: -2, C: -3, F: -4, Bb: -5, Eb: -6, Ab: -7,
+    };
+    const map = mode === "minor" ? minorKeys : majorKeys;
+    return map[tonic] ?? 0;
   }
 
   private static fifthsToKeyName(fifths: number, mode: string): { tonic: string; mode: string } {

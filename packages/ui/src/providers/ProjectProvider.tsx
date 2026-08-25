@@ -37,9 +37,11 @@ import {
   type OrchestratorConfigInput,
   type OrchestratorRunResult,
   type EngravingRunResult,
+  type ExtractPartsRunResult,
   type TeachingConfigInput,
   type TeachingRunResult,
   convertAgentCollisions,
+  convertExtractParts,
   convertAgentExplanation,
   EMPTY_UI_EXPLANATION,
 } from "../store/project-store";
@@ -551,6 +553,55 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           suggestions: Array.isArray(data.suggestions)
             ? (data.suggestions as string[])
             : [],
+          confidence:
+            typeof result.confidence === "number" ? result.confidence : undefined,
+          raw: data,
+        };
+      },
+      // v1.15 Stage 0: Score panel part-extraction closed loop. Routes the
+      // request through the real engraving.extractParts tool on the shared
+      // ToolRegistry (visible in the tool-call timeline); the returned
+      // PartLayout proposal diffs are enqueued into pendingDiffs. The parts
+      // summary for the panel comes from the tool's `data.parts` payload,
+      // falling back to the diff ops when it is missing (defensive).
+      runExtractParts: async (
+        layoutId?: string,
+      ): Promise<ExtractPartsRunResult> => {
+        const result = await toolRegistry.call(
+          "engraving.extractParts",
+          { layoutId: layoutId ?? "full-score-v1" },
+          { type: "user", name: "score-panel" },
+        );
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        const diffs = Array.isArray((result as { diffs?: unknown }).diffs)
+          ? ((result as { diffs?: unknown }).diffs as DiffEnvelope[])
+          : [];
+        let parts = convertExtractParts(data.parts);
+        // Fallback: derive the part list from the proposal diffs' PartLayout
+        // add_node ops when the tool payload carries no `parts` array.
+        if (parts.length === 0 && diffs.length > 0) {
+          parts = diffs
+            .flatMap((d) => d.ops)
+            .filter((op) => op.op === "add_node" && op.nodeType === "PartLayout")
+            .map((op) => (op as { data?: unknown }).data)
+            .filter(
+              (d): d is { instrumentId: string; instrumentName: string; barCount: number } =>
+                typeof d === "object" &&
+                d !== null &&
+                typeof (d as { instrumentId?: unknown }).instrumentId === "string" &&
+                typeof (d as { instrumentName?: unknown }).instrumentName === "string" &&
+                typeof (d as { barCount?: unknown }).barCount === "number"
+            );
+        }
+        if (result.status === "ok" && diffs.length > 0) {
+          dispatch({
+            type: "ADD_PENDING_DIFFS",
+            diffs,
+          } satisfies ProjectStoreAction);
+        }
+        return {
+          status: result.status,
+          parts,
           confidence:
             typeof result.confidence === "number" ? result.confidence : undefined,
           raw: data,

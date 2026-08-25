@@ -24,6 +24,7 @@ import {
   type ArrangerRunResult,
   type OrchestratorRunResult,
   type EngravingRunResult,
+  type ExtractPartsRunResult,
   type TeachingRunResult,
   type ProjectStoreValue,
 } from "../../store/project-store";
@@ -2330,6 +2331,130 @@ describe("project-store engraving (v1.14 Stage 0)", () => {
     // The failure is recorded in the tool timeline as an error entry.
     const calls = s.value.toolCalls.filter(
       (r) => r.toolName === "engraving.reportCollisions",
+    );
+    expect(calls.length).toBe(1);
+    expect(calls[0].status).toBe("error");
+
+    s.cleanup();
+  });
+});
+
+// ── v1.15 Stage 0: Score panel -> real part-extraction tool bridge ─────────
+describe("project-store extract parts (v1.15 Stage 0)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  // T02 (unit, critical): runExtractParts routes through the real
+  // engraving.extractParts tool and parses the extracted part list from the
+  // tool payload (not a stub).
+  it("T02: runExtractParts 调用真实 extractParts 并解析声部列表 (critical)", async () => {
+    const s = setup(makeNotes());
+    let result: ExtractPartsRunResult | undefined;
+
+    await act(async () => {
+      result = await s.value.actions.runExtractParts("main");
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.status).toBe("ok");
+    // Real EngravingAgent demo layout yields violin/viola/cello groups.
+    expect(result!.parts.length).toBe(3);
+    expect(result!.parts.map((p) => p.instrumentId)).toEqual([
+      "violin",
+      "viola",
+      "cello",
+    ]);
+    for (const p of result!.parts) {
+      expect(typeof p.instrumentId).toBe("string");
+      expect(typeof p.instrumentName).toBe("string");
+      expect(p.instrumentName.length).toBeGreaterThan(0);
+      expect(typeof p.barCount).toBe("number");
+      expect(p.barCount).toBeGreaterThan(0);
+    }
+    expect(typeof result!.confidence).toBe("number");
+    // raw payload preserved for debugging/audit.
+    expect(result!.raw).toBeDefined();
+
+    s.cleanup();
+  });
+
+  // T02 (critical) part 2: the score-panel invocation leaves a visible trace
+  // in the Agent tool timeline (running + success upserted into one record).
+  it("T02b: 时间线出现 engraving.extractParts 工具调用(合并为一条 success)", async () => {
+    const s = setup(makeNotes());
+    expect(s.value.toolCalls).toEqual([]);
+
+    await act(async () => {
+      await s.value.actions.runExtractParts("main");
+    });
+
+    const calls = s.value.toolCalls.filter(
+      (r) => r.toolName === "engraving.extractParts",
+    );
+    expect(calls.length).toBe(1);
+    expect(calls[0].status).toBe("success");
+    expect(calls[0].agentName).toBe("score-panel");
+    expect(calls[0].params).toEqual({ layoutId: "main" });
+    expect(calls[0].correlationId).toBeDefined();
+    expect(calls[0].resultSummary.length).toBeGreaterThan(0);
+
+    s.cleanup();
+  });
+
+  // The PartLayout proposal diffs must land in pendingDiffs so the Agent Panel
+  // can review/apply them (same convention as orchestrator/arranger).
+  it("T02c: extractParts 提案 diffs 入 pendingDiffs(agent panel 可审批)", async () => {
+    const s = setup(makeNotes());
+    const pendingBefore = s.value.pendingDiffs.length;
+
+    await act(async () => {
+      await s.value.actions.runExtractParts("main");
+    });
+
+    const added = s.value.pendingDiffs.slice(pendingBefore);
+    expect(added.length).toBe(3);
+    expect(added.every((d) => d.actor.name === "engraving")).toBe(true);
+    expect(added.every((d) => d.permissionScope === "proposal_only")).toBe(true);
+    expect(
+      added.every((d) =>
+        d.ops.some((o) => o.op === "add_node" && o.nodeType === "PartLayout"),
+      ),
+    ).toBe(true);
+
+    s.cleanup();
+  });
+
+  // T02 (unit, non-critical): a failing tool must surface as status:"error"
+  // with an empty parts list and never throw.
+  it("T02d: extractParts 工具失败时 runExtractParts 返回 status:error 不抛异常", async () => {
+    const s = setup(makeNotes());
+    const spy = vi.spyOn(EngravingAgent.prototype, "extractParts");
+    spy.mockImplementation(() => {
+      throw new Error("engraving engine down");
+    });
+
+    let result: ExtractPartsRunResult | undefined;
+    let threw = false;
+    try {
+      await act(async () => {
+        try {
+          result = await s.value.actions.runExtractParts("main");
+        } catch {
+          threw = true;
+        }
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(threw).toBe(false);
+    expect(result!.status).toBe("error");
+    expect(result!.parts).toEqual([]);
+    expect(result!.confidence).toBeUndefined();
+    // The failure is recorded in the tool timeline as an error entry.
+    const calls = s.value.toolCalls.filter(
+      (r) => r.toolName === "engraving.extractParts",
     );
     expect(calls.length).toBe(1);
     expect(calls[0].status).toBe("error");
