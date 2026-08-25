@@ -718,6 +718,84 @@ describe("project-store mixing proposal (Stage 2)", () => {
   });
 });
 
+// ── v1.15 Stage 1: single-track mixing suggestion ──────────────────────────
+describe("project-store single-track mixing suggestion (v1.15 Stage 1)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("T01: suggestMixingChain(trackId) 仅生成该轨的 FX 链提案(ops 全指向该 trackId)", () => {
+    const s = setup(makeNotes(), makeMixer());
+    const pendingBefore = s.value.pendingDiffs.length;
+
+    act(() => {
+      s.value.actions.suggestMixingChain("t2");
+    });
+
+    expect(s.value.pendingDiffs.length).toBe(pendingBefore + 1);
+    const proposal = s.value.pendingDiffs[s.value.pendingDiffs.length - 1];
+    expect(proposal.actor.name).toBe("mixing");
+    expect(proposal.permissionScope).toBe("proposal_only");
+    // 关键约束:单轨 diff 必须能被 applyDiff 的 isMixerDiff 检测识别
+    // (ops 全在 /tracks/<id> 命名空间 + data.trackId),否则提案无法应用。
+    expect(isMixerDiff(proposal)).toBe(true);
+    expect(proposal.ops.length).toBeGreaterThan(0);
+    for (const op of proposal.ops) {
+      expect(op.op).toBe("update_node");
+      expect(op.path).toBe("/tracks/t2");
+      expect((op as { data: Record<string, unknown> }).data.trackId).toBe("t2");
+    }
+    // 提案只覆盖 t2,不触碰 t1 / master
+    const trackIds = proposal.ops.map(
+      (o) => (o as { data?: { trackId?: string } }).data?.trackId ?? ""
+    );
+    expect(trackIds.every((id) => id === "t2")).toBe(true);
+
+    s.cleanup();
+  });
+
+  it("T02: 不带 trackId 保持向后兼容(全混音提案覆盖多轨)", () => {
+    const s = setup(makeNotes(), makeMixer());
+    const pendingBefore = s.value.pendingDiffs.length;
+
+    act(() => {
+      s.value.actions.suggestMixingChain();
+    });
+
+    expect(s.value.pendingDiffs.length).toBe(pendingBefore + 1);
+    const proposal = s.value.pendingDiffs[s.value.pendingDiffs.length - 1];
+    expect(isMixerDiff(proposal)).toBe(true);
+    const trackIds = proposal.ops.map(
+      (o) => (o as { data?: { trackId?: string } }).data?.trackId ?? ""
+    );
+    expect(trackIds).toContain("t1");
+    expect(trackIds).toContain("t2");
+    expect(trackIds).toContain("master");
+
+    s.cleanup();
+  });
+
+  it("T04: toolRegistry.call 收到正确 trackId(时间线出现单轨 suggestChain 记录)", async () => {
+    const s = setup(makeNotes(), makeMixer());
+
+    act(() => {
+      s.value.actions.suggestMixingChain("t2");
+    });
+    // Flush microtasks so the async ToolRegistry.call success record lands.
+    await act(async () => {});
+
+    const calls = s.value.toolCalls.filter(
+      (r) => r.toolName === "mixing.suggestChain"
+    );
+    expect(calls.length).toBe(1);
+    expect(calls[0].status).toBe("success");
+    expect(calls[0].agentName).toBe("mixing");
+    expect(calls[0].params).toHaveProperty("trackId", "t2");
+
+    s.cleanup();
+  });
+});
+
 // ── Stage 1: TasteStore in the store + browser fs adapter ───────────────────
 describe("project-store taste (Stage 1)", () => {
   afterEach(() => {

@@ -519,8 +519,15 @@ export interface ProjectStoreActions {
   applyMixerDiff: (diff: DiffEnvelope) => void;
   revertMixerTo: (prevMixer: MixerState) => void;
   addMixerTrack: (name: string, sourceId: string) => void;
-  /** Stage 2: generate a Mixing Agent mix proposal and enqueue it into pendingDiffs. */
-  suggestMixingChain: () => void;
+  /**
+   * Stage 2: generate a Mixing Agent mix proposal and enqueue it into
+   * pendingDiffs.
+   * v1.15 Stage 1: `trackId` is optional. When given, only that track
+   * receives a single-track FX chain proposal; without it the full-mix
+   * proposal (all tracks + master) is generated as before (backwards
+   * compatible).
+   */
+  suggestMixingChain: (trackId?: string) => void;
   /**
    * Stage 0: run the real Orchestrator agent through the ToolRegistry
    * (orchestrator.voicingPlan). Real conflict detection is returned for the

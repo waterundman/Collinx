@@ -287,8 +287,11 @@ export function App() {
 
   // Stage 2: Mixing Agent trigger. Generates the proposal into pendingDiffs,
   // then jumps to the Agent Panel so the user sees and reviews it.
-  const handleSuggestFxChain = useCallback(() => {
-    actions.suggestMixingChain();
+  // v1.15 Stage 1: an optional trackId scopes the suggestion to a single
+  // track (MixerConsole per-track buttons); omitting it keeps the full-mix
+  // suggestion (header button).
+  const handleSuggestFxChain = useCallback((trackId?: string) => {
+    actions.suggestMixingChain(trackId);
     setActiveTab("agent");
   }, [actions]);
 

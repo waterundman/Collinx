@@ -21,6 +21,7 @@ import {
   createDiffEnvelope,
   createNoteEvent,
   createToolCallRecord,
+  mixerToDiff,
   type NewToolCallRecord,
 } from "@collinx/core";
 import {
@@ -410,9 +411,77 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       // MixingAgent and enqueues it into pendingDiffs, where the Agent Panel
       // picks it up. Applying it routes through applyDiff's mixer-diff
       // detection and lands on the mixer via diffToMixer.
-      suggestMixingChain: (): void => {
+      //
+      // v1.15 Stage 1: accepts an optional trackId. When given, only that
+      // track receives a proposal: the single-track FX chain (built from the
+      // track's source role, matching what suggestMix would suggest for it) is
+      // encoded as a mixer diff in the /tracks/<id> namespace so isMixerDiff /
+      // diffToMixer recognize it exactly like a full-mix proposal. The real
+      // mixing.suggestChain tool is still routed through the ToolRegistry so
+      // the call shows up in the timeline. Without trackId the full-mix path
+      // below is unchanged (backwards compatible).
+      suggestMixingChain: (trackId?: string): void => {
         const currentMixer = state.mixer;
         const mixing = mixingAgent;
+
+        if (trackId) {
+          const track =
+            currentMixer.tracks.find((t) => t.id === trackId) ??
+            (trackId === currentMixer.masterTrack.id
+              ? currentMixer.masterTrack
+              : undefined);
+          // Unknown track id: nothing to suggest, keep the queue untouched.
+          if (!track) return;
+
+          // Single-track FX chain suggestion. suggestChain classifies by
+          // source role (melody/bass/chords/drums/default), matching the per-
+          // track chain suggestMix builds for the same source.
+          const chain = mixing.suggestChain(
+            track.sourceTrackId.length > 0 ? track.sourceTrackId : trackId
+          );
+          const fxChanges = chain.map((slot, idx) => ({
+            slotIndex: idx,
+            changes: {
+              type: slot.type,
+              preset: slot.preset,
+              params: slot.params,
+              enabled: slot.enabled,
+            },
+          }));
+          // mixerToDiff emits ops in the /tracks/<id> namespace with a
+          // MixerChange payload carrying `trackId`, so isMixerDiff recognizes
+          // the envelope and applyDiff routes it to diffToMixer.
+          const diff = mixerToDiff(
+            [{ trackId, changes: {}, fxChanges }],
+            "HEAD"
+          );
+          const envelope: DiffEnvelope = {
+            ...diff,
+            actor: { type: "agent", name: "mixing" },
+            permissionScope: "proposal_only",
+            summary: `FX chain suggestion for track: ${track.name}`,
+            domainExplanations: [
+              {
+                label: "fx_chain",
+                text: `Tailored FX chain for ${track.name} based on its role in the mix.`,
+              },
+            ],
+          };
+          dispatch({
+            type: "ADD_PENDING_DIFFS",
+            diffs: [envelope],
+          } satisfies ProjectStoreAction);
+          // Stage 1: route the real mixing.suggestChain tool call through the
+          // ToolRegistry (fire-and-forget) so the single-track suggestion is
+          // visible in the tool-call timeline.
+          void toolRegistry.call(
+            "mixing.suggestChain",
+            { trackId },
+            { type: "agent", name: "mixing" }
+          );
+          return;
+        }
+
         const analysis = mixing.suggestMix(currentMixer.tracks, state.notes);
         const envelope = mixing.toDiffEnvelope(analysis, currentMixer);
         dispatch({

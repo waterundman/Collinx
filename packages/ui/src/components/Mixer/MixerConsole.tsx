@@ -16,8 +16,12 @@ interface MixerConsoleProps {
   onTrackChange?: (trackId: string, changes: Partial<MixerTrack>) => void;
   onAddTrack?: (name: string, sourceId: string) => void;
   onRemoveTrack?: (trackId: string) => void;
-  /** Stage 2: trigger the Mixing Agent to propose an FX chain / mix setting. */
-  onSuggestFxChain?: () => void;
+  /**
+   * Stage 2: trigger the Mixing Agent to propose an FX chain / mix setting.
+   * v1.15 Stage 1: an optional trackId scopes the suggestion to a single
+   * track; omitting it keeps the full-mix suggestion (backwards compatible).
+   */
+  onSuggestFxChain?: (trackId?: string) => void;
 }
 
 interface FXEditorState {
@@ -512,6 +516,18 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
           </div>
         )}
 
+        {onSuggestFxChain && (
+          <button
+            className={styles.addTrackBtn}
+            style={{ marginLeft: 0, padding: "2px 6px", fontSize: "10px" }}
+            data-testid={`mixer-suggest-fx-${track.id}`}
+            onClick={() => onSuggestFxChain?.(track.id)}
+            title={t('mixer.suggestFxChainHint')}
+          >
+            {t('mixer.suggestFxChain')}
+          </button>
+        )}
+
         <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
           {renderFXSlots(track)}
           {isEditingFX && track.fxChain.slots.map((slot) => renderFXEditor(track, slot))}
@@ -536,7 +552,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
           <button
             className={styles.addTrackBtn}
             data-testid="mixer-suggest-fx"
-            onClick={onSuggestFxChain}
+            onClick={() => onSuggestFxChain?.()}
             title={t('mixer.suggestFxChainHint')}
           >
             {t('mixer.suggestFxChain')}
