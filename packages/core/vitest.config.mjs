@@ -1,4 +1,6 @@
 import { defineConfig } from "vitest/config";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export default defineConfig({
   test: {
@@ -6,5 +8,8 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     watch: false,
+    cache: {
+      dir: join(tmpdir(), "collinx-vitest-cache", "core"),
+    },
   },
 });
