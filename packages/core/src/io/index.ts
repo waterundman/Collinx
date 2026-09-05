@@ -3,6 +3,8 @@ export * from "./midi-exporter";
 export * from "./musicxml-io";
 export * from "./musicxml-optimizer";
 export * from "./audio-exporter";
-// pdf-exporter requires pdfkit which is a Node.js library and doesn't work in browser
-// export * from "./pdf-exporter";
+// v1.16.0 Stage 1: pdf-exporter re-exported for the browser UI. The exporter's
+// byte pipeline (exportToPDFBytes) is Buffer-free and browser-safe; the vite
+// build aliases pdfkit to its self-contained standalone browser bundle.
+export * from "./pdf-exporter";
 export * from "./agentmusic-io";

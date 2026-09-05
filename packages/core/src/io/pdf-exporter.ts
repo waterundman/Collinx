@@ -15,6 +15,18 @@ interface PageDimensions {
   height: number;
 }
 
+/** Browser-safe chunk concat (no Node Buffer.concat). */
+function concatUint8(chunks: Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
 const PAGE_SIZES: Record<string, PageDimensions> = {
   A4: { width: 595.28, height: 841.89 },
   Letter: { width: 612, height: 792 },
@@ -77,12 +89,18 @@ function shouldStemUp(pitchMidi: number): boolean {
 }
 
 export class PDFExporter {
-  exportToPDF(
+  /**
+   * v1.16.0 Stage 1: browser-safe PDF export. Collects the pdfkit output
+   * chunks and concatenates them into a plain Uint8Array (no Node Buffer
+   * dependency), so the result can be wrapped in a Blob directly in the
+   * browser. The Node-only Buffer API (exportToPDF) is a thin wrapper.
+   */
+  exportToPDFBytes(
     layout: Layout,
     notes: NoteEvent[],
     tempoMap: TempoMap,
     options?: PDFExportOptions,
-  ): Promise<Buffer> {
+  ): Promise<Uint8Array> {
     const pageSize = options?.pageSize ?? "A4";
     const orientation = options?.orientation ?? "portrait";
     const dims = PAGE_SIZES[pageSize] ?? PAGE_SIZES.A4;
@@ -129,16 +147,18 @@ export class PDFExporter {
       }
     }
 
-    return new Promise<Buffer>((resolve, reject) => {
-      const chunks: Buffer[] = [];
+    return new Promise<Uint8Array>((resolve, reject) => {
+      const chunks: Uint8Array[] = [];
       const doc = new PDFDocument({
         size: [pageWidth, pageHeight],
         margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
         autoFirstPage: false,
       });
 
-      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("data", (chunk: Uint8Array) =>
+        chunks.push(new Uint8Array(chunk)),
+      );
+      doc.on("end", () => resolve(concatUint8(chunks)));
       doc.on("error", (err: Error) => reject(err));
 
       if (options?.title) {
@@ -172,6 +192,22 @@ export class PDFExporter {
 
       doc.end();
     });
+  }
+
+  /**
+   * Node-compat alias: same bytes as exportToPDFBytes, wrapped in a Buffer
+   * for existing Node consumers/tests. Browser callers must use
+   * exportToPDFBytes (Buffer global is unavailable in the browser bundle).
+   */
+  exportToPDF(
+    layout: Layout,
+    notes: NoteEvent[],
+    tempoMap: TempoMap,
+    options?: PDFExportOptions,
+  ): Promise<Buffer> {
+    return this.exportToPDFBytes(layout, notes, tempoMap, options).then(
+      (bytes) => Buffer.from(bytes),
+    );
   }
 
   private renderTitlePage(

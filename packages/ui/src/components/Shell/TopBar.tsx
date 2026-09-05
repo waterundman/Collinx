@@ -8,6 +8,8 @@ export interface TopBarProps {
   status: React.ReactNode;
   /** Tab area content (usually a set of <TabPill /> children). */
   children?: React.ReactNode;
+  /** Right-aligned action buttons (e.g. save/load project) shown before status. */
+  toolbar?: React.ReactNode;
 }
 
 /**
@@ -17,7 +19,12 @@ export interface TopBarProps {
  * the data-testid contract the integration/E2E tests rely on: "tab-bar" for
  * the tab container, "header-status" for the status line.
  */
-export const TopBar: React.FC<TopBarProps> = ({ brand, status, children }) => {
+export const TopBar: React.FC<TopBarProps> = ({
+  brand,
+  status,
+  children,
+  toolbar,
+}) => {
   return (
     <header className={styles.header}>
       <span className={styles.brand}>{brand}</span>
@@ -25,6 +32,12 @@ export const TopBar: React.FC<TopBarProps> = ({ brand, status, children }) => {
       <div className={styles.tabBar} data-testid="tab-bar">
         {children}
       </div>
+
+      {toolbar ? (
+        <div className={styles.toolbar} data-testid="topbar-toolbar">
+          {toolbar}
+        </div>
+      ) : null}
 
       <span className={styles.status} data-testid="header-status">
         {status}

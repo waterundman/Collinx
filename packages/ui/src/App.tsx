@@ -81,6 +81,9 @@ export function App() {
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
 
+  // Stage 0 (.agentmusic): hidden file input for loading a .agentmusic project.
+  const projectFileInputRef = useRef<HTMLInputElement>(null);
+
   // Stage 2: global Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) composite undo/redo.
   // Input/textarea/contentEditable targets are excluded inside the hook, so
   // text editing keeps the native browser undo.
@@ -365,6 +368,47 @@ export function App() {
     );
   }, [notes, tempoMap, t]);
 
+  // Stage 0 (.agentmusic): download the current project as project.agentmusic.
+  const handleSaveProject = useCallback(() => {
+    void actions.saveProjectAsAgentMusic();
+  }, [actions]);
+
+  // v1.16.0 Stage 1: export menu wiring — MIDI (current notes → .mid) and PDF
+  // (score layout + notes → .pdf) through the real core exporters. The score
+  // layout is the same Layout instance the ScorePanel/ScoreRenderer consume.
+  const handleExportMIDI = useCallback(() => {
+    // eslint-disable-next-line no-console
+    void actions.exportMIDI().catch(console.error);
+  }, [actions]);
+
+  const handleExportPDF = useCallback(() => {
+    // eslint-disable-next-line no-console
+    void actions.exportPDF(defaultLayout).catch(console.error);
+  }, [actions, defaultLayout]);
+
+  // Stage 0 (.agentmusic): open the hidden file picker; the change handler
+  // reads the selected .agentmusic File and restores the project.
+  const handleLoadProjectClick = useCallback(() => {
+    projectFileInputRef.current?.click();
+  }, []);
+
+  const handleProjectFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      // Reset so selecting the same file again still fires a change event.
+      event.target.value = "";
+      if (!file) return;
+      try {
+        await actions.loadProjectFromAgentMusic(file);
+      } catch (err) {
+        // Surface the failure (corrupt / unreadable file) without crashing.
+        // eslint-disable-next-line no-console
+        console.error("[agentmusic] 加载工程失败:", err);
+      }
+    },
+    [actions]
+  );
+
   // v1.14 Stage 1: Teaching panel real tool loop. Whenever the active diff or
   // the user level changes, re-run teaching.explainDecision through the store
   // action (userLevel mapped from the UI enum: professional -> expert) and
@@ -433,7 +477,32 @@ export function App() {
 
   return (
     <div className={styles.appRoot}>
-      <TopBar brand="Collinx" status={headerStatus}>
+      <TopBar brand="Collinx" status={headerStatus} toolbar={<>
+        <button
+          type="button"
+          onClick={handleSaveProject}
+          data-testid="save-project"
+          className={styles.topBarButton}
+        >
+          {t("app.project.save")}
+        </button>
+        <button
+          type="button"
+          onClick={handleLoadProjectClick}
+          data-testid="load-project"
+          className={styles.topBarButton}
+        >
+          {t("app.project.load")}
+        </button>
+        <input
+          ref={projectFileInputRef}
+          type="file"
+          accept=".agentmusic"
+          data-testid="project-file-input"
+          style={{ display: "none" }}
+          onChange={handleProjectFileChange}
+        />
+      </>}>
         {tabs.map((tab) => (
           <TabPill
             key={tab.id}
@@ -583,6 +652,8 @@ export function App() {
             onAutoLayout={handleAutoLayout}
             onExtractParts={handleExtractParts}
             onExportMusicXML={handleExportMusicXML}
+            onExportMIDI={handleExportMIDI}
+            onExportPDF={handleExportPDF}
           />
         </div>
       )}

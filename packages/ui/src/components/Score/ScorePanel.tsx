@@ -28,6 +28,8 @@ export interface ScorePanelProps {
   onExtractParts?: () => void;
   onAutoLayout?: () => void;
   onExportMusicXML?: () => void;
+  onExportMIDI?: () => void;
+  onExportPDF?: () => void;
   compact?: boolean;
 }
 
@@ -50,6 +52,8 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   onExtractParts,
   onAutoLayout,
   onExportMusicXML,
+  onExportMIDI,
+  onExportPDF,
   compact = false,
 }) => {
   const { t } = useI18n();
@@ -95,6 +99,24 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
         {onExportMusicXML && (
           <button className={styles.toolbarBtn} onClick={onExportMusicXML}>
             {t('score.exportMusicXML')}
+          </button>
+        )}
+        {onExportMIDI && (
+          <button
+            className={styles.toolbarBtn}
+            onClick={onExportMIDI}
+            data-testid="export-midi"
+          >
+            {t('score.exportMIDI')}
+          </button>
+        )}
+        {onExportPDF && (
+          <button
+            className={styles.toolbarBtn}
+            onClick={onExportPDF}
+            data-testid="export-pdf"
+          >
+            {t('score.exportPDF')}
           </button>
         )}
         <div className={styles.viewToggle}>

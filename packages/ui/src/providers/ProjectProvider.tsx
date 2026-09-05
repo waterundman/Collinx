@@ -8,22 +8,36 @@ import React, {
 } from "react";
 import {
   AgentBus,
+  AgentMusicIO,
   DiffEngine,
+  MIDIExporter,
+  PDFExporter,
+  TempoMap,
   ToolRegistry,
   TasteGenome,
   deserializeGraph,
+  createLayout,
+  type AgentMusicData,
+  type Layout,
   type NoteEvent,
+  type ProjectGraph,
   type DiffEnvelope,
   type MixerState,
   type MixerTrack,
   type TasteStore,
   type TasteGenomeData,
+  type GenomeVersionEntry,
   createDiffEnvelope,
   createNoteEvent,
   createToolCallRecord,
   mixerToDiff,
   type NewToolCallRecord,
 } from "@collinx/core";
+import {
+  collectAgentMusicData,
+  restoreFromAgentMusicData,
+  type AgentMusicRestoreActions,
+} from "../services/agentmusic-bridge";
 import {
   ProjectStoreContext,
   createInitialState,
@@ -67,6 +81,22 @@ function genomesEqual(
   if (a === null) return b === null;
   if (b === null) return false;
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * v1.16.0 Stage 1: shared Blob download helper for the export menu
+ * (.agentmusic save, MIDI export, PDF export). Creates an object URL, clicks
+ * a temporary anchor with the given filename, then revokes the URL.
+ */
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -754,6 +784,115 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       },
       clearToolCalls: (): void => {
         dispatch({ type: "CLEAR_TOOL_CALLS" } satisfies ProjectStoreAction);
+      },
+      // Stage 0 (.agentmusic): collect the live store state, serialize via
+      // AgentMusicIO, and trigger a Blob download as project.agentmusic.
+      saveProjectAsAgentMusic: async (): Promise<void> => {
+        const data = collectAgentMusicData({
+          graph: state.graph,
+          notes: state.notes,
+          mixer: state.mixer,
+          tasteStore,
+          appliedDiffs: state.appliedDiffs,
+        });
+        const io = new AgentMusicIO();
+        const bytes = await io.save(data);
+        // .slice() copies into a plain Uint8Array<ArrayBuffer> — a valid
+        // BlobPart without any cast.
+        downloadBlob(new Blob([bytes.slice()], { type: "application/octet-stream" }), "project.agentmusic");
+      },
+      // v1.16.0 Stage 1: export the current notes (derived from the project
+      // graph) as a Standard MIDI File via core MIDIExporter and download it
+      // as project.mid. Notes are already NoteEvents; the exporter handles
+      // sorting/tempo/meter events itself.
+      exportMIDI: async (): Promise<void> => {
+        const bytes = MIDIExporter.toBuffer(state.notes, TempoMap.default());
+        downloadBlob(new Blob([bytes], { type: "audio/midi" }), "project.mid");
+      },
+      // v1.16.0 Stage 1: render the current score (layout + notes) to PDF via
+      // core PDFExporter's browser-safe byte pipeline and download it as
+      // project.pdf. The caller (App) passes the live score layout; the
+      // fallback is a minimal full-score layout the exporter expands to its
+      // default treble/bass staves.
+      exportPDF: async (layout?: Layout): Promise<void> => {
+        const exporter = new PDFExporter();
+        const bytes = await exporter.exportToPDFBytes(
+          layout ?? createLayout("Collinx Score", "full_score", []),
+          state.notes,
+          TempoMap.default(),
+          { title: "Collinx Score" },
+        );
+        downloadBlob(
+          // .slice() copies into a plain Uint8Array<ArrayBuffer> — a valid
+          // BlobPart without any cast.
+          new Blob([bytes.slice()], { type: "application/pdf" }),
+          "project.pdf",
+        );
+      },
+      // Stage 0 (.agentmusic): read the uploaded .agentmusic File, deserialize,
+      // and restore the project through restoreFromAgentMusicData (which routes
+      // through the existing store actions so diff history stays consistent).
+      // Corrupt files throw — the caller (App) catches and surfaces the error.
+      loadProjectFromAgentMusic: async (file: File): Promise<void> => {
+        const buffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        const io = new AgentMusicIO();
+        const data: AgentMusicData = await io.load(bytes);
+
+        // Local restore API (avoids a circular reference into the live `actions`).
+        const restoreApi: AgentMusicRestoreActions = {
+          replaceGraph: (graph) => {
+            dispatch({ type: "REPLACE_GRAPH", graph } satisfies ProjectStoreAction);
+          },
+          revertMixerTo: (mixer) => {
+            dispatch({ type: "REVERT_MIXER_TO", mixer } satisfies ProjectStoreAction);
+          },
+          restoreTaste: (genome, versions) => {
+            const beforeGenome =
+              tasteStore.getCurrentGenome()?.toJSON() ?? null;
+            if (genome) {
+              tasteStore.importPackage({
+                packageVersion: 1,
+                exportedAt: new Date().toISOString(),
+                genome,
+                evidence: [],
+                versionHistory: versions,
+              });
+            }
+            dispatch({
+              type: "TASTE_RESTORE",
+              genome,
+              versions,
+              beforeGenome,
+            } satisfies ProjectStoreAction);
+          },
+        };
+
+        await restoreFromAgentMusicData(data, restoreApi);
+      },
+      // Stage 0 (.agentmusic load): replace the whole graph (notes re-derived in
+      // the reducer). Exposed so restoreFromAgentMusicData can route through it.
+      replaceGraph: (graph: ProjectGraph): void => {
+        dispatch({ type: "REPLACE_GRAPH", graph } satisfies ProjectStoreAction);
+      },
+      // Stage 0 (.agentmusic load): restore the taste genome + version history.
+      restoreTaste: (genome: TasteGenomeData | null, versions: GenomeVersionEntry[]): void => {
+        const beforeGenome = tasteStore.getCurrentGenome()?.toJSON() ?? null;
+        if (genome) {
+          tasteStore.importPackage({
+            packageVersion: 1,
+            exportedAt: new Date().toISOString(),
+            genome,
+            evidence: [],
+            versionHistory: versions,
+          });
+        }
+        dispatch({
+          type: "TASTE_RESTORE",
+          genome,
+          versions,
+          beforeGenome,
+        } satisfies ProjectStoreAction);
       },
     }),
     [tasteStore, state]

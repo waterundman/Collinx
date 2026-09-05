@@ -30,3 +30,10 @@
   font-family: var(--font-mono);
   letter-spacing: 1px;
 }
+
+.toolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: var(--space-3);
+}

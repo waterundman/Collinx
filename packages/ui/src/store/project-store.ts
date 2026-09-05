@@ -9,6 +9,7 @@ import {
   type MixerTrack,
   type TasteStore,
   type TasteGenomeData,
+  type GenomeVersionEntry,
   type ToolCallRecord,
   type NewToolCallRecord,
   midiToSpelling,
@@ -19,6 +20,7 @@ import {
   diffToMixer,
   serializeGraph,
   deserializeGraph,
+  type Layout,
 } from "@collinx/core";
 import { createDemoMixer, createTasteStore } from "../data/demoData";
 import { createBrowserTasteFsAdapter } from "../services/tasteFsAdapter";
@@ -120,7 +122,21 @@ export type ProjectStoreAction =
   | { type: "UNDO"; redoGenome?: TasteGenomeData | null }
   | { type: "REDO"; undoGenome?: TasteGenomeData | null }
   | { type: "RECORD_TOOL_CALL"; record: ToolCallRecord }
-  | { type: "CLEAR_TOOL_CALLS" };
+  | { type: "CLEAR_TOOL_CALLS" }
+  /**
+   * Stage 0 (.agentmusic load): replace the entire ProjectGraph and re-derive
+   * notes from it. Used by restoreFromAgentMusicData so the graph and notes
+   * never drift apart. Pushed to the undo stack so a load is undoable.
+   */
+  | { type: "REPLACE_GRAPH"; graph: ProjectGraph }
+  /**
+   * Stage 0 (.agentmusic load): restore the taste genome + version history onto
+   * the shared TasteStore. The mutation happens in the provider's action
+   * creator (TasteStore is mutable), so the reducer only advances the
+   * re-render counter + bumps undo (genomeOverride records the pre-restore
+   * genome so undo() can revert the taste values).
+   */
+  | { type: "TASTE_RESTORE"; genome: TasteGenomeData | null; versions: GenomeVersionEntry[]; beforeGenome?: TasteGenomeData | null };
 
 // ---------------------------------------------------------------------------
 // Stage 0: Orchestrator panel -> real Orchestrator tool bridge
@@ -595,6 +611,41 @@ export interface ProjectStoreActions {
   recordToolCall: (record: NewToolCallRecord) => void;
   /** Stage 0: empty the tool-call trace. */
   clearToolCalls: () => void;
+  /**
+   * Stage 0 (.agentmusic): collect the full project state into AgentMusicData,
+   * serialize via AgentMusicIO, and download it as `project.agentmusic`
+   * (Blob, application/octet-stream). Resolves when the download is triggered.
+   */
+  saveProjectAsAgentMusic: () => Promise<void>;
+  /**
+   * v1.16.0 Stage 1: serialize the current notes (derived from the graph) into
+   * a Standard MIDI File via core MIDIExporter and download it as
+   * `project.mid` (Blob, audio/midi).
+   */
+  exportMIDI: () => Promise<void>;
+  /**
+   * v1.16.0 Stage 1: render the current score layout + notes into a PDF via
+   * core PDFExporter (browser-safe exportToPDFBytes) and download it as
+   * `project.pdf` (Blob, application/pdf). When no layout is given a minimal
+   * default layout is used.
+   */
+  exportPDF: (layout?: Layout) => Promise<void>;
+  /**
+   * Stage 0 (.agentmusic): read a `.agentmusic` File, deserialize via
+   * AgentMusicIO, and restore the project state through restoreFromAgentMusicData.
+   * Corrupt files reject with the underlying Error (caller surfaces it to the UI).
+   */
+  loadProjectFromAgentMusic: (file: File) => Promise<void>;
+  /**
+   * Stage 0 (.agentmusic load): replace the whole ProjectGraph (notes re-derived).
+   * Used by restoreFromAgentMusicData instead of bypassing the reducer.
+   */
+  replaceGraph: (graph: ProjectGraph) => void;
+  /**
+   * Stage 0 (.agentmusic load): restore the taste genome + version history onto
+   * the shared TasteStore. genome === null keeps the current taste.
+   */
+  restoreTaste: (genome: TasteGenomeData | null, versions: GenomeVersionEntry[]) => void;
 }
 
 export interface PersistenceStatus {
@@ -1279,6 +1330,28 @@ export function createProjectReducer(
 
       case "CLEAR_TOOL_CALLS":
         return { ...state, toolCalls: [] };
+
+      // Stage 0 (.agentmusic load): replace the graph and re-derive notes from
+      // it. The graph is a mutable class, so we snapshot the pre-edit state for
+      // undo and swap in the loaded graph wholesale.
+      case "REPLACE_GRAPH": {
+        return withUndo(state, {
+          graph: action.graph,
+          notes: deriveNotes(action.graph),
+        });
+      }
+
+      // Stage 0 (.agentmusic load): the TasteStore mutation (importPackage) is
+      // already done in the provider's action creator; the reducer only bumps
+      // the re-render counter + advances undo (beforeGenome captured the
+      // pre-restore genome so undo() restores the taste values).
+      case "TASTE_RESTORE": {
+        return withUndo(
+          state,
+          { genomeVersion: state.genomeVersion + 1 },
+          action.beforeGenome
+        );
+      }
 
       default:
         return state;
