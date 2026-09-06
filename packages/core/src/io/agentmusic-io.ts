@@ -6,8 +6,9 @@ import type { MixerState } from "../model/audio-routes";
 import type { TasteGenomeData } from "../taste/taste-genome";
 import type { GenomeVersionEntry } from "../taste/taste-store";
 import type { DiffLogEntry } from "../diff/diff-log";
+import type { DiffEnvelope } from "../diff/diff-envelope";
 
-const FORMAT_VERSION = "1.1.0";
+const FORMAT_VERSION = "1.2.0";
 
 export interface AgentMusicManifest {
   version: string;
@@ -35,6 +36,19 @@ export interface AgentMusicData {
   tasteGenome?: TasteGenomeData;
   tasteVersions?: GenomeVersionEntry[];
   diffLog?: DiffLogEntry[];
+  /**
+   * v1.17.0 Stage 0: full applied-diff history (envelopes WITH ops), so a
+   * loaded project keeps its rollback chain instead of only the audit
+   * metadata in diffLog. Optional for backwards compatibility with v1.16
+   * files (which only carry diffLog); readers must tolerate its absence.
+   */
+  appliedDiffs?: DiffEnvelope[];
+  /**
+   * v1.17.0 Stage 0: DiffEngine rollback snapshots (rollbackToken ->
+   * pre-apply graph JSON string), so ROLLBACK_DIFF keeps working after a
+   * load. Optional; absent in v1.16 files.
+   */
+  rollbackSnapshots?: Record<string, string>;
 }
 
 interface ZipFileMap {
@@ -145,6 +159,20 @@ export class AgentMusicIO {
       );
     }
 
+    // v1.17.0 Stage 0: persist the full applied-diff history (one compact
+    // DiffEnvelope per line, mirroring diff-log.jsonl) and the DiffEngine
+    // rollback snapshot map (single JSON object). Both are optional: older
+    // callers that only build diffLog produce files without them.
+    if (data.appliedDiffs) {
+      addFile(
+        "agent/applied-diffs.jsonl",
+        data.appliedDiffs.map((d) => compactJson(d)).join("\n") + "\n"
+      );
+    }
+    if (data.rollbackSnapshots && Object.keys(data.rollbackSnapshots).length > 0) {
+      addFile("agent/rollback-snapshots.json", compactJson(data.rollbackSnapshots));
+    }
+
     zip.end();
     await ready;
 
@@ -225,6 +253,13 @@ export class AgentMusicIO {
 
     const diffLog = readJsonl<DiffLogEntry>("agent/diff-log.jsonl");
 
+    // v1.17.0 Stage 0: read back the full diff history. Both files are
+    // optional (absent in v1.16 saves) — missing entries degrade to
+    // undefined so old files load exactly as they did before.
+    const appliedDiffs = readJsonl<DiffEnvelope>("agent/applied-diffs.jsonl");
+    const rollbackSnapshots =
+      readJson<Record<string, string>>("agent/rollback-snapshots.json");
+
     return {
       manifest,
       graph,
@@ -239,6 +274,11 @@ export class AgentMusicIO {
       tasteGenome,
       tasteVersions: tasteVersions.length > 0 ? tasteVersions : undefined,
       diffLog: diffLog.length > 0 ? diffLog : undefined,
+      appliedDiffs: appliedDiffs.length > 0 ? appliedDiffs : undefined,
+      rollbackSnapshots:
+        rollbackSnapshots && Object.keys(rollbackSnapshots).length > 0
+          ? rollbackSnapshots
+          : undefined,
     };
   }
 

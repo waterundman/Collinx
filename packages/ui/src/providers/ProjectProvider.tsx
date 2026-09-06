@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useMemo,
   useReducer,
@@ -70,6 +71,12 @@ import {
   saveProjectState,
   serializeProjectState,
 } from "../services/persistence";
+import {
+  AUTOSAVE_INTERVAL_MS,
+  clearAutosaveSlots,
+  scanAutosaveSlots,
+  writeAutosaveSlot,
+} from "../services/autosave";
 import { MixingAgent, registerBuiltinTools } from "@collinx/agent";
 
 /** Serialized deep-equality for genome snapshots. toJSON() emits the same key
@@ -97,6 +104,36 @@ function downloadBlob(blob: Blob, filename: string): void {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * v1.17.0 Stage 1: dirty-detection fingerprint for the autosave interval.
+ * A cheap composite of the signals that actually change on user edits —
+ * graph revision + diff/notes counts + a compact mixer signature (the mixer
+ * lives outside the graph, so its gain/pan/mute/solo per track is folded in
+ * without hashing the full state JSON) + genomeVersion — rather than a hash
+ * of the whole serialized project. Equal fingerprints mean "no user-visible
+ * change since the last autosave write", so the tick is skipped.
+ */
+function computeAutosaveFingerprint(state: {
+  graph: ProjectGraph;
+  notes: NoteEvent[];
+  pendingDiffs: DiffEnvelope[];
+  appliedDiffs: DiffEnvelope[];
+  mixer: MixerState;
+  genomeVersion: number;
+}): string {
+  const mixerSig = state.mixer.tracks
+    .map((t) => `${t.id}:${t.gainDb}:${t.pan}:${t.mute}:${t.solo}`)
+    .join(",");
+  return [
+    state.graph.getRevisionId(),
+    state.appliedDiffs.length,
+    state.notes.length,
+    state.pendingDiffs.length,
+    mixerSig,
+    state.genomeVersion,
+  ].join("|");
 }
 
 /**
@@ -278,6 +315,45 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
     }
   );
 
+  // -----------------------------------------------------------------------
+  // v1.17.0 Stage 1: autosave (crash recovery).
+  // -----------------------------------------------------------------------
+
+  // Mirror of the latest state for the autosave interval: the interval reads
+  // stateRef inside its callback, so its 5-minute cadence is NOT reset by
+  // edits (a useEffect keyed on [state] would restart the timer on every
+  // change and starve the autosave during continuous editing).
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Dirty-detection baseline: fingerprint of the state at mount. Until the
+  // live fingerprint differs from this, the autosave interval skips writing
+  // (a freshly opened tab with no edits must not produce snapshots).
+  const autosaveFingerprintRef = useRef<string>(computeAutosaveFingerprint(state));
+
+  // Mount-time scan of the autosave slots (one-shot: the useState lazy
+  // initializer runs exactly once per mount and is StrictMode-safe — double
+  // invocation is a pure localStorage read). A recovery hint is surfaced only
+  // when the newest autosave snapshot is NEWER than the localStorage-persisted
+  // state (loadProjectState null counts as older) — i.e. the browser likely
+  // crashed/was killed after an autosave tick but before the debounced main
+  // save landed.
+  const [autosaveRecovery, setAutosaveRecovery] = useState<{
+    savedAt: string;
+    payload: string;
+  } | null>(() => {
+    if (!effectivePersistenceKey) return null;
+    const latest = scanAutosaveSlots()[0];
+    if (!latest) return null;
+    const persistedState = persistedRef.current;
+    if (persistedState && persistedState.savedAt >= latest.savedAt) return null;
+    return { savedAt: latest.savedAt, payload: latest.payload };
+  });
+  // The restore action reads the pending payload through this mirror so the
+  // actions memo does not need to rebuild when the hint is consumed.
+  const autosaveRecoveryRef = useRef(autosaveRecovery);
+  autosaveRecoveryRef.current = autosaveRecovery;
+
   // Stage 1: create the ToolRegistry after dispatch is available and register
   // the built-in agent tools. onToolCall forwards every ToolCallRecord emitted
   // by ToolRegistry.call into the store's timeline (RECORD_TOOL_CALL is pure:
@@ -336,6 +412,44 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
     };
   }, [state, effectivePersistenceKey]);
 
+  // v1.17.0 Stage 1: periodic autosave. Every AUTOSAVE_INTERVAL_MS a full
+  // AgentMusicData snapshot (same collect path as saveProjectAsAgentMusic,
+  // including rollbackSnapshots) is rotated into the localStorage autosave
+  // slots — a crash-recovery net complementary to the single-slot debounced
+  // main persistence above. Dirty detection: the tick is skipped when the
+  // fingerprint is unchanged since the last write, so an idle open tab does
+  // not churn identical snapshots. Disabled entirely when persistence is off
+  // (same condition as the save effect), cleared on unmount.
+  const collectAgentMusicSnapshot = useCallback((): AgentMusicData => {
+    const s = stateRef.current;
+    return collectAgentMusicData({
+      graph: s.graph,
+      notes: s.notes,
+      mixer: s.mixer,
+      tasteStore,
+      appliedDiffs: s.appliedDiffs,
+      pendingDiffs: s.pendingDiffs,
+      // Same wiring as the localStorage main-save path: the autosave carries
+      // the full rollback chain. collectAgentMusicData caps the count.
+      rollbackSnapshots: diffEngine.exportSnapshots(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasteStore, diffEngine]);
+
+  useEffect(() => {
+    if (!effectivePersistenceKey) return;
+    const intervalId = window.setInterval(() => {
+      const fingerprint = computeAutosaveFingerprint(stateRef.current);
+      if (autosaveFingerprintRef.current === fingerprint) return;
+      autosaveFingerprintRef.current = fingerprint;
+      const data = collectAgentMusicSnapshot();
+      writeAutosaveSlot(JSON.stringify(data), new Date().toISOString());
+    }, AUTOSAVE_INTERVAL_MS);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [effectivePersistenceKey, collectAgentMusicSnapshot]);
+
   // Register a minimal "compose" agent for Stage 1 groundwork.
   useEffect(() => {
     agentBus.registerAgent("compose", async (msg) => {
@@ -357,6 +471,48 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       agentBus.unregisterAgent("compose");
     };
   }, [agentBus]);
+
+  // v1.17.0 Stage 1: the restore API shared by the .agentmusic file load
+  // path (loadProjectFromAgentMusic) and the autosave crash-recovery path
+  // (restoreFromAutosave) — kept identical by construction. Both route
+  // through restoreFromAgentMusicData. DiffEngine is a mutable class, so
+  // the snapshot import lives here (same layer as tasteStore.importPackage);
+  // importSnapshots is a merge-overwrite, so repeated restores are idempotent.
+  const buildRestoreApi = useCallback((): AgentMusicRestoreActions => {
+    return {
+      replaceGraph: (graph) => {
+        dispatch({ type: "REPLACE_GRAPH", graph } satisfies ProjectStoreAction);
+      },
+      revertMixerTo: (mixer) => {
+        dispatch({ type: "REVERT_MIXER_TO", mixer } satisfies ProjectStoreAction);
+      },
+      restoreTaste: (genome, versions) => {
+        const beforeGenome = tasteStore.getCurrentGenome()?.toJSON() ?? null;
+        if (genome) {
+          tasteStore.importPackage({
+            packageVersion: 1,
+            exportedAt: new Date().toISOString(),
+            genome,
+            evidence: [],
+            versionHistory: versions,
+          });
+        }
+        dispatch({
+          type: "TASTE_RESTORE",
+          genome,
+          versions,
+          beforeGenome,
+        } satisfies ProjectStoreAction);
+      },
+      restoreDiffHistory: (appliedDiffs, rollbackSnapshots) => {
+        diffEngine.importSnapshots(rollbackSnapshots);
+        dispatch({
+          type: "RESTORE_DIFF_HISTORY",
+          appliedDiffs,
+        } satisfies ProjectStoreAction);
+      },
+    };
+  }, [tasteStore, diffEngine]);
 
   const actions = useMemo(
     () => ({
@@ -787,14 +943,11 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       },
       // Stage 0 (.agentmusic): collect the live store state, serialize via
       // AgentMusicIO, and trigger a Blob download as project.agentmusic.
+      // v1.17.0 Stage 1: snapshot collection is shared with the autosave
+      // interval (collectAgentMusicSnapshot), so both surfaces stay in
+      // lockstep by construction.
       saveProjectAsAgentMusic: async (): Promise<void> => {
-        const data = collectAgentMusicData({
-          graph: state.graph,
-          notes: state.notes,
-          mixer: state.mixer,
-          tasteStore,
-          appliedDiffs: state.appliedDiffs,
-        });
+        const data = collectAgentMusicSnapshot();
         const io = new AgentMusicIO();
         const bytes = await io.save(data);
         // .slice() copies into a plain Uint8Array<ArrayBuffer> — a valid
@@ -839,36 +992,10 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         const io = new AgentMusicIO();
         const data: AgentMusicData = await io.load(bytes);
 
-        // Local restore API (avoids a circular reference into the live `actions`).
-        const restoreApi: AgentMusicRestoreActions = {
-          replaceGraph: (graph) => {
-            dispatch({ type: "REPLACE_GRAPH", graph } satisfies ProjectStoreAction);
-          },
-          revertMixerTo: (mixer) => {
-            dispatch({ type: "REVERT_MIXER_TO", mixer } satisfies ProjectStoreAction);
-          },
-          restoreTaste: (genome, versions) => {
-            const beforeGenome =
-              tasteStore.getCurrentGenome()?.toJSON() ?? null;
-            if (genome) {
-              tasteStore.importPackage({
-                packageVersion: 1,
-                exportedAt: new Date().toISOString(),
-                genome,
-                evidence: [],
-                versionHistory: versions,
-              });
-            }
-            dispatch({
-              type: "TASTE_RESTORE",
-              genome,
-              versions,
-              beforeGenome,
-            } satisfies ProjectStoreAction);
-          },
-        };
-
-        await restoreFromAgentMusicData(data, restoreApi);
+        // v1.17.0 Stage 1: the restore API is shared with the autosave
+        // crash-recovery path (buildRestoreApi), so a slot restore and a file
+        // load route through exactly the same actions.
+        await restoreFromAgentMusicData(data, buildRestoreApi());
       },
       // Stage 0 (.agentmusic load): replace the whole graph (notes re-derived in
       // the reducer). Exposed so restoreFromAgentMusicData can route through it.
@@ -894,8 +1021,49 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           beforeGenome,
         } satisfies ProjectStoreAction);
       },
+      // v1.17.0 Stage 0 (.agentmusic load): rebuild the applied-diff history.
+      // Same implementation as the local restoreApi in
+      // loadProjectFromAgentMusic (kept in sync by construction).
+      restoreDiffHistory: (
+        appliedDiffs: DiffEnvelope[],
+        rollbackSnapshots: Record<string, string>
+      ): void => {
+        diffEngine.importSnapshots(rollbackSnapshots);
+        dispatch({
+          type: "RESTORE_DIFF_HISTORY",
+          appliedDiffs,
+        } satisfies ProjectStoreAction);
+      },
+      // v1.17.0 Stage 1: crash recovery. The user clicking the TopBar
+      // "restore autosave" entry IS the confirmation (no extra dialog).
+      // Parses the pending slot payload and routes through the same restore
+      // path as a .agentmusic file load, then clears the slots + the hint so
+      // the entry disappears. Corrupt payload resolves silently (the scan
+      // already filters most of it; belt and braces).
+      restoreFromAutosave: async (): Promise<void> => {
+        const recovery = autosaveRecoveryRef.current;
+        if (!recovery) return;
+        let data: AgentMusicData;
+        try {
+          const parsed = JSON.parse(recovery.payload) as {
+            savedAt?: unknown;
+            data?: AgentMusicData;
+          };
+          if (!parsed || typeof parsed.data !== "object" || parsed.data === null) {
+            return;
+          }
+          data = parsed.data;
+        } catch {
+          return;
+        }
+        await restoreFromAgentMusicData(data, buildRestoreApi());
+        // Recovery consumed: drop the slots (avoid stale hints) + the hint.
+        clearAutosaveSlots();
+        autosaveRecoveryRef.current = null;
+        setAutosaveRecovery(null);
+      },
     }),
-    [tasteStore, state]
+    [tasteStore, state, buildRestoreApi, collectAgentMusicSnapshot]
   );
 
   const value = useMemo<ProjectStoreValue>(
@@ -917,10 +1085,13 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         enabled: Boolean(effectivePersistenceKey),
         lastSavedAt: lastPersistedAt,
       },
+      autosaveRecovery: autosaveRecovery
+        ? { savedAt: autosaveRecovery.savedAt }
+        : null,
       actions,
       bus: agentBus,
     }),
-    [state, actions, agentBus, effectivePersistenceKey, lastPersistedAt]
+    [state, actions, agentBus, effectivePersistenceKey, lastPersistedAt, autosaveRecovery]
   );
 
   return (

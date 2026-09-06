@@ -1558,7 +1558,8 @@
     },
     "project": {
       "save": "保存工程",
-      "load": "加载工程"
+      "load": "加载工程",
+      "restoreAutosave": "恢复自动保存 ({{time}})"
     }
   }
 }

@@ -53,6 +53,17 @@ interface TabDef {
 
 const TAB_IDS: TabId[] = ["compose", "arrange", "orchestrate", "mixer", "score", "taste", "teaching", "agent", "graph"];
 
+/**
+ * v1.17.0 Stage 1: formats an autosave snapshot ISO timestamp as HH:MM for
+ * the TopBar recovery entry ("恢复自动保存 (14:32)"). Empty string for an
+ * unparsable timestamp (button falls back to the plain label via i18n).
+ */
+function formatAutosaveTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export function App() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<TabId>("compose");
@@ -70,6 +81,7 @@ export function App() {
     tasteStore,
     genomeVersion,
     toolCalls,
+    autosaveRecovery,
     actions,
   } = useProjectStore();
 
@@ -392,6 +404,14 @@ export function App() {
     projectFileInputRef.current?.click();
   }, []);
 
+  // v1.17.0 Stage 1: crash recovery. Clicking the entry IS the user
+  // confirmation; the store action parses the pending autosave slot and
+  // restores through the standard .agentmusic restore path.
+  const handleRestoreAutosave = useCallback(() => {
+    // eslint-disable-next-line no-console
+    void actions.restoreFromAutosave().catch(console.error);
+  }, [actions]);
+
   const handleProjectFileChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -494,6 +514,18 @@ export function App() {
         >
           {t("app.project.load")}
         </button>
+        {autosaveRecovery ? (
+          <button
+            type="button"
+            onClick={handleRestoreAutosave}
+            data-testid="restore-autosave"
+            className={styles.topBarButton}
+          >
+            {t("app.project.restoreAutosave", {
+              time: formatAutosaveTime(autosaveRecovery.savedAt),
+            })}
+          </button>
+        ) : null}
         <input
           ref={projectFileInputRef}
           type="file"

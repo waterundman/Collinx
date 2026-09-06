@@ -5,6 +5,7 @@ import { serializeGraph } from "../../graph/serialization";
 import { createNoteEvent } from "../../model/note-event";
 import { createMotif } from "../../model/motif";
 import { TasteGenome } from "../../taste/taste-genome";
+import type { DiffEnvelope } from "../../diff/diff-envelope";
 
 function createEmptyProjectData(): AgentMusicData {
   const graph = ProjectGraph.create("Test Project", 120);
@@ -122,7 +123,7 @@ describe("AgentMusicIO", () => {
       const loaded = await io.load(buffer);
       expect(loaded.manifest).toBeDefined();
       expect(loaded.manifest.title).toBe("Test Project");
-      expect(loaded.manifest.version).toBe("1.1.0");
+      expect(loaded.manifest.version).toBe("1.2.0");
       expect(loaded.graph).toBeDefined();
       expect(loaded.graph.meta.title).toBe("Test Project");
       expect(loaded.notes).toEqual([]);
@@ -290,7 +291,7 @@ describe("AgentMusicIO", () => {
       expect(manifest.timeSignature).toBe("4/4");
       expect(manifest.totalBars).toBe(2);
       expect(manifest.trackCount).toBe(2);
-      expect(manifest.version).toBe("1.1.0");
+      expect(manifest.version).toBe("1.2.0");
     });
 
     it("should handle empty data with defaults", () => {
@@ -306,6 +307,77 @@ describe("AgentMusicIO", () => {
     it("should throw on invalid buffer", async () => {
       const badBuffer = new Uint8Array([1, 2, 3]);
       await expect(io.load(badBuffer)).rejects.toThrow();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // v1.17.0 Stage 0 (T04, unit, critical): 完整 diff 历史持久化
+  // -----------------------------------------------------------------------
+  describe("diff history persistence (v1.17 T04)", () => {
+    function makeDiff(i: number): DiffEnvelope {
+      return {
+        diffId: `diff-${i}`,
+        baseRevision: "rev-0",
+        actor: { type: "agent", name: "test-agent" },
+        permissionScope: "write_direct",
+        summary: `diff ${i}`,
+        ops: [{ op: "update_meta", path: "/", data: { title: `V${i}` } }],
+        domainExplanations: [],
+        evidenceRefs: [],
+        rollbackToken: `rb-${i}`,
+        riskFlags: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+      };
+    }
+
+    it("T04: save 产出 agent/applied-diffs.jsonl 与 agent/rollback-snapshots.json 条目，load 正确读回", async () => {
+      const graph = ProjectGraph.create("Diff History Project", 120);
+      const graphData = graph.toJSON();
+      // serializeGraph 每次调用都会重新生成顶层 created_at（非语义字段），
+      // 因此捕获一次，构造与断言使用同一快照字符串。
+      const snapshotJson = serializeGraph(graph);
+      const appliedDiffs = [makeDiff(1), makeDiff(2)];
+      const rollbackSnapshots: Record<string, string> = {
+        "rb-1": snapshotJson,
+        "rb-2": snapshotJson,
+      };
+
+      const data: AgentMusicData = {
+        manifest: io.createManifest({ graph: graphData }),
+        graph: graphData,
+        revisions: [],
+        notes: [],
+        appliedDiffs,
+        rollbackSnapshots,
+      };
+
+      const buffer = await io.save(data);
+
+      // zip 条目确实存在
+      const { unzipSync } = await import("fflate");
+      const entries = Object.keys(unzipSync(buffer));
+      expect(entries).toContain("agent/applied-diffs.jsonl");
+      expect(entries).toContain("agent/rollback-snapshots.json");
+
+      // load 读回（含字段值校验）
+      const loaded = await io.load(buffer);
+      expect(loaded.appliedDiffs).toEqual(appliedDiffs);
+      expect(loaded.appliedDiffs!.length).toBe(2);
+      expect(loaded.appliedDiffs![0].diffId).toBe("diff-1");
+      expect(loaded.appliedDiffs![0].ops).toEqual(appliedDiffs[0].ops);
+      expect(loaded.appliedDiffs![1].rollbackToken).toBe("rb-2");
+      expect(loaded.rollbackSnapshots).toEqual(rollbackSnapshots);
+      expect(loaded.rollbackSnapshots!["rb-1"]).toBe(snapshotJson);
+      expect(loaded.diffLog).toBeUndefined();
+    });
+
+    it("T04b: 无 diff 历史的 v1.16 形状数据 save→load 两字段为 undefined（宽容降级）", async () => {
+      const data = createEmptyProjectData();
+      const buffer = await io.save(data);
+      const loaded = await io.load(buffer);
+      expect(loaded.appliedDiffs).toBeUndefined();
+      expect(loaded.rollbackSnapshots).toBeUndefined();
+      expect(loaded.manifest.title).toBe("Test Project");
     });
   });
 });

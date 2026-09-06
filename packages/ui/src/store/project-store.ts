@@ -136,7 +136,17 @@ export type ProjectStoreAction =
    * re-render counter + bumps undo (genomeOverride records the pre-restore
    * genome so undo() can revert the taste values).
    */
-  | { type: "TASTE_RESTORE"; genome: TasteGenomeData | null; versions: GenomeVersionEntry[]; beforeGenome?: TasteGenomeData | null };
+  | { type: "TASTE_RESTORE"; genome: TasteGenomeData | null; versions: GenomeVersionEntry[]; beforeGenome?: TasteGenomeData | null }
+  /**
+   * v1.17.0 Stage 0 (.agentmusic load): rebuild the applied-diff history from
+   * the loaded file so historical diffs stay visible and rollback-able. The
+   * DiffEngine rollback snapshot import happens imperatively in the
+   * provider's action creator (DiffEngine is a mutable class, same layer as
+   * tasteStore.importPackage); the reducer only replaces the pure state.
+   * Guarded by the bridge: only dispatched when the file actually carries
+   * diff history, so v1.16 files keep their old (leave-current) behavior.
+   */
+  | { type: "RESTORE_DIFF_HISTORY"; appliedDiffs: DiffEnvelope[] };
 
 // ---------------------------------------------------------------------------
 // Stage 0: Orchestrator panel -> real Orchestrator tool bridge
@@ -646,6 +656,24 @@ export interface ProjectStoreActions {
    * the shared TasteStore. genome === null keeps the current taste.
    */
   restoreTaste: (genome: TasteGenomeData | null, versions: GenomeVersionEntry[]) => void;
+  /**
+   * v1.17.0 Stage 0 (.agentmusic load): rebuild the applied-diff history so
+   * historical diffs remain rollback-able after a load. The provider imports
+   * the rollback snapshots into the shared DiffEngine before dispatching.
+   */
+  restoreDiffHistory: (
+    appliedDiffs: DiffEnvelope[],
+    rollbackSnapshots: Record<string, string>
+  ) => void;
+  /**
+   * v1.17.0 Stage 1: restore the latest autosave snapshot (crash recovery).
+   * The user clicking the TopBar "restore autosave" entry is the explicit
+   * confirmation. Parses the slot payload, routes through
+   * restoreFromAgentMusicData (same restore path as .agentmusic file load),
+   * then clears the autosave slots + the pending-recovery hint. Resolves
+   * silently when no recovery snapshot is pending or the payload is corrupt.
+   */
+  restoreFromAutosave: () => Promise<void>;
 }
 
 export interface PersistenceStatus {
@@ -656,11 +684,24 @@ export interface PersistenceStatus {
   lastSavedAt: string | null;
 }
 
+/**
+ * v1.17.0 Stage 1: pending crash-recovery snapshot info. Non-null when an
+ * autosave snapshot is newer than the localStorage-persisted state at mount
+ * (i.e. the browser likely crashed before the debounced main save ran). The
+ * TopBar surfaces a "restore autosave" entry while this is set.
+ */
+export interface AutosaveRecoveryInfo {
+  /** ISO timestamp of the autosave snapshot (slot-level savedAt). */
+  savedAt: string;
+}
+
 export interface ProjectStoreValue extends ProjectStoreState {
   actions: ProjectStoreActions;
   bus: AgentBus;
   /** Stage 1: cross-refresh persistence indicator. */
   persistence: PersistenceStatus;
+  /** v1.17.0 Stage 1: pending autosave crash-recovery snapshot, or null. */
+  autosaveRecovery: AutosaveRecoveryInfo | null;
 }
 
 export const ProjectStoreContext = createContext<ProjectStoreValue | null>(null);
@@ -1351,6 +1392,20 @@ export function createProjectReducer(
           { genomeVersion: state.genomeVersion + 1 },
           action.beforeGenome
         );
+      }
+
+      // v1.17.0 Stage 0 (.agentmusic load): replace the applied-diff history
+      // wholesale. rollbackTokens are re-derived from the envelopes so the
+      // token list stays consistent with appliedDiffs; the DiffEngine
+      // snapshot map was already populated by the provider's action creator
+      // (importSnapshots is a merge-overwrite, so StrictMode double-dispatch
+      // of the same payload is idempotent). Structured-clone keeps the state
+      // from sharing mutable memory with the loaded payload.
+      case "RESTORE_DIFF_HISTORY": {
+        return withUndo(state, {
+          appliedDiffs: action.appliedDiffs.map((d) => structuredClone(d)),
+          rollbackTokens: action.appliedDiffs.map((d) => d.rollbackToken),
+        });
       }
 
       default:

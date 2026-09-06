@@ -1558,7 +1558,8 @@
     },
     "project": {
       "save": "Save Project",
-      "load": "Load Project"
+      "load": "Load Project",
+      "restoreAutosave": "Restore autosave ({{time}})"
     }
   }
 }
