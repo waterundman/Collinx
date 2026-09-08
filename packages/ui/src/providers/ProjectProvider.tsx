@@ -114,6 +114,19 @@ function downloadBlob(blob: Blob, filename: string): void {
  * without hashing the full state JSON) + genomeVersion — rather than a hash
  * of the whole serialized project. Equal fingerprints mean "no user-visible
  * change since the last autosave write", so the tick is skipped.
+ *
+ * v1.18.0 Stage 1: two dimensions added —
+ *  - pendingDiffs diffIds (comma-joined): covers the "equal-length swap" case
+ *    (one pending diff rejected + a new one added keeps length unchanged, but
+ *    the diffId list changes), which the previous length-only signal missed.
+ *  - per-track fxChain serialization (JSON.stringify of each track's
+ *    fxChain): mixer effect-slot edits (add/reorder/params) change the mixer
+ *    state without touching gain/pan/mute/solo. JSON.stringify is chosen over
+ *    a hand-rolled signature because FXChain/FXSlot are plain data objects
+ *    with stable key insertion order (created via createTrack/createFXSlot),
+ *    so stringify is deterministic; the cost is bounded (fxChains are small)
+ *    and the fingerprint is only computed inside the autosave interval
+ *    callback (stateRef.current), never per render.
  */
 function computeAutosaveFingerprint(state: {
   graph: ProjectGraph;
@@ -124,13 +137,20 @@ function computeAutosaveFingerprint(state: {
   genomeVersion: number;
 }): string {
   const mixerSig = state.mixer.tracks
-    .map((t) => `${t.id}:${t.gainDb}:${t.pan}:${t.mute}:${t.solo}`)
+    .map(
+      (t) =>
+        `${t.id}:${t.gainDb}:${t.pan}:${t.mute}:${t.solo}:${JSON.stringify(
+          t.fxChain,
+        )}`,
+    )
     .join(",");
+  const pendingDiffSig = state.pendingDiffs.map((d) => d.diffId).join(",");
   return [
     state.graph.getRevisionId(),
     state.appliedDiffs.length,
     state.notes.length,
     state.pendingDiffs.length,
+    pendingDiffSig,
     mixerSig,
     state.genomeVersion,
   ].join("|");
@@ -879,6 +899,32 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
             userLevel: config.userLevel,
             compareWithAlt: config.compareWithAlt ?? false,
           },
+          { type: "user", name: "teaching-panel" },
+        );
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        return {
+          status: result.status,
+          explanation: convertAgentExplanation(data) ?? EMPTY_UI_EXPLANATION,
+          confidence:
+            typeof result.confidence === "number" ? result.confidence : undefined,
+          raw: data,
+        };
+      },
+      // v1.18.0 Stage 0: Teaching harmony closed loop. Routes the panel request
+      // through the real teaching.explainHarmony tool on the shared
+      // ToolRegistry, so the invocation (running + success) shows up in the
+      // tool-call timeline. The agent-side Explanation is converted to the UI
+      // UiExplanation shape (see convertAgentExplanation); on failure the
+      // result carries EMPTY_UI_EXPLANATION + status "error" so the panel can
+      // render an explicit error state instead of template content.
+      runTeachingHarmony: async (
+        chordProgression: string[],
+        key: string,
+        userLevel: TeachingConfigInput["userLevel"],
+      ): Promise<TeachingRunResult> => {
+        const result = await toolRegistry.call(
+          "teaching.explainHarmony",
+          { chordProgression, key, userLevel },
           { type: "user", name: "teaching-panel" },
         );
         const data = (result.data ?? {}) as Record<string, unknown>;

@@ -1523,7 +1523,8 @@
     },
     "arrange": {
       "planReady": "编排方案已就绪",
-      "opsAndExplanations": "{{ops}} 操作 · {{explanations}} 段落说明"
+      "opsAndExplanations": "{{ops}} 操作 · {{explanations}} 段落说明",
+      "emptyPhrases": "暂无乐段（Phrase）节点——应用乐段提案或添加 Phrase 节点后，这里将显示段落编排。"
     },
     "orchestrate": {
       "planReady": "编制方案已就绪",
@@ -1554,12 +1555,20 @@
       "exportMusicXMLEmpty": "当前没有音符可导出"
     },
     "teaching": {
-      "runFailed": "教学解释生成失败，请重试"
+      "runFailed": "教学解释生成失败，请重试",
+      "harmonyTitle": "和声讲解",
+      "harmonyAction": "解释当前和声",
+      "harmonyLoading": "正在生成和声讲解…",
+      "harmonyEmpty": "暂无和声讲解——点击按钮，基于和弦轨生成讲解内容。",
+      "harmonyNoChords": "和弦轨没有音符，无法生成和声讲解。",
+      "harmonyRunFailed": "和声讲解生成失败，请重试",
+      "harmonyExamples": "示例"
     },
     "project": {
       "save": "保存工程",
       "load": "加载工程",
-      "restoreAutosave": "恢复自动保存 ({{time}})"
+      "restoreAutosave": "恢复自动保存 ({{time}})",
+      "autosaveRestoreFailed": "恢复自动保存快照失败，当前工程未受影响，可重试。"
     }
   }
 }

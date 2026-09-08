@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import type { DiffEnvelope } from "@collinx/core";
+import { useI18n } from "../../i18n";
 import styles from "./TeachingPanel.module.css";
 
 export type UserLevel = "beginner" | "intermediate" | "advanced" | "professional";
@@ -30,6 +31,19 @@ export interface TeachingPanelProps {
   relatedConcepts?: string[];
   loading?: boolean;
   error?: string | null;
+  /** v1.18.0 Stage 0: harmony explanation block fed by the real
+   *  teaching.explainHarmony tool (never template content). Independent of
+   *  the activeDiff explanation above: the block renders for every project
+   *  that has notes on the chords track. */
+  harmonyExplanation?: ExplanationSection | null;
+  harmonyLoading?: boolean;
+  harmonyError?: string | null;
+  /** Triggers the store's runTeachingHarmony action. Absent = block hidden
+   *  (tests / minimal embeds render the panel without the harmony block). */
+  onExplainHarmony?: () => void;
+  /** False when the chords track has no notes: the trigger button is
+   *  disabled instead of letting the tool run on an empty progression. */
+  canExplainHarmony?: boolean;
 }
 
 const LEVEL_LABELS: Record<UserLevel, string> = {
@@ -50,7 +64,13 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({
   relatedConcepts = [],
   loading = false,
   error = null,
+  harmonyExplanation = null,
+  harmonyLoading = false,
+  harmonyError = null,
+  onExplainHarmony,
+  canExplainHarmony = false,
 }) => {
+  const { t } = useI18n();
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
 
   const handleLevelChange = useCallback(
@@ -256,6 +276,80 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({
           </div>
         )}
       </div>
+
+      {onExplainHarmony && (
+        <div className={styles.harmonySection} data-testid="teaching-harmony-section">
+          <div className={styles.harmonyHeader}>
+            <span className={styles.sidebarTitle}>
+              {t("app.teaching.harmonyTitle")}
+            </span>
+            <button
+              type="button"
+              className={styles.harmonyTrigger}
+              data-testid="teaching-harmony-trigger"
+              disabled={!canExplainHarmony || harmonyLoading}
+              onClick={onExplainHarmony}
+            >
+              {t("app.teaching.harmonyAction")}
+            </button>
+          </div>
+
+          {!canExplainHarmony && !harmonyLoading ? (
+            <div className={styles.harmonyEmpty} data-testid="teaching-harmony-empty">
+              {t("app.teaching.harmonyNoChords")}
+            </div>
+          ) : harmonyLoading ? (
+            <div className={styles.statusState} data-testid="teaching-harmony-loading">
+              <span className={styles.statusSpinner} aria-hidden="true" />
+              {t("app.teaching.harmonyLoading")}
+            </div>
+          ) : harmonyError ? (
+            <div className={styles.statusState} data-testid="teaching-harmony-error">
+              <span className={styles.statusIcon} aria-hidden="true">!</span>
+              {harmonyError}
+            </div>
+          ) : harmonyExplanation ? (
+            <div className={styles.harmonyResult} data-testid="teaching-harmony-result">
+              <div className={styles.explanationCard}>
+                <div className={styles.explanationTitle}>
+                  {harmonyExplanation.title}
+                </div>
+                <div className={styles.explanationOverview}>
+                  {harmonyExplanation.overview}
+                </div>
+                <div className={styles.explanationDetail}>
+                  {harmonyExplanation.detail}
+                </div>
+                {harmonyExplanation.conceptTags.length > 0 && (
+                  <div className={styles.conceptTags}>
+                    {harmonyExplanation.conceptTags.map((tag) => (
+                      <span key={tag} className={styles.conceptTag}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {harmonyExplanation.examples.length > 0 && (
+                  <div className={styles.examplesSection}>
+                    <div className={styles.examplesTitle}>
+                      {t("app.teaching.harmonyExamples")}
+                    </div>
+                    {harmonyExplanation.examples.map((example, idx) => (
+                      <div key={idx} className={styles.exampleItem}>
+                        {example}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className={styles.harmonyEmpty} data-testid="teaching-harmony-empty">
+              {t("app.teaching.harmonyEmpty")}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

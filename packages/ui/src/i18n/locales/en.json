@@ -1523,7 +1523,8 @@
     },
     "arrange": {
       "planReady": "Arrangement plan ready",
-      "opsAndExplanations": "{{ops}} ops · {{explanations}} explanations"
+      "opsAndExplanations": "{{ops}} ops · {{explanations}} explanations",
+      "emptyPhrases": "No phrase nodes yet — apply a phrase proposal or add Phrase nodes to see the arrangement."
     },
     "orchestrate": {
       "planReady": "Orchestration plan ready",
@@ -1554,12 +1555,20 @@
       "exportMusicXMLEmpty": "There are no notes to export"
     },
     "teaching": {
-      "runFailed": "Teaching explanation failed, please retry"
+      "runFailed": "Teaching explanation failed, please retry",
+      "harmonyTitle": "Harmony Explainer",
+      "harmonyAction": "Explain current harmony",
+      "harmonyLoading": "Generating harmony explanation…",
+      "harmonyEmpty": "No harmony explanation yet — click the button to generate one from the chord track.",
+      "harmonyNoChords": "The chord track has no notes; cannot generate a harmony explanation.",
+      "harmonyRunFailed": "Harmony explanation failed, please retry",
+      "harmonyExamples": "Examples"
     },
     "project": {
       "save": "Save Project",
       "load": "Load Project",
-      "restoreAutosave": "Restore autosave ({{time}})"
+      "restoreAutosave": "Restore autosave ({{time}})",
+      "autosaveRestoreFailed": "Failed to restore the autosave snapshot. Your current project is unchanged — you can try again."
     }
   }
 }

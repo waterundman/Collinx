@@ -335,3 +335,49 @@
   color: var(--text-muted);
   padding: var(--space-2) 0;
 }
+
+/* v1.18.0 Stage 0: harmony explanation block (teaching.explainHarmony). */
+.harmonySection {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-primary);
+  padding: var(--space-2) var(--space-4);
+  overflow-y: auto;
+}
+
+.harmonyHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.harmonyTrigger {
+  background: transparent;
+  border: 1px solid var(--accent-cyan);
+  border-radius: var(--radius-sm);
+  color: var(--accent-cyan);
+  font-size: 11px;
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  transition: background var(--transition-normal), color var(--transition-normal);
+}
+
+.harmonyTrigger:hover:not(:disabled) {
+  background: var(--accent-cyan);
+  color: var(--bg-primary);
+}
+
+.harmonyTrigger:disabled {
+  border-color: var(--border-primary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.harmonyEmpty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+}
+
+.harmonyResult {
+  padding-top: var(--space-2);
+}

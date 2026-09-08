@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { DiffEnvelope } from "@collinx/core";
@@ -175,6 +175,122 @@ describe("TeachingPanel (v1.14 Stage 1: real explanation data source)", () => {
       "选择一个编曲方案或差异操作来查看详细的教学解释"
     );
     expect(container.textContent).not.toContain("方案 A: 密集和声排列");
+
+    cleanup();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v1.18.0 Stage 0: harmony explanation block (teaching.explainHarmony wiring).
+// ---------------------------------------------------------------------------
+
+describe("TeachingPanel harmony block (v1.18.0 Stage 0)", () => {
+  /** Real agent explanation converted through the same store conversion layer
+   *  the App uses, so the panel test exercises the production payload shape. */
+  function buildRealHarmonyProps(): Partial<TeachingPanelProps> {
+    const raw = new TeachingAgent().explainHarmony(
+      ["I", "IV", "V", "I"],
+      "C major",
+      "intermediate"
+    );
+    const ui = convertAgentExplanation(raw);
+    if (!ui) throw new Error("conversion of real agent harmony explanation failed");
+    return { harmonyExplanation: ui };
+  }
+
+  it("T03: harmony 结果渲染真实讲解内容 (critical)", () => {
+    const real = buildRealHarmonyProps();
+    const { container, cleanup } = renderPanel({
+      userLevel: "intermediate",
+      onExplainHarmony: () => {},
+      canExplainHarmony: true,
+      ...real,
+    });
+
+    const section = container.querySelector('[data-testid="teaching-harmony-section"]');
+    expect(section).not.toBeNull();
+    const result = container.querySelector('[data-testid="teaching-harmony-result"]');
+    expect(result).not.toBeNull();
+    // Real agent content: title carries key + progression, overview/detail present.
+    expect(result!.textContent).toContain("和声进行分析");
+    expect(result!.textContent).toContain("C major");
+    expect(result!.textContent).toContain(real.harmonyExplanation!.overview);
+    expect(result!.textContent).toContain(real.harmonyExplanation!.detail);
+    // No error / loading / empty state leaking.
+    expect(container.querySelector('[data-testid="teaching-harmony-error"]')).toBeNull();
+    expect(container.querySelector('[data-testid="teaching-harmony-loading"]')).toBeNull();
+    expect(container.querySelector('[data-testid="teaching-harmony-empty"]')).toBeNull();
+
+    cleanup();
+  });
+
+  it("T03: 触发按钮可点击并调用 onExplainHarmony (critical)", () => {
+    const onExplainHarmony = vi.fn();
+    const { container, cleanup } = renderPanel({
+      userLevel: "intermediate",
+      onExplainHarmony,
+      canExplainHarmony: true,
+    });
+
+    const trigger = container.querySelector(
+      '[data-testid="teaching-harmony-trigger"]'
+    ) as HTMLButtonElement | null;
+    expect(trigger).not.toBeNull();
+    expect(trigger!.disabled).toBe(false);
+    act(() => {
+      trigger!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(onExplainHarmony).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
+  it("T03: 无 harmony 数据时按钮可用但显示空态 (non-critical)", () => {
+    const { container, cleanup } = renderPanel({
+      userLevel: "intermediate",
+      onExplainHarmony: () => {},
+      canExplainHarmony: true,
+    });
+
+    expect(
+      container.querySelector('[data-testid="teaching-harmony-result"]')
+    ).toBeNull();
+    const empty = container.querySelector('[data-testid="teaching-harmony-empty"]');
+    expect(empty).not.toBeNull();
+    // Empty state text comes from i18n — never a template explanation.
+    expect(empty!.textContent).not.toContain("方案 A");
+
+    cleanup();
+  });
+
+  it("T04: canExplainHarmony=false 时触发按钮禁用 (non-critical)", () => {
+    const onExplainHarmony = vi.fn();
+    const { container, cleanup } = renderPanel({
+      userLevel: "intermediate",
+      onExplainHarmony,
+      canExplainHarmony: false,
+    });
+
+    const trigger = container.querySelector(
+      '[data-testid="teaching-harmony-trigger"]'
+    ) as HTMLButtonElement | null;
+    expect(trigger).not.toBeNull();
+    expect(trigger!.disabled).toBe(true);
+    act(() => {
+      trigger!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    // Disabled button must not fire the handler.
+    expect(onExplainHarmony).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it("T04: 未传 onExplainHarmony 时 harmony 区块整体隐藏 (non-critical)", () => {
+    const { container, cleanup } = renderPanel({ userLevel: "beginner" });
+
+    expect(
+      container.querySelector('[data-testid="teaching-harmony-section"]')
+    ).toBeNull();
 
     cleanup();
   });

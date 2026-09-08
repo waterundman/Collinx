@@ -1,4 +1,3 @@
-import PDFDocument from "pdfkit";
 import type { Layout } from "../model/score-model";
 import type { NoteEvent } from "../model/note-event";
 import type { TempoMap } from "../model/tempo-map";
@@ -94,8 +93,13 @@ export class PDFExporter {
    * chunks and concatenates them into a plain Uint8Array (no Node Buffer
    * dependency), so the result can be wrapped in a Blob directly in the
    * browser. The Node-only Buffer API (exportToPDF) is a thin wrapper.
+   *
+   * v1.18.0 Stage 1: pdfkit is loaded via dynamic import() so its standalone
+   * bundle (all standard fonts inlined, ~1 MB+) stays out of the main chunk
+   * and is only fetched when the user actually exports a PDF. The returned
+   * Promise chain is unchanged — this method already returned a Promise.
    */
-  exportToPDFBytes(
+  async exportToPDFBytes(
     layout: Layout,
     notes: NoteEvent[],
     tempoMap: TempoMap,
@@ -146,6 +150,8 @@ export class PDFExporter {
         currentPage = [];
       }
     }
+
+    const { default: PDFDocument } = await import("pdfkit");
 
     return new Promise<Uint8Array>((resolve, reject) => {
       const chunks: Uint8Array[] = [];

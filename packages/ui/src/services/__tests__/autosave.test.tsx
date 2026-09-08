@@ -182,3 +182,235 @@ describe("autosave dirty detection (T02)", () => {
     s.cleanup();
   });
 });
+
+// ---------------------------------------------------------------------------
+// v1.18.0 Stage 1: 指纹补强测试（追加，不改既有断言）。
+// T01 (critical): pendingDiffs 等量置换 —— REJECT 一个旧提案 + 注入一个新
+//   提案，pendingDiffs 长度不变但 diffId 列表变化（pendingDiffSig）→ 指纹
+//   变化 → interval 触发新写入。旧实现只看长度会漏写这一维。
+// T02 (critical): mixer fxChain 变更（gain/pan/mute/solo 不变）→ mixerSig
+//   内 JSON.stringify(t.fxChain) 变化 → 触发写入。
+// ---------------------------------------------------------------------------
+
+describe("autosave fingerprint hardening (v1.18.0 T01/T02)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+  });
+
+  it("T01: pendingDiffs 等量置换（长度不变、diffId 列表变化）→ 触发新写入", async () => {
+    const KEY = "collinx.test.autosave.v118.t01";
+    const s = setupProvider(KEY);
+    try {
+      // 初始 2 条 demo 提案；apply 第一条（pending 2→1、applied 0→1、
+      // graph revision 变化）→ 首次写入。
+      expect(s.value.pendingDiffs).toHaveLength(2);
+      const first = s.value.pendingDiffs[0];
+      act(() => {
+        s.value.actions.applyDiff(first);
+      });
+      expect(s.value.pendingDiffs).toHaveLength(1);
+      expect(s.value.appliedDiffs).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AUTOSAVE_INTERVAL_MS + 1000);
+      });
+      const rawA = window.localStorage.getItem(autosaveSlotKey(0));
+      expect(rawA).not.toBeNull();
+      const snapA = JSON.parse(rawA!) as { savedAt: string };
+      expect(snapA.savedAt).toBeTruthy();
+
+      // 等量置换：REJECT 剩余旧提案（1→0）+ suggestMixingChain 注入一条新
+      // 提案（0→1）。净效果：pendingDiffs 长度与上次写入时一致（1）、
+      // appliedDiffs/notes/graph/mixer/genome 全部未动 —— 旧版仅看长度的
+      // 指纹会判定"无变化"而跳过；v1.18.0 的 pendingDiffSig（diffId 列表）
+      // 必须识别出变化。
+      const remaining = s.value.pendingDiffs[0];
+      act(() => {
+        s.value.actions.rejectDiff(remaining.diffId);
+      });
+      expect(s.value.pendingDiffs).toHaveLength(0);
+      act(() => {
+        s.value.actions.suggestMixingChain();
+      });
+      expect(s.value.pendingDiffs).toHaveLength(1);
+      expect(s.value.pendingDiffs[0].diffId).not.toBe(remaining.diffId);
+      // 其余指纹维度与写入 A 时一致。
+      expect(s.value.appliedDiffs).toHaveLength(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AUTOSAVE_INTERVAL_MS + 1000);
+      });
+
+      // 新写入发生：slot0 savedAt 更新，且旧快照 A 顺移到 slot1（轮转证明
+      // 写入确实发生，而非扫描读到旧值）。
+      const rawB = window.localStorage.getItem(autosaveSlotKey(0));
+      expect(rawB).not.toBeNull();
+      const snapB = JSON.parse(rawB!) as { savedAt: string };
+      expect(snapB.savedAt).not.toBe(snapA.savedAt);
+      const raw1 = window.localStorage.getItem(autosaveSlotKey(1));
+      expect(raw1).not.toBeNull();
+      const slot1 = JSON.parse(raw1!) as { savedAt: string };
+      expect(slot1.savedAt).toBe(snapA.savedAt);
+    } finally {
+      s.cleanup();
+    }
+  });
+
+  it("T02: mixer fxChain 变更（gain/pan/mute/solo 不变）→ 触发新写入", async () => {
+    const KEY = "collinx.test.autosave.v118.t02";
+    const s = setupProvider(KEY);
+    try {
+      // 首次写入：普通编辑（notes 变化）触发。
+      act(() => {
+        s.value.actions.addNote(
+          createNoteEvent({ trackId: "melody", bar: 2, beat: 2, durQn: 1, pitchMidi: 64 })
+        );
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AUTOSAVE_INTERVAL_MS + 1000);
+      });
+      const rawA = window.localStorage.getItem(autosaveSlotKey(0));
+      expect(rawA).not.toBeNull();
+      const snapA = JSON.parse(rawA!) as { savedAt: string };
+
+      // 仅替换 melody 轨 fxChain（新增一个 reverb slot），gain/pan/mute/solo
+      // 均不变 —— 旧版 mixerSig 只含 gain:pan:mute:solo，会漏掉这次变更；
+      // v1.18.0 将 JSON.stringify(t.fxChain) 折入 mixerSig 后必须触发写入。
+      const track = s.value.mixer.tracks.find((t) => t.sourceTrackId === "melody");
+      expect(track).toBeDefined();
+      act(() => {
+        s.value.actions.updateMixerTrack(track!.id, {
+          fxChain: {
+            ...track!.fxChain,
+            slots: [
+              {
+                id: "test-fx-slot-1",
+                type: "reverb",
+                preset: "hall",
+                params: {},
+                enabled: true,
+              },
+            ],
+          },
+        });
+      });
+      // gain 未变（变更只针对 fxChain）。
+      expect(s.value.mixer.tracks.find((t) => t.id === track!.id)!.gainDb).toBe(
+        track!.gainDb
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AUTOSAVE_INTERVAL_MS + 1000);
+      });
+
+      const rawB = window.localStorage.getItem(autosaveSlotKey(0));
+      expect(rawB).not.toBeNull();
+      const snapB = JSON.parse(rawB!) as { savedAt: string };
+      expect(snapB.savedAt).not.toBe(snapA.savedAt);
+      const raw1 = window.localStorage.getItem(autosaveSlotKey(1));
+      expect(raw1).not.toBeNull();
+      const slot1 = JSON.parse(raw1!) as { savedAt: string };
+      expect(slot1.savedAt).toBe(snapA.savedAt);
+    } finally {
+      s.cleanup();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v1.18.0 Stage 1: quota 降级测试（service 级纯函数，无需 Provider）。
+// ---------------------------------------------------------------------------
+
+describe("autosave quota degradation (v1.18.0 T03)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  /** 直接预置三个内容可辨识的槽（绕过 writeAutosaveSlot，避免与其内部
+   *  顺移逻辑耦合）。 */
+  function seedSlots(): void {
+    window.localStorage.setItem(
+      autosaveSlotKey(0),
+      JSON.stringify({ savedAt: TIMES[0], data: { marker: "old0" } })
+    );
+    window.localStorage.setItem(
+      autosaveSlotKey(1),
+      JSON.stringify({ savedAt: TIMES[1], data: { marker: "old1" } })
+    );
+    window.localStorage.setItem(
+      autosaveSlotKey(2),
+      JSON.stringify({ savedAt: TIMES[2], data: { marker: "old2" } })
+    );
+  }
+
+  it("T03: slot0 写入配额失败 → 淘汰最旧非空槽（slot2）重试一次 → 新快照落位", () => {
+    seedSlots();
+    const realSetItem = Storage.prototype.setItem;
+    let slot0WriteFailed = false;
+    // 仅第一次对 slot0 的最终写入抛配额错误；顺移（slot1/slot2 的搬移）
+    // 与淘汰后的重试均走真实实现 —— 精确命中 autosave.ts 的降级分支。
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation((key: string, value: string) => {
+        if (key === autosaveSlotKey(0) && !slot0WriteFailed) {
+          slot0WriteFailed = true;
+          throw new DOMException("mock quota exceeded", "QuotaExceededError");
+        }
+        realSetItem.call(window.localStorage, key, value);
+      });
+    const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
+    expect(setItemSpy).toBeDefined();
+
+    expect(() => writeAutosaveSlot(snapshotJson("new"), TIMES[3])).not.toThrow();
+
+    // 淘汰了最旧的非空槽（slot2）。
+    expect(removeItemSpy).toHaveBeenCalledWith(autosaveSlotKey(2));
+    expect(window.localStorage.getItem(autosaveSlotKey(2))).toBeNull();
+    // 重试成功：新快照落位 slot0。
+    const raw0 = window.localStorage.getItem(autosaveSlotKey(0));
+    expect(raw0).not.toBeNull();
+    const parsed0 = JSON.parse(raw0!) as { savedAt: string; data: { marker: string } };
+    expect(parsed0.savedAt).toBe(TIMES[3]);
+    expect(parsed0.data.marker).toBe("new");
+    // 顺移仍正常：slot1 承接原 slot0 内容。
+    const raw1 = window.localStorage.getItem(autosaveSlotKey(1));
+    expect(raw1).not.toBeNull();
+    const parsed1 = JSON.parse(raw1!) as { data: { marker: string } };
+    expect(parsed1.data.marker).toBe("old0");
+  });
+
+  it("T03b: 全部 setItem 持续失败 → 不抛错，已有快照保留（仅淘汰最旧槽腾位）", () => {
+    seedSlots();
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("mock quota exceeded", "QuotaExceededError");
+      });
+    const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
+    expect(setItemSpy).toBeDefined();
+
+    // 顺移与最终写入全部失败：静默淘汰最旧槽后重试仍失败 → 放弃本次
+    // 写入，绝不向上抛错。
+    expect(() => writeAutosaveSlot(snapshotJson("new"), TIMES[3])).not.toThrow();
+
+    // 依赖 L98-107 的淘汰逻辑：removeItem 被调用以腾位。
+    expect(removeItemSpy).toHaveBeenCalledWith(autosaveSlotKey(2));
+    // 放弃写入：slot0 原有快照原样保留。
+    const raw0 = window.localStorage.getItem(autosaveSlotKey(0));
+    expect(raw0).not.toBeNull();
+    const parsed0 = JSON.parse(raw0!) as { savedAt: string; data: { marker: string } };
+    expect(parsed0.savedAt).toBe(TIMES[0]);
+    expect(parsed0.data.marker).toBe("old0");
+  });
+});

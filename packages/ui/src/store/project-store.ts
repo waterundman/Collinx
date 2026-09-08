@@ -598,6 +598,21 @@ export interface ProjectStoreActions {
    */
   runTeaching: (config: TeachingConfigInput) => Promise<TeachingRunResult>;
   /**
+   * v1.18.0 Stage 0: run the real Teaching agent through the ToolRegistry
+   * (teaching.explainHarmony). `chordProgression` is one chord per element
+   * (a hyphen-joined pitch-name sequence such as "E-G#-B"); `key` is the
+   * "tonic mode" string from the graph meta key_map; `userLevel` is already
+   * mapped from the UI enum (professional -> expert, see mapUiLevelToAgent).
+   * The agent-side Explanation is converted to the UI UiExplanation shape (see
+   * convertAgentExplanation). Resolves to a TeachingRunResult, never throws
+   * (ToolRegistry.call surfaces handler failures as status: "error").
+   */
+  runTeachingHarmony: (
+    chordProgression: string[],
+    key: string,
+    userLevel: TeachingConfigInput["userLevel"]
+  ) => Promise<TeachingRunResult>;
+  /**
    * Stage 2: record an applied (or arbitrary) Agent decision as a graph
    * evidence node so the Knowledge Graph can show the decision rationale.
    * APPLY_DIFF also records agent diffs automatically; this action makes the

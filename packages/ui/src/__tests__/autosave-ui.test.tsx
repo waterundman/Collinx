@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { App } from "../App";
@@ -257,6 +257,81 @@ describe("autosave crash recovery UI (T04)", () => {
       ).toBe(false);
     } finally {
       s2.cleanup();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v1.18.0 Stage 1: 恢复失败横幅（追加，不改既有断言）。
+// T04 (non-critical): restoreFromAutosave 失败 → data-testid="autosave-error-
+//   banner" 出现、槽未清、恢复入口保留（可重试）；重试成功 → 横幅消失。
+// 失败注入方式：spy ProjectGraph.fromJSON 令其抛错一次（restoreFromAgentMusic
+// Data 第一步 deserializeGraph 即失败，store 不被改动，等价于槽内快照畸形）。
+// ---------------------------------------------------------------------------
+
+describe("autosave restore failure banner (v1.18.0 T04)", () => {
+  beforeAll(() => stubBrowserApis());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+  });
+
+  it("T04: 恢复失败显示横幅且保留槽与入口；重试成功后横幅消失", async () => {
+    const KEY = "collinx.test.autosave.v118.t04.banner";
+    window.localStorage.clear();
+    seedAutosaveSlot();
+
+    const { container, cleanup } = renderAppWithProbe(KEY);
+    try {
+      const btn = container.querySelector('[data-testid="restore-autosave"]');
+      expect(btn).not.toBeNull();
+
+      // 第一次恢复：让反序列化抛错一次（模拟畸形快照导致 restore 失败）。
+      const fromJSONSpy = vi
+        .spyOn(ProjectGraph, "fromJSON")
+        .mockImplementationOnce(() => {
+          throw new Error("simulated corrupt autosave snapshot");
+        });
+      click(btn);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      // 横幅出现（文本来自 app.project.autosaveRestoreFailed 词条）。
+      const banner = container.querySelector(
+        '[data-testid="autosave-error-banner"]'
+      );
+      expect(banner).not.toBeNull();
+      expect(banner!.textContent).toBeTruthy();
+      // 槽未清（失败不清快照，用户可重试）。
+      expect(window.localStorage.getItem(autosaveSlotKey(0))).not.toBeNull();
+      expect(scanAutosaveSlots()).toHaveLength(1);
+      // 恢复入口仍在。
+      expect(
+        container.querySelector('[data-testid="restore-autosave"]')
+      ).not.toBeNull();
+
+      // 解除故障后重试：恢复成功 → 横幅消失、入口消失、槽被清空。
+      fromJSONSpy.mockRestore();
+      const btnRetry = container.querySelector(
+        '[data-testid="restore-autosave"]'
+      );
+      expect(btnRetry).not.toBeNull();
+      click(btnRetry);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(
+        container.querySelector('[data-testid="autosave-error-banner"]')
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="restore-autosave"]')
+      ).toBeNull();
+      expect(scanAutosaveSlots()).toHaveLength(0);
+    } finally {
+      cleanup();
     }
   });
 });

@@ -15,6 +15,10 @@ interface ArrangementViewProps {
   onPhraseClick?: (phraseId: string) => void;
   onSectionDoubleClick?: (phraseId: string) => void;
   totalBars?: number;
+  /** v1.18.0 Stage 0: explicit empty-state hint shown when phrases is empty
+   *  (no Phrase nodes in the graph). Text comes from i18n via the caller;
+   *  the view never falls back to demo data. */
+  emptyHint?: string;
 }
 
 function getCSSVar(name: string): string {
@@ -98,6 +102,7 @@ export const ArrangementView: React.FC<ArrangementViewProps> = ({
   onPhraseClick,
   onSectionDoubleClick,
   totalBars,
+  emptyHint,
 }) => {
   const maxBar =
     totalBars ?? phrases.reduce((max, p) => Math.max(max, p.endBar), 16);
@@ -220,6 +225,12 @@ export const ArrangementView: React.FC<ArrangementViewProps> = ({
             );
           })}
       </div>
+
+      {phrases.length === 0 && emptyHint && (
+        <div className={styles.emptyState} data-testid="arrangement-empty">
+          {emptyHint}
+        </div>
+      )}
 
       {selectedPhrase && (
         <div className={styles.selectedInfo}>

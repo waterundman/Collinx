@@ -11,6 +11,7 @@ import {
   DiffEnvelope,
   MixerTrack,
   MusicXMLIO,
+  midiToSpelling,
 } from "@collinx/core";
 import { PianoRollView } from "./components/PianoRoll/PianoRollView";
 import { ScorePanel } from "./components/Score";
@@ -31,7 +32,6 @@ import type { ConnectedNode, GraphData } from "./components/KnowledgeGraph";
 import { TopBar, TabPill } from "./components/Shell";
 import styles from "./App.module.css";
 import {
-  demoPhrases,
   createDefaultLayout,
   defaultHouseStyle,
 } from "./data/demoData";
@@ -121,6 +121,47 @@ export function App() {
       { id: "motif_c", name: t("app.motifs.harmony"), notes: byTrack("chords") },
     ];
   }, [t, notes]);
+
+  // v1.18.0 Stage 0: the ArrangementView tabs receive REAL phrases derived
+  // from the project graph's Phrase nodes (single source of truth), never the
+  // demo template data. Projection mirrors the demo proposal payload
+  // (ProjectProvider add_node Phrase): name/formRole/startBar/endBar.
+  // Defensive defaults keep hand-crafted / partial nodes from crashing the
+  // view; nodes are ordered by startBar so blocks render left-to-right.
+  const storePhrases = useMemo(() => {
+    return graph
+      .getNodesByType("Phrase")
+      .map((n) => {
+        const d = (n.data ?? {}) as Record<string, unknown>;
+        return {
+          id: n.id,
+          name: typeof d.name === "string" ? d.name : "",
+          startBar: typeof d.startBar === "number" ? d.startBar : 1,
+          endBar:
+            typeof d.endBar === "number"
+              ? d.endBar
+              : typeof d.startBar === "number"
+                ? d.startBar
+                : 1,
+          formRole: typeof d.formRole === "string" ? d.formRole : "verse",
+        };
+      })
+      .sort((a, b) => a.startBar - b.startBar);
+  }, [graph]);
+
+  // v1.18.0 Stage 0: arrangement timeline length derived from the real data —
+  // the larger of the deepest note bar and the deepest phrase endBar. The
+  // minimum of 16 preserves the default viewport when the project is short,
+  // matching the previous hardcoded totalBars={16} view span.
+  const totalBars = useMemo(() => {
+    const maxNoteBar = notes.reduce((max, n) => Math.max(max, n.bar), 0);
+    const maxPhraseBar = storePhrases.reduce(
+      (max, p) => Math.max(max, p.endBar),
+      0,
+    );
+    return Math.max(16, maxNoteBar, maxPhraseBar);
+  }, [notes, storePhrases]);
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [diffReport, setDiffReport] = useState<TasteDiffReport | null>(null);
   const [arrangerDiff, setArrangerDiff] = useState<DiffEnvelope | null>(null);
@@ -129,12 +170,22 @@ export function App() {
   // v1.14: transient status line for the Score panel (auto-layout results,
   // pending part-extraction / MusicXML export notices). Null hides it.
   const [scoreNotice, setScoreNotice] = useState<string | null>(null);
+  // v1.18.0 Stage 1: user-visible banner when an autosave restore attempt
+  // fails (previously the error was only logged to console). Null hides it;
+  // a successful retry clears it.
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const [userLevel, setUserLevel] = useState<UserLevel>("intermediate");
   // v1.14 Stage 1: Teaching panel state, fed by the real teaching.explainDecision
   // tool run in the effect below (never template content).
   const [teachingExplanation, setTeachingExplanation] = useState<UiExplanation | null>(null);
   const [teachingLoading, setTeachingLoading] = useState(false);
   const [teachingError, setTeachingError] = useState<string | null>(null);
+  // v1.18.0 Stage 0: harmony explanation block state, fed by the real
+  // teaching.explainHarmony tool through the button handler below (button
+  // triggered, unlike the diff-driven explainDecision effect).
+  const [harmonyExplanation, setHarmonyExplanation] = useState<UiExplanation | null>(null);
+  const [harmonyLoading, setHarmonyLoading] = useState(false);
+  const [harmonyError, setHarmonyError] = useState<string | null>(null);
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
 
   const defaultLayout = useMemo(() => createDefaultLayout(), []);
@@ -279,12 +330,16 @@ export function App() {
     [actions],
   );
 
+  // v1.18.0 Stage 0: double-clicking a phrase block validates that the id is
+  // a REAL graph Phrase node and jumps to the compose tab. The phrase id IS
+  // the graph node id, so no demo-data lookup is involved; if the node was
+  // removed the click is a no-op instead of navigating.
   const handleSectionDoubleClick = useCallback((phraseId: string) => {
-    const phrase = demoPhrases.find((p) => p.id === phraseId);
+    const phrase = storePhrases.find((p) => p.id === phraseId);
     if (phrase) {
       setActiveTab("compose");
     }
-  }, []);
+  }, [storePhrases]);
 
   const handleMixerTrackChange = useCallback(
     (trackId: string, changes: Partial<MixerTrack>) => {
@@ -407,10 +462,20 @@ export function App() {
   // v1.17.0 Stage 1: crash recovery. Clicking the entry IS the user
   // confirmation; the store action parses the pending autosave slot and
   // restores through the standard .agentmusic restore path.
-  const handleRestoreAutosave = useCallback(() => {
-    // eslint-disable-next-line no-console
-    void actions.restoreFromAutosave().catch(console.error);
-  }, [actions]);
+  // v1.18.0 Stage 1: failures surface a user-visible banner instead of a
+  // silent console.error. The pending slot + TopBar hint are preserved on
+  // failure (the store action only clears them after a successful restore),
+  // so the user can retry; a successful attempt clears the banner.
+  const handleRestoreAutosave = useCallback(async () => {
+    try {
+      await actions.restoreFromAutosave();
+      setAutosaveError(null);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      setAutosaveError(t("app.project.autosaveRestoreFailed"));
+    }
+  }, [actions, t]);
 
   const handleProjectFileChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -469,6 +534,65 @@ export function App() {
       cancelled = true;
     };
   }, [arrangerDiff, userLevel, t]);
+
+  // v1.18.0 Stage 0: harmony teaching derivation. The chords track notes are
+  // grouped by bar; each bar's pitch set becomes one chord in the
+  // progression, rendered as a hyphen-joined pitch-name sequence (e.g.
+  // "E-G#-B") because the tool's chordProgression parameter is string[] with
+  // one chord per element. Empty when the chords track has no notes — the
+  // TeachingPanel trigger button is disabled in that case.
+  const chordProgression = useMemo(() => {
+    const chordNotes = notes.filter((n) => n.trackId === "chords");
+    if (chordNotes.length === 0) return [];
+    const byBar = new Map<number, string[]>();
+    for (const n of chordNotes) {
+      const spelling =
+        typeof n.pitchSpelling === "string" && n.pitchSpelling.length > 0
+          ? n.pitchSpelling
+          : midiToSpelling(n.pitchMidi);
+      const name = spelling.replace(/\d+$/, "");
+      if (!name) continue;
+      const bar = byBar.get(n.bar) ?? [];
+      if (!bar.includes(name)) bar.push(name);
+      byBar.set(n.bar, bar);
+    }
+    return Array.from(byBar.keys())
+      .sort((a, b) => a - b)
+      .map((bar) => (byBar.get(bar) ?? []).join("-"));
+  }, [notes]);
+
+  // Tonic + mode from the graph meta key_map's first entry ("C major").
+  const harmonyKey = useMemo(() => {
+    const keyMap = graph.getMeta().key_map;
+    const first = keyMap[0];
+    return first ? `${first.tonic} ${first.mode}` : "C major";
+  }, [graph]);
+
+  const canExplainHarmony = chordProgression.length > 0;
+
+  // v1.18.0 Stage 0: button-triggered harmony explanation. Routes through the
+  // store action (real teaching.explainHarmony tool on the shared
+  // ToolRegistry); a failure keeps the panel alive with an error hint.
+  const handleExplainHarmony = useCallback(() => {
+    if (!canExplainHarmony) return;
+    setHarmonyExplanation(null);
+    setHarmonyLoading(true);
+    setHarmonyError(null);
+    actionsRef.current
+      .runTeachingHarmony(chordProgression, harmonyKey, mapUiLevelToAgent(userLevel))
+      .then((result) => {
+        setHarmonyLoading(false);
+        if (result.status === "ok") {
+          setHarmonyExplanation(result.explanation);
+        } else {
+          setHarmonyError(t("app.teaching.harmonyRunFailed"));
+        }
+      })
+      .catch(() => {
+        setHarmonyLoading(false);
+        setHarmonyError(t("app.teaching.harmonyRunFailed"));
+      });
+  }, [canExplainHarmony, chordProgression, harmonyKey, userLevel, t]);
 
   const headerStatus = useMemo(() => {
     switch (activeTab) {
@@ -547,12 +671,25 @@ export function App() {
         ))}
       </TopBar>
 
+      {/* v1.18.0 Stage 1: autosave restore failure banner, rendered right
+          under the TopBar (same diffInfoBox style as the score notice). */}
+      {autosaveError && (
+        <div
+          className={styles.diffInfoBox}
+          data-testid="autosave-error-banner"
+          role="alert"
+        >
+          <div className={styles.diffInfoSummary}>{autosaveError}</div>
+        </div>
+      )}
+
       {activeTab === "compose" && (
         <div className={styles.composeLayout} data-testid="compose-layout">
           <div className={styles.composeArrangement}>
             <ArrangementView
-              phrases={demoPhrases}
-              totalBars={16}
+              phrases={storePhrases}
+              totalBars={totalBars}
+              emptyHint={t("app.arrange.emptyPhrases")}
               onSectionDoubleClick={handleSectionDoubleClick}
             />
           </div>
@@ -589,8 +726,9 @@ export function App() {
           <div className={styles.sectionColumn}>
             <div className={styles.sectionMargin}>
               <ArrangementView
-                phrases={demoPhrases}
-                totalBars={16}
+                phrases={storePhrases}
+                totalBars={totalBars}
+                emptyHint={t("app.arrange.emptyPhrases")}
                 onSectionDoubleClick={handleSectionDoubleClick}
               />
             </div>
@@ -622,8 +760,9 @@ export function App() {
           <div className={styles.sectionColumn}>
             <div className={styles.sectionMargin}>
               <ArrangementView
-                phrases={demoPhrases}
-                totalBars={16}
+                phrases={storePhrases}
+                totalBars={totalBars}
+                emptyHint={t("app.arrange.emptyPhrases")}
                 onSectionDoubleClick={handleSectionDoubleClick}
               />
             </div>
@@ -732,6 +871,11 @@ export function App() {
             relatedConcepts={teachingExplanation?.conceptTags ?? []}
             loading={teachingLoading}
             error={teachingError}
+            harmonyExplanation={harmonyExplanation}
+            harmonyLoading={harmonyLoading}
+            harmonyError={harmonyError}
+            onExplainHarmony={handleExplainHarmony}
+            canExplainHarmony={canExplainHarmony}
           />
         </div>
       )}
