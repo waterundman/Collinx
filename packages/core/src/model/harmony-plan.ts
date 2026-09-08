@@ -138,6 +138,107 @@ const CADENCE_PATTERNS: { pattern: string[]; type: string }[] = [
   { pattern: ["bVII", "I"], type: "backdoor" },
 ];
 
+const PITCH_TOKEN_RE = /^[A-G][#b]?$/;
+
+interface IntervalQuality {
+  intervals: number[];
+  quality: "maj" | "min" | "dim" | "aug" | "maj7" | "dom7" | "min7" | "halfdim7" | "dim7";
+  seventh: boolean;
+}
+
+// 三和弦：按相对根音的半音差集合判定质量
+const TRIAD_QUALITIES: IntervalQuality[] = [
+  { intervals: [3, 6], quality: "dim", seventh: false },
+  { intervals: [3, 7], quality: "min", seventh: false },
+  { intervals: [4, 7], quality: "maj", seventh: false },
+  { intervals: [4, 8], quality: "aug", seventh: false },
+];
+
+// 七和弦（可选支持）：仍以三音性质定大小写
+const SEVENTH_QUALITIES: IntervalQuality[] = [
+  { intervals: [3, 6, 9], quality: "dim7", seventh: true },
+  { intervals: [3, 6, 10], quality: "halfdim7", seventh: true },
+  { intervals: [3, 7, 10], quality: "min7", seventh: true },
+  { intervals: [4, 7, 10], quality: "dom7", seventh: true },
+  { intervals: [4, 7, 11], quality: "maj7", seventh: true },
+];
+
+/**
+ * 将一组音名（音级集合）在给定调性下转换为罗马数字。
+ *
+ * - 音名 token 必须匹配 ^[A-G][#b]?$，任何非法 token → undefined（绝不抛错）。
+ * - 去重后独立音级 <3 → undefined（无法判定三音）。
+ * - 遍历每个独立音级作为候选根音，用音程集合匹配质量；
+ *   根音相对 tonic 的半音差必须落在调式自然音级集合内，否则 undefined。
+ * - 大小写来自实际音程（大三度→大写），不是音阶默认推断；dim 追加 "°"。
+ */
+export function pitchSetToRomanNumeral(
+  pitches: string[],
+  tonic: string,
+  mode: string
+): string | undefined {
+  if (!Array.isArray(pitches) || pitches.length === 0) return undefined;
+
+  for (const p of pitches) {
+    if (typeof p !== "string" || !PITCH_TOKEN_RE.test(p)) return undefined;
+  }
+
+  let tonicSemi: number;
+  try {
+    tonicSemi = noteToSemitone(tonic);
+  } catch {
+    return undefined;
+  }
+
+  let pcs: number[];
+  try {
+    pcs = Array.from(new Set(pitches.map((p) => noteToSemitone(p))));
+  } catch {
+    // "B#"/"Cb" 等能通过 PITCH_TOKEN_RE 但不在音名表内 → 绝不抛错
+    return undefined;
+  }
+  if (pcs.length < 3) return undefined;
+
+  const scale = mode === "minor" ? NATURAL_MINOR_DEGREES : MAJOR_SCALE_DEGREES;
+  const qualities = pcs.length === 3 ? TRIAD_QUALITIES : SEVENTH_QUALITIES;
+
+  for (const rootPc of pcs) {
+    const intervals = pcs
+      .filter((pc) => pc !== rootPc)
+      .map((pc) => (((pc - rootPc) % 12) + 12) % 12)
+      .sort((a, b) => a - b);
+
+    const match = qualities.find((q) => q.intervals.every((v) => intervals.includes(v)));
+    if (!match) continue;
+
+    const diff = (((rootPc - tonicSemi) % 12) + 12) % 12;
+    const degreeIdx = scale.indexOf(diff);
+    if (degreeIdx < 0) continue;
+
+    let casing: "upper" | "lower" = "upper";
+    let isDim = false;
+    let isAug = false;
+    if (match.seventh) {
+      // 七和弦：按三音性质定大小写（大三度→大写，小三度→小写）
+      casing = match.quality === "maj7" || match.quality === "dom7" ? "upper" : "lower";
+    } else {
+      if (match.quality === "maj" || match.quality === "aug") casing = "upper";
+      else casing = "lower";
+      if (match.quality === "dim") isDim = true;
+      if (match.quality === "aug") isAug = true;
+    }
+
+    let roman = scaleDegreeName(degreeIdx);
+    if (casing === "lower") roman = roman.toLowerCase();
+    if (isDim) roman += "°";
+    if (isAug) roman += "+";
+
+    return roman;
+  }
+
+  return undefined;
+}
+
 export class HarmonyPlan {
   private entries: HarmonyEntry[];
 

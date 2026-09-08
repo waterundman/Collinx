@@ -159,9 +159,10 @@ describe("agentmusic UI save (T03)", () => {
       expect(saveBtn).not.toBeNull();
 
       click(saveBtn);
-      // flush the async save (fflate dynamic import + blob download)
+      // 条件等待：保存链路含 fflate 动态 import（多跳微/宏任务）+ Blob 下载，
+      // 单次 flush 覆盖不了，改用 vi.waitFor 轮询至 createObjectURL 被调用。
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
       });
 
       expect(createObjectURL).toHaveBeenCalledTimes(1);
@@ -223,9 +224,15 @@ describe("agentmusic UI load (T04)", () => {
         );
       });
 
-      // flush async load + restore
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 0));
+      // 条件等待：加载链路含 async restore，单次 flush 覆盖不了，
+      // 改用 vi.waitFor 轮询至 store 被还原（notes 来自文件，而非初始 demo）。
+      // 不包外层 act：外层 act 会阻塞 Probe 的 liveStore 在 commit 后刷新，
+      // 始终读到还原前状态导致必挂；单层 vi.waitFor 轮询即可稳定等待 store 还原。
+      await vi.waitFor(() => {
+        const s = getStore();
+        expect(s.notes.length).toBe(1);
+        expect(s.notes[0].trackId).toBe(note.trackId);
+        expect(s.notes[0].pitchMidi).toBe(note.pitchMidi);
       });
 
       const after = getStore();

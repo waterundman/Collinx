@@ -105,6 +105,43 @@ describe("TeachingAgent", () => {
 
       expect(explanation.alternatives.length).toBeGreaterThan(0);
     });
+
+    // T03: 音名格式（连字符）输入应转换为罗马数字并命中模板
+    it("matches I-IV-V-I template from pitch-name input (T03)", () => {
+      const explanation = agent.explainHarmony(
+        ["C-E-G", "F-A-C", "G-B-D", "C-E-G"],
+        "C major",
+        "intermediate"
+      );
+
+      // 命中模板：concepts 应含模板概念而非兜底 ["和声","和弦进行","调性"]
+      expect(explanation.concepts).toContain("终止式");
+      expect(explanation.concepts).not.toEqual(["和声", "和弦进行", "调性"]);
+      expect(explanation.detail).toBeTruthy();
+    });
+
+    it("matches I-V-vi-IV template (deceptive cadence) from pitch-name input (T03)", () => {
+      const explanation = agent.explainHarmony(
+        ["C-E-G", "G-B-D", "A-C-E", "F-A-C"],
+        "C major",
+        "advanced"
+      );
+
+      expect(explanation.concepts).toContain("欺骗终止");
+    });
+
+    // T04: 转换成功但不命中任何模板 → generic 兜底，title 保留原始串
+    it("falls back to generic without crash when no template matches (T04)", () => {
+      const explanation = agent.explainHarmony(
+        ["A-C-E", "D-F-A", "E-G#-B", "A-C-E"],
+        "A minor",
+        "intermediate"
+      );
+
+      expect(explanation.detail).toContain("和弦进行");
+      expect(explanation.title).toContain("A-C-E");
+      expect(explanation.concepts).not.toContain("终止式");
+    });
   });
 
   describe("explainOrchestration", () => {

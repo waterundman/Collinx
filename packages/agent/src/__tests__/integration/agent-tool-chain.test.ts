@@ -109,6 +109,21 @@ describe("Agent tool chain integration", () => {
       expect(result.requiresUserConfirmation).toBe(false);
     });
 
+    // T06: 经真实 ToolRegistry 调用音名格式输入，应命中模板级内容
+    it("should match harmony template from pitch-name input via ToolRegistry (T06)", async () => {
+      const result = await registry.call(
+        "teaching.explainHarmony",
+        { chordProgression: ["C-E-G", "F-A-C", "G-B-D", "C-E-G"], key: "C major", userLevel: "intermediate" },
+        { type: "agent", name: "test" }
+      );
+
+      expect(result.status).toBe("ok");
+      const data = result.data as { detail: string; concepts: string[] };
+      expect(data).toBeDefined();
+      expect(data.concepts).toContain("终止式");
+      expect(data.detail).toBeTruthy();
+    });
+
     it("should call teaching.explainOrchestration and get valid result", async () => {
       const result = await registry.call(
         "teaching.explainOrchestration",

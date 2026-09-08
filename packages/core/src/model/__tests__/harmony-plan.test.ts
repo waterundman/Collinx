@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { HarmonyPlan } from "../harmony-plan";
+import { HarmonyPlan, pitchSetToRomanNumeral } from "../harmony-plan";
 
 describe("HarmonyPlan", () => {
   describe("parseChordSymbol", () => {
@@ -392,5 +392,53 @@ describe("HarmonyPlan", () => {
       const restored = HarmonyPlan.fromNodeData(data);
       expect(restored.getAllEntries()).toHaveLength(0);
     });
+  });
+});
+
+describe("pitchSetToRomanNumeral", () => {
+  // T01: C 大调基本三和弦映射
+  it("maps C major triads to Roman numerals (T01)", () => {
+    expect(pitchSetToRomanNumeral(["C", "E", "G"], "C", "major")).toBe("I");
+    expect(pitchSetToRomanNumeral(["A", "C", "E"], "C", "major")).toBe("vi");
+    expect(pitchSetToRomanNumeral(["D", "F", "A"], "C", "major")).toBe("ii");
+    expect(pitchSetToRomanNumeral(["G", "B", "D"], "C", "major")).toBe("V");
+    expect(pitchSetToRomanNumeral(["B", "D", "F"], "C", "major")).toBe("vii°");
+  });
+
+  // T01b: 增三和弦追加 "+"，与 tonic 大三和弦区分，且模板剥离 [0-9°] 时不误配 I-IV-V-I
+  it("marks augmented triad with + suffix (T01b)", () => {
+    expect(pitchSetToRomanNumeral(["C", "E", "G#"], "C", "major")).toBe("I+");
+  });
+
+  // T02: 容错边界
+  it("handles flat tonic and minor mode (T02)", () => {
+    // Bb 大调：降号根音
+    expect(pitchSetToRomanNumeral(["Bb", "D", "F"], "Bb", "major")).toBe("I");
+    // A 小调：自然小三和弦 + 大属和弦（G# 导音）
+    expect(pitchSetToRomanNumeral(["A", "C", "E"], "A", "minor")).toBe("i");
+    expect(pitchSetToRomanNumeral(["E", "G#", "B"], "A", "minor")).toBe("V");
+  });
+
+  it("returns undefined for non-diatonic root (T02)", () => {
+    // C 大调中 Db 不是自然音级
+    expect(pitchSetToRomanNumeral(["Db", "F", "Ab"], "C", "major")).toBeUndefined();
+  });
+
+  it("returns undefined when fewer than 3 distinct pitch classes (T02)", () => {
+    expect(pitchSetToRomanNumeral(["C", "E"], "C", "major")).toBeUndefined();
+  });
+
+  it("returns undefined for garbage tokens (T02)", () => {
+    expect(pitchSetToRomanNumeral(["C4", "E", "G"], "C", "major")).toBeUndefined();
+  });
+
+  it("never throws on spelled-out non-enharmonic tokens (T02)", () => {
+    // "B#"/"Cb" 通过 token 正则但不在音名表内 → 必须不抛错而返回 undefined
+    expect(() => pitchSetToRomanNumeral(["B#", "D#", "F#"], "C", "major")).not.toThrow();
+    expect(pitchSetToRomanNumeral(["B#", "D#", "F#"], "C", "major")).toBeUndefined();
+  });
+
+  it("returns undefined for empty input (T02)", () => {
+    expect(pitchSetToRomanNumeral([], "C", "major")).toBeUndefined();
   });
 });

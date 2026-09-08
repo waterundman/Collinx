@@ -294,7 +294,7 @@ export function registerBuiltinTools(
     description: "解释和声进行",
     permission: "read_only",
     parameters: [
-      { name: "chordProgression", type: "array", required: true, description: "和弦进行 (如 ['I','IV','V','I'])" },
+      { name: "chordProgression", type: "array", required: true, description: "和弦进行，支持两种格式：1) 罗马数字数组（如 ['I','IV','V','I']）；2) 音名和弦数组（如 ['E-G#-B']，每条为连字符拼接的音名序列），此时必须同时传 key 以指定调性（如 'C major' / 'A minor'），内部会转换为罗马数字再匹配模板。" },
       { name: "key", type: "string", required: true, description: "调性" },
       { name: "userLevel", type: "string", required: false, description: "用户水平" },
     ],

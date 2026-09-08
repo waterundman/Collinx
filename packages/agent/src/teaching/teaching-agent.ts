@@ -1,3 +1,5 @@
+import { pitchSetToRomanNumeral } from "@collinx/core";
+
 export type UserLevel = "beginner" | "intermediate" | "advanced" | "expert";
 
 export interface Explanation {
@@ -258,7 +260,11 @@ export class TeachingAgent {
     key: string,
     userLevel: UserLevel
   ): Explanation {
-    const match = this.matchHarmonyTemplate(chordProgression);
+    // 归一化：若输入为连字符拼接的音名序列（如 "C-E-G"），在给定调性下
+    // 转换为罗马数字后再做模板匹配；任何元素转换失败则保持原数组走旧逻辑。
+    const matchProgression = this.normalizeProgressionToRoman(chordProgression, key);
+
+    const match = this.matchHarmonyTemplate(matchProgression);
 
     const detail = match
       ? explanationForLevel(
@@ -510,6 +516,29 @@ export class TeachingAgent {
       }
     }
     return undefined;
+  }
+
+  private normalizeProgressionToRoman(chordProgression: string[], key: string): string[] {
+    const pitchSetRe = /^[A-G][#b]?(-[A-G][#b]?)*$/;
+    if (
+      chordProgression.length === 0 ||
+      !chordProgression.every((el) => typeof el === "string" && pitchSetRe.test(el))
+    ) {
+      return chordProgression;
+    }
+
+    const parts = key.trim().split(/\s+/);
+    const tonic = parts[0] ?? "";
+    const mode = parts[1] === "minor" || parts[1] === "major" ? parts[1] : "major";
+
+    const converted = chordProgression.map((el) =>
+      pitchSetToRomanNumeral(el.split("-"), tonic, mode)
+    );
+
+    if (converted.every((r) => r !== undefined)) {
+      return converted as string[];
+    }
+    return chordProgression;
   }
 
   private genericHarmonyExplanation(
