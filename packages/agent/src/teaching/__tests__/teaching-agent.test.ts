@@ -130,17 +130,61 @@ describe("TeachingAgent", () => {
       expect(explanation.concepts).toContain("欺骗终止");
     });
 
-    // T04: 转换成功但不命中任何模板 → generic 兜底，title 保留原始串
-    it("falls back to generic without crash when no template matches (T04)", () => {
+    // v1.20: 该输入（A minor i-iv-V-i）现在命中新增大调/小调模板，
+    // 不再是 generic 兜底——断言命中 i-iv-V-i（title 保留原始串）。
+    // 注：此用例输入与下方 T01 完全相同，原为 v1.19 "无模板命中" 断言，
+    // 自 v1.20 扩充小调模板后行为已变更为命中，故同步更新断言。
+    it("hits i-iv-V-i minor template from pitch-name input (was generic-fallback pre-v1.20)", () => {
       const explanation = agent.explainHarmony(
         ["A-C-E", "D-F-A", "E-G#-B", "A-C-E"],
         "A minor",
         "intermediate"
       );
 
-      expect(explanation.detail).toContain("和弦进行");
       expect(explanation.title).toContain("A-C-E");
-      expect(explanation.concepts).not.toContain("终止式");
+      expect(explanation.concepts).not.toEqual(["和声", "和弦进行", "调性"]);
+      expect(explanation.concepts).toContain("和声小调");
+    });
+
+    // T01 (critical): A minor i-iv-V-i 命中新小调模板（非 generic 兜底）
+    it("hits i-iv-V-i minor template from pitch-name input (T01)", () => {
+      const explanation = agent.explainHarmony(
+        ["A-C-E", "D-F-A", "E-G#-B", "A-C-E"],
+        "A minor",
+        "intermediate"
+      );
+
+      // 命中模板：concepts 不应等于兜底数组，且含新模板特征词
+      expect(explanation.concepts).not.toEqual(["和声", "和弦进行", "调性"]);
+      expect(explanation.concepts).toContain("和声小调");
+      // T05: title 保留原始音名串
+      expect(explanation.title).toContain("A-C-E");
+    });
+
+    // T02 (critical): A minor 安达卢西亚进行 i-VII-VI-V 命中新小调模板
+    it("hits Andalusian i-VII-VI-V minor template from pitch-name input (T02)", () => {
+      const explanation = agent.explainHarmony(
+        ["A-C-E", "G-B-D", "F-A-C", "E-G#-B"],
+        "A minor",
+        "advanced"
+      );
+
+      expect(explanation.concepts).not.toEqual(["和声", "和弦进行", "调性"]);
+      expect(explanation.concepts).toContain("安达卢西亚进行");
+    });
+
+    // T03 (critical): C major ii-V-I 命中升级后模板，含 "ii-V-I" 与七和弦表述
+    it("hits upgraded ii-V-I template with seventh-chord wording (T03)", () => {
+      const explanation = agent.explainHarmony(
+        ["D-F-A-C", "G-B-D-F", "C-E-G"],
+        "C major",
+        "advanced"
+      );
+
+      expect(explanation.detail).toContain("ii-V-I");
+      // 七和弦表述：含 "7" 或 "七"
+      const hasSeventh = explanation.detail.includes("7") || explanation.detail.includes("七");
+      expect(hasSeventh).toBe(true);
     });
   });
 

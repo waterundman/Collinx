@@ -77,14 +77,40 @@ const HARMONY_TEMPLATES: HarmonyTemplate[] = [
     progression: ["ii", "V", "I"],
     tonicName: "上主-属-主",
     beginnerExplanation:
-      "这是爵士乐中最常见的进行 ii-V-I。听起来像是一个完美的问句和答案：提出问题、感到紧张、找到答案。",
+      "这是爵士乐中最常见的进行 ii-V-I。它通常写作 ii7-V7-I：先是一个柔和的小七和弦，再是一个带张力的属七和弦，最后解决到主和弦，像提出问题、感到紧张、找到答案。",
     intermediateExplanation:
-      "ii-V-I 是爵士乐的核心进行。ii 是下属功能组的代表，提供预备紧张感；V7 通过三全音张力驱动解决；I 是目标。在爵士编曲中常使用扩展音 (9th/11th/13th) 丰富色彩。",
+      "ii-V-I 是爵士乐的核心进行。ii 常扩展为 ii7（如 Dm7）作为下属预备，提供柔和的紧张感；V7 通过三全音 (tritone，如 B-F) 张力驱动解决回到 I。在爵士编曲中常叠加扩展音 (9th/11th/13th) 丰富色彩，但骨架始终是 ii7-V7-I。",
     advancedExplanation:
       "ii-V-I 中 ii 作为 predominat 建立张力累积，V7 的 dominant quality 通过 leading tone tension 解决到 I。在声部进行中，ii7 的七音保留到 V7 的三音，V7 的七音下行解决到 I 的三音，形成平滑的连接。",
     expertExplanation:
-      "ii-V-I 是调性引力 (tonal gravity) 的理想模型：S-D-T 功能序列逐步增加 harmonic tension。在 Neo-Riemannian 理论中，ii → V 是 L (Leading-tone exchange) 操作，V → I 是 R (Relative) 操作的逆。在爵士理论中，ii-V 可被三全音替代 (tritone substitution) 为 bII7-V7。",
+      "ii-V-I 是调性引力 (tonal gravity) 的理想模型：S-D-T 功能序列逐步增加 harmonic tension。在爵士实践中，ii 与 V 几乎总是以七和弦（ii7 / V7）出现，并可叠加 extension（9th / 11th / 13th）形成色彩层；V7 的三全音 (tritone) 不仅驱动其自身解决，也是 ii-V 可被三全音替代 (tritone substitution，bII7-V7) 的理论基础。在 Neo-Riemannian 理论中，ii → V 是 L (Leading-tone exchange) 操作，V → I 是 R (Relative) 操作的逆。",
     concepts: ["功能和声", "声部进行", "属预备", "三全音替代"],
+  },
+  {
+    progression: ["i", "iv", "V", "i"],
+    tonicName: "主-下属-属-主（小调）",
+    beginnerExplanation:
+      "这是小调里最自然的回家路，但比大调更暗、更有戏剧感。i 给你稳定的小调底色，iv 稍作徘徊，V 和弦突然亮起来（升了导音），一把把音乐拉回家。",
+    intermediateExplanation:
+      "i-iv-V-i 是和声小调的经典终止式。iv 是自然小调和弦（小三和弦），色彩柔和；V 则使用升七级（如 G#）构成大属和弦，制造强烈的解决倾向回到 i。这种明暗对比正是小调进行感染力来源。",
+    advancedExplanation:
+      "i-iv-V-i 体现了小调的 T-S-D-T 功能循环。关键在于 leading tone（升七级）以半音上行直冲主音的张力机制，V-i 构成强终止 (authentic cadence)；iv 到 V 的低音是上行大二度（如 D→E），推动进行的动力。",
+    expertExplanation:
+      "i-iv-V-i 展示了调性化 (tonalization) 过程：自然小调 (aeolian) 借由升高七级转为和声小调 (harmonic minor)，从而获得功能性的大属和弦 V。这是西方小调音乐的基础终止逻辑，可见于 Bach 的恰空式小调终止以及大量 Pop 小调进行（如 minor key ballads）。iv-V 的半音导音引入是调性引力的物理体现。",
+    concepts: ["和声小调", "属和弦", "半音导音", "终止式"],
+  },
+  {
+    progression: ["i", "VII", "VI", "V"],
+    tonicName: "主-属-下属-属（下行）",
+    beginnerExplanation:
+      "这是一路往下走的'下楼梯'进行：i 站稳，VII、VI 依次往下探，最后落到 V，再弹回 i 像转了个圈。它听起来神秘又带点拉丁的慵懒。",
+    intermediateExplanation:
+      "i-VII-VI-V（安达卢西亚进行）是弗拉门戈与拉丁流行的经典语汇。低音以半音下行（自然小调如 A-G-F-E），V 常用大三和弦（E 大三和弦）制造强烈的回归张力，让循环具有不停下坠又被拉回的律动。",
+    advancedExplanation:
+      "i-VII-VI-V 源自下行 passacaglia / ground bass 传统，低音线 (bass line) 的半音下行构成进行的逻辑骨架。末和弦 V 常可扩展为 V7 引入属七张力，或染上 Phrygian dominant（弗利几亚属，如 E7♭9）色彩，强化异域感。",
+    expertExplanation:
+      "i-VII-VI-V 即 Andalusian cadence，其本质是 descending tetrachord（下行四音列）的循环，是历史悠久的弗拉门戈与西班牙民间音乐标志语汇。从 mode mixture / modal interchange 视角看，VII 与 VI 借用了平行大调与弗里几亚调式材料，制造色彩错位；在现代应用中（如 Keith Richards 式 riff）它常被固化为固定低音 (ostinato) 的吉他循环。",
+    concepts: ["安达卢西亚进行", "下行低音", "模进", "弗拉门戈"],
   },
 ];
 

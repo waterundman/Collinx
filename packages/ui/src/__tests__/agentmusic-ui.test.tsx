@@ -158,10 +158,11 @@ describe("agentmusic UI save (T03)", () => {
       const saveBtn = container.querySelector('[data-testid="save-project"]');
       expect(saveBtn).not.toBeNull();
 
-      click(saveBtn);
       // 条件等待：保存链路含 fflate 动态 import（多跳微/宏任务）+ Blob 下载，
       // 单次 flush 覆盖不了，改用 vi.waitFor 轮询至 createObjectURL 被调用。
+      // 整个交互+轮询包进 act，确保异步 store/下载更新在 act 内 flush。
       await act(async () => {
+        click(saveBtn);
         await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
       });
 
@@ -217,17 +218,15 @@ describe("agentmusic UI load (T04)", () => {
         value: [file],
       });
 
-      // 触发 change 事件（React 合成事件）
+      // 触发 change 事件（React 合成事件），flush 异步 restore 的状态更新，
+      // 随后在 act 外 vi.waitFor 轮询至 store 被还原（notes 来自文件）。
       act(() => {
         input!.dispatchEvent(
           new Event("change", { bubbles: true } as EventInit)
         );
       });
+      await act(async () => {});
 
-      // 条件等待：加载链路含 async restore，单次 flush 覆盖不了，
-      // 改用 vi.waitFor 轮询至 store 被还原（notes 来自文件，而非初始 demo）。
-      // 不包外层 act：外层 act 会阻塞 Probe 的 liveStore 在 commit 后刷新，
-      // 始终读到还原前状态导致必挂；单层 vi.waitFor 轮询即可稳定等待 store 还原。
       await vi.waitFor(() => {
         const s = getStore();
         expect(s.notes.length).toBe(1);

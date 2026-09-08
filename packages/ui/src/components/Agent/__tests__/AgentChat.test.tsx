@@ -94,11 +94,13 @@ describe("AgentChat (Stage 1 wiring + v1.14 Stage 2 single-card)", () => {
     const chat = renderChat();
     expect(chat.store.toolCalls.length).toBe(0);
 
-    chat.submit("Suggest a chord progression for bars 1-4");
-
     // The compose agent answers synchronously inside AgentBus.request, so the
-    // running entry is immediately upserted to success by correlationId. Poll
-    // until the settled card lands (state update is async through React).
+    // running entry is immediately upserted to success by correlationId. The
+    // upsert flushes asynchronously through React, so flush it with act first,
+    // then poll (reading the already-settled store) outside act.
+    chat.submit("Suggest a chord progression for bars 1-4");
+    await act(async () => {});
+
     let settled: {
       toolName: string;
       status: string;
@@ -130,11 +132,12 @@ describe("AgentChat (Stage 1 wiring + v1.14 Stage 2 single-card)", () => {
   it("T02: 同一 correlationId 复用,无 running 残留(时间线彻底单卡) (critical)", async () => {
     const chat = renderChat();
 
-    chat.submit("Mix the drums louder");
-
     let settled:
       | { toolName: string; status: string; correlationId?: string }
       | undefined;
+    chat.submit("Mix the drums louder");
+    await act(async () => {});
+
     const deadline = Date.now() + 2000;
     while (!settled && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 10));
