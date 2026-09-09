@@ -130,23 +130,9 @@ describe("TeachingAgent", () => {
       expect(explanation.concepts).toContain("欺骗终止");
     });
 
-    // v1.20: 该输入（A minor i-iv-V-i）现在命中新增大调/小调模板，
-    // 不再是 generic 兜底——断言命中 i-iv-V-i（title 保留原始串）。
-    // 注：此用例输入与下方 T01 完全相同，原为 v1.19 "无模板命中" 断言，
-    // 自 v1.20 扩充小调模板后行为已变更为命中，故同步更新断言。
-    it("hits i-iv-V-i minor template from pitch-name input (was generic-fallback pre-v1.20)", () => {
-      const explanation = agent.explainHarmony(
-        ["A-C-E", "D-F-A", "E-G#-B", "A-C-E"],
-        "A minor",
-        "intermediate"
-      );
-
-      expect(explanation.title).toContain("A-C-E");
-      expect(explanation.concepts).not.toEqual(["和声", "和弦进行", "调性"]);
-      expect(explanation.concepts).toContain("和声小调");
-    });
-
     // T01 (critical): A minor i-iv-V-i 命中新小调模板（非 generic 兜底）
+    // 历史断言前提变更记录：v1.19 时此输入（A minor i-iv-V-i 音名串）
+    // 曾断言 generic 兜底；v1.20 扩充小调模板后命中 i-iv-V-i。
     it("hits i-iv-V-i minor template from pitch-name input (T01)", () => {
       const explanation = agent.explainHarmony(
         ["A-C-E", "D-F-A", "E-G#-B", "A-C-E"],
