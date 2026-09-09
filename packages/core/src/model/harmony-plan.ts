@@ -1,3 +1,5 @@
+import { type NoteEvent, midiToSpelling } from "./note-event";
+
 export interface ChordSymbol {
   root: string;
   quality: string;
@@ -164,30 +166,24 @@ const SEVENTH_QUALITIES: IntervalQuality[] = [
 ];
 
 /**
- * 将一组音名（音级集合）在给定调性下转换为罗马数字。
+ * 单一事实源：从一组音名（音级集合）检测根音与质量。
  *
- * - 音名 token 必须匹配 ^[A-G][#b]?$，任何非法 token → undefined（绝不抛错）。
+ * - 必须传入数组；空数组 / 非数组 → undefined。
+ * - 每个 token 必须匹配 ^[A-G][#b]?$；"B#" / "Cb" 等能通过正则但不在音名表内
+ *   会抛错，捕获后返回 undefined（绝不向上抛）。
  * - 去重后独立音级 <3 → undefined（无法判定三音）。
- * - 遍历每个独立音级作为候选根音，用音程集合匹配质量；
- *   根音相对 tonic 的半音差必须落在调式自然音级集合内，否则 undefined。
- * - 大小写来自实际音程（大三度→大写），不是音阶默认推断；dim 追加 "°"。
+ * - 遍历每个独立音级作为候选根音，用音程集合匹配三/七和弦质量表；
+ *   首个匹配即返回其原始 token（保序、最早出现者）作为 root，并携带 rootPc。
+ *
+ * 返回 undefined 表示无法识别（非三度叠置 / 音级不足 / 坏 token）。
  */
-export function pitchSetToRomanNumeral(
+function matchChord(
   pitches: string[],
-  tonic: string,
-  mode: string
-): string | undefined {
+): { root: string; rootPc: number; quality: IntervalQuality["quality"] } | undefined {
   if (!Array.isArray(pitches) || pitches.length === 0) return undefined;
 
   for (const p of pitches) {
     if (typeof p !== "string" || !PITCH_TOKEN_RE.test(p)) return undefined;
-  }
-
-  let tonicSemi: number;
-  try {
-    tonicSemi = noteToSemitone(tonic);
-  } catch {
-    return undefined;
   }
 
   let pcs: number[];
@@ -199,10 +195,13 @@ export function pitchSetToRomanNumeral(
   }
   if (pcs.length < 3) return undefined;
 
-  const scale = mode === "minor" ? NATURAL_MINOR_DEGREES : MAJOR_SCALE_DEGREES;
   const qualities = pcs.length === 3 ? TRIAD_QUALITIES : SEVENTH_QUALITIES;
 
-  for (const rootPc of pcs) {
+  for (const semi of pcs) {
+    const rootToken = pitches.find((p) => noteToSemitone(p) === semi);
+    if (!rootToken) continue;
+    const rootPc = semi;
+
     const intervals = pcs
       .filter((pc) => pc !== rootPc)
       .map((pc) => (((pc - rootPc) % 12) + 12) % 12)
@@ -211,32 +210,158 @@ export function pitchSetToRomanNumeral(
     const match = qualities.find((q) => q.intervals.every((v) => intervals.includes(v)));
     if (!match) continue;
 
-    const diff = (((rootPc - tonicSemi) % 12) + 12) % 12;
-    const degreeIdx = scale.indexOf(diff);
-    if (degreeIdx < 0) continue;
-
-    let casing: "upper" | "lower" = "upper";
-    let isDim = false;
-    let isAug = false;
-    if (match.seventh) {
-      // 七和弦：按三音性质定大小写（大三度→大写，小三度→小写）
-      casing = match.quality === "maj7" || match.quality === "dom7" ? "upper" : "lower";
-    } else {
-      if (match.quality === "maj" || match.quality === "aug") casing = "upper";
-      else casing = "lower";
-      if (match.quality === "dim") isDim = true;
-      if (match.quality === "aug") isAug = true;
-    }
-
-    let roman = scaleDegreeName(degreeIdx);
-    if (casing === "lower") roman = roman.toLowerCase();
-    if (isDim) roman += "°";
-    if (isAug) roman += "+";
-
-    return roman;
+    return { root: rootToken, rootPc, quality: match.quality };
   }
 
   return undefined;
+}
+
+/**
+ * 将一组不带八度的音名（如 ["E","G#","B"]）识别为和弦符号 { root, quality }。
+ *
+ * quality 使用文件内 QUALITY_ALIASES 的 canonical value（"maj"/"min"/"dim"/
+ * "aug"/"maj7"/"dom7"/"min7"/"halfdim7"/"dim7"）。无法识别（非三度叠置 / <3 pcs /
+ * 坏 token / 空数组）→ undefined，绝不 throw。
+ */
+export function pitchSetToChordSymbol(pitches: string[]): ChordSymbol | undefined {
+  const match = matchChord(pitches);
+  if (!match) return undefined;
+  return { root: match.root, quality: match.quality };
+}
+
+/**
+ * 将一组音名（音级集合）在给定调性下转换为罗马数字。
+ *
+ * - 音名 token 必须匹配 ^[A-G][#b]?$，任何非法 token → undefined（绝不抛错）。
+ * - 去重后独立音级 <3 → undefined（无法判定三音）。
+ * - 遍历每个独立音级作为候选根音，用音程集合匹配质量；
+ *   根音相对 tonic 的半音差必须落在调式自然音级集合内，否则 undefined。
+ * - 大小写来自实际音程（大三度→大写），不是音阶默认推断；dim 追加 "°"。
+ *
+ * 根音/质量检测复用单一事实源 matchChord()，保持既有的行为。
+ */
+export function pitchSetToRomanNumeral(
+  pitches: string[],
+  tonic: string,
+  mode: string
+): string | undefined {
+  const chord = matchChord(pitches);
+  if (!chord) return undefined;
+
+  let tonicSemi: number;
+  try {
+    tonicSemi = noteToSemitone(tonic);
+  } catch {
+    return undefined;
+  }
+
+  const scale = mode === "minor" ? NATURAL_MINOR_DEGREES : MAJOR_SCALE_DEGREES;
+  const diff = (((chord.rootPc - tonicSemi) % 12) + 12) % 12;
+  const degreeIdx = scale.indexOf(diff);
+  if (degreeIdx < 0) return undefined;
+
+  let casing: "upper" | "lower" = "upper";
+  let isDim = false;
+  let isAug = false;
+  if (chord.quality === "maj7" || chord.quality === "dom7") {
+    casing = "upper";
+  } else if (
+    chord.quality === "min7" ||
+    chord.quality === "halfdim7" ||
+    chord.quality === "dim7"
+  ) {
+    casing = "lower";
+  } else {
+    if (chord.quality === "maj" || chord.quality === "aug") casing = "upper";
+    else casing = "lower";
+    if (chord.quality === "dim") isDim = true;
+    if (chord.quality === "aug") isAug = true;
+  }
+
+  let roman = scaleDegreeName(degreeIdx);
+  if (casing === "lower") roman = roman.toLowerCase();
+  if (isDim) roman += "°";
+  if (isAug) roman += "+";
+
+  return roman;
+}
+
+/**
+ * 从和弦轨音符派生 HarmonyEntry[]。
+ *
+ * 已知限界（v1.22.0）：
+ * - 仅按 bar 分组，bar 内多于一个和弦的变化会被合并为单一 entry；
+ * - 无法识别为三/七和弦的 bar 整体丢失（不产生 entry）；
+ * - 不处理重叠/跨小节的连音与装饰音。
+ *
+ * 规则：
+ * 1. 空数组 / 全无效输入 → []。
+ * 2. 按 bar 分组（对齐 v1.19 App.tsx:544 chordProgression 先例）。
+ * 3. 每组 pitch names = 组内音符 pitchSpelling 去八度数字（`replace(/\d+$/, "")`）
+ *    去重保序；pitchSpelling 非法/空时回退由 pitchMidi 推名（midiToSpelling）。
+ * 4. entry.beat = 组内最小 beat；durationQn = 组内时间跨度
+ *    max(beat+durQn) − min(beat)（同时态三音组求和会翻倍，跨度才正确）。
+ * 5. chord = pitchSetToChordSymbol(names)；undefined → 跳过该 bar。
+ * 6. 有 key 时：romanNumeral = pitchSetToRomanNumeral(names, tonic, mode)，
+ *    undefined 则省略字段；无 key 省略。
+ * 7. 按 bar 升序输出。
+ */
+export function notesToHarmonyEntries(
+  chordNotes: NoteEvent[],
+  key?: { tonic: string; mode: string },
+): HarmonyEntry[] {
+  if (!Array.isArray(chordNotes) || chordNotes.length === 0) return [];
+
+  const byBar = new Map<number, NoteEvent[]>();
+  for (const note of chordNotes) {
+    if (!note || typeof note.bar !== "number") continue;
+    const group = byBar.get(note.bar) ?? [];
+    group.push(note);
+    byBar.set(note.bar, group);
+  }
+  if (byBar.size === 0) return [];
+
+  const entries: HarmonyEntry[] = [];
+
+  for (const [bar, group] of byBar) {
+    const names: string[] = [];
+    for (const n of group) {
+      let name = n.pitchSpelling ? n.pitchSpelling.replace(/\d+$/, "") : "";
+      if (!name || !PITCH_TOKEN_RE.test(name)) {
+        name = midiToSpelling(n.pitchMidi).replace(/\d+$/, "");
+      }
+      if (!names.includes(name)) names.push(name);
+    }
+
+    const chord = pitchSetToChordSymbol(names);
+    if (!chord) continue;
+
+    const beats = group.map((n) => n.beat);
+    const minBeat = Math.min(...beats);
+    const maxEnd = Math.max(...group.map((n) => n.beat + (n.durQn ?? 0)));
+    const durationQn = maxEnd - minBeat;
+
+    const entry: HarmonyEntry = {
+      bar,
+      beat: minBeat,
+      chord,
+      durationQn,
+    };
+
+    if (key) {
+      const rn = pitchSetToRomanNumeral(names, key.tonic, key.mode);
+      if (rn) entry.romanNumeral = rn;
+    }
+
+    entries.push(entry);
+  }
+
+  entries.sort((a, b) => {
+    if (a.bar !== b.bar) return a.bar - b.bar;
+    return a.beat - b.beat;
+  });
+
+  return entries;
 }
 
 export class HarmonyPlan {

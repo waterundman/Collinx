@@ -33,6 +33,7 @@ import {
   createToolCallRecord,
   mixerToDiff,
   type NewToolCallRecord,
+  type HarmonyEntry,
 } from "@collinx/core";
 import {
   collectAgentMusicData,
@@ -717,12 +718,17 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       // the proposal diffs produced by the Orchestrator (DiffEnvelope[],
       // carried on the ToolResult under `diffs`) are enqueued into
       // pendingDiffs where the Agent Panel can review/apply them.
+      // v1.22.0 Stage 1: harmony (HarmonyEntry[] derived from the chords
+      // track) is forwarded to the tool (required param); phraseRef stays
+      // optional audit metadata.
       runOrchestrator: async (
         config: OrchestratorConfigInput,
+        harmony?: HarmonyEntry[],
       ): Promise<OrchestratorRunResult> => {
         const result = await toolRegistry.call(
           "orchestrator.voicingPlan",
           {
+            harmony: harmony ?? [],
             phraseRef: config.phraseRef ?? "verse1",
             players: config.players,
             style: config.style ?? "classical",

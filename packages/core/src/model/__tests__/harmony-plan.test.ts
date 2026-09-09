@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { HarmonyPlan, pitchSetToRomanNumeral } from "../harmony-plan";
+import {
+  HarmonyPlan,
+  pitchSetToRomanNumeral,
+  pitchSetToChordSymbol,
+  notesToHarmonyEntries,
+} from "../harmony-plan";
+import { midiToSpelling, type NoteEvent } from "../note-event";
 
 describe("HarmonyPlan", () => {
   describe("parseChordSymbol", () => {
@@ -440,5 +446,159 @@ describe("pitchSetToRomanNumeral", () => {
 
   it("returns undefined for empty input (T02)", () => {
     expect(pitchSetToRomanNumeral([], "C", "major")).toBeUndefined();
+  });
+});
+
+describe("pitchSetToChordSymbol", () => {
+  // S0-T01: 三和弦矩阵
+  it("identifies triad qualities (S0-T01)", () => {
+    expect(pitchSetToChordSymbol(["C", "E", "G"])).toEqual({ root: "C", quality: "maj" });
+    expect(pitchSetToChordSymbol(["E", "G", "B"])).toEqual({ root: "E", quality: "min" });
+    expect(pitchSetToChordSymbol(["C", "E", "G#"])).toEqual({ root: "C", quality: "aug" });
+    expect(pitchSetToChordSymbol(["B", "D", "F"])).toEqual({ root: "B", quality: "dim" });
+  });
+
+  // S0-T02: 七和弦矩阵
+  it("identifies seventh chord qualities (S0-T02)", () => {
+    expect(pitchSetToChordSymbol(["C", "E", "G", "B"])).toEqual({ root: "C", quality: "maj7" });
+    expect(pitchSetToChordSymbol(["C", "E", "G", "Bb"])).toEqual({ root: "C", quality: "dom7" });
+    expect(pitchSetToChordSymbol(["A", "C", "E", "G"])).toEqual({ root: "A", quality: "min7" });
+    expect(pitchSetToChordSymbol(["B", "D", "F", "A"])).toEqual({ root: "B", quality: "halfdim7" });
+    expect(pitchSetToChordSymbol(["B", "D", "F", "Ab"])).toEqual({ root: "B", quality: "dim7" });
+  });
+
+  // S0-T03: 无法识别 → undefined，绝不 throw
+  it("returns undefined for unrecognized pitch sets without throwing (S0-T03)", () => {
+    expect(() => pitchSetToChordSymbol(["C", "D", "G"])).not.toThrow();
+    expect(pitchSetToChordSymbol(["C", "D", "G"])).toBeUndefined(); // 非三度叠置
+    expect(pitchSetToChordSymbol(["C", "E"])).toBeUndefined(); // 2 pcs
+    expect(pitchSetToChordSymbol(["C"])).toBeUndefined(); // 1 pc
+    expect(pitchSetToChordSymbol([])).toBeUndefined(); // 空数组
+    expect(pitchSetToChordSymbol(["X", "Y", "Z"])).toBeUndefined(); // 坏 token
+  });
+});
+
+describe("notesToHarmonyEntries", () => {
+  const key = { tonic: "C", mode: "major" };
+
+  function chordNote(
+    bar: number,
+    beat: number,
+    pitchMidi: number,
+    durQn = 1,
+    pitchSpelling?: string,
+  ): NoteEvent {
+    return {
+      id: `n-${bar}-${beat}-${pitchMidi}`,
+      trackId: "chords",
+      phraseId: null,
+      bar,
+      beat,
+      durQn,
+      pitchMidi,
+      pitchSpelling: pitchSpelling ?? midiToSpelling(pitchMidi),
+      velocity: 0.8,
+      voice: "rh",
+      tags: [],
+    };
+  }
+
+  // S0-T05: 分组 / 最小 beat / 跨度 durationQn / 去重 / 空输入
+  it("groups by bar with min beat and span durationQn (S0-T05)", () => {
+    const notes = [
+      chordNote(1, 1, 60, 4), // C4
+      chordNote(1, 1, 64, 4), // E4
+      chordNote(1, 1, 67, 4), // G4
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].bar).toBe(1);
+    expect(entries[0].beat).toBe(1);
+    expect(entries[0].durationQn).toBe(4);
+    expect(entries[0].chord).toEqual({ root: "C", quality: "maj" });
+  });
+
+  it("uses time span for arpeggiated bars (S0-T05)", () => {
+    // bar3 琶音：A3/C4/E4 各 1 拍 → durationQn = 跨度 3（求和会得 3 但同时态会翻倍，跨度才正确）
+    const notes = [
+      chordNote(3, 1, 57, 1), // A3
+      chordNote(3, 2, 60, 1), // C4
+      chordNote(3, 3, 64, 1), // E4
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].beat).toBe(1);
+    expect(entries[0].durationQn).toBe(3);
+    expect(entries[0].chord).toEqual({ root: "A", quality: "min" });
+  });
+
+  it("dedupes pitch names preserving order and falls back to midi (S0-T05)", () => {
+    const notes = [
+      chordNote(2, 1, 67, 4, "G4"),
+      chordNote(2, 1, 71, 4, "B4"),
+      chordNote(2, 1, 74, 4, "D5"),
+      chordNote(2, 1, 77, 4, "F5"),
+      chordNote(2, 1, 67, 4, "G4"), // 重复，去重
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].chord).toEqual({ root: "G", quality: "dom7" });
+  });
+
+  it("returns [] for empty or all-invalid input (S0-T05)", () => {
+    expect(notesToHarmonyEntries([])).toEqual([]);
+    expect(notesToHarmonyEntries([null as unknown as NoteEvent])).toEqual([]);
+    expect(notesToHarmonyEntries([{ bar: "x" } as unknown as NoteEvent])).toEqual([]);
+  });
+
+  // S0-T06: 有 key 填 RN / 无 key 省略 / 无法识别 bar 跳过
+  it("fills romanNumeral when key given (S0-T06)", () => {
+    const notes = [
+      chordNote(1, 1, 60, 4), // C4
+      chordNote(1, 1, 64, 4),
+      chordNote(1, 1, 67, 4),
+    ];
+    const entries = notesToHarmonyEntries(notes, key);
+    expect(entries[0].romanNumeral).toBe("I");
+  });
+
+  it("fills romanNumeral as string for dom7 bar (S0-T06)", () => {
+    const notes = [
+      chordNote(2, 1, 67, 4), // G4
+      chordNote(2, 1, 71, 4), // B4
+      chordNote(2, 1, 74, 4), // D5
+      chordNote(2, 1, 77, 4), // F5
+    ];
+    const entries = notesToHarmonyEntries(notes, key);
+    expect(typeof entries[0].romanNumeral).toBe("string");
+  });
+
+  it("omits romanNumeral when no key (S0-T06)", () => {
+    const notes = [
+      chordNote(1, 1, 60, 4),
+      chordNote(1, 1, 64, 4),
+      chordNote(1, 1, 67, 4),
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect("romanNumeral" in entries[0]).toBe(false);
+  });
+
+  it("skips unrecognized bars and sorts by bar ascending (S0-T06)", () => {
+    const notes = [
+      chordNote(1, 1, 60, 4), // C maj
+      chordNote(1, 1, 64, 4),
+      chordNote(1, 1, 67, 4),
+      chordNote(4, 1, 60, 4), // C4/D4/G4 → 非三度叠置，bar4 被跳过
+      chordNote(4, 1, 62, 4),
+      chordNote(4, 1, 67, 4),
+      chordNote(3, 1, 57, 1), // A min（琶音）
+      chordNote(3, 2, 60, 1),
+      chordNote(3, 3, 64, 1),
+    ];
+    const entries = notesToHarmonyEntries(notes, key);
+    expect(entries).toHaveLength(2);
+    expect(entries.map((e) => e.bar)).toEqual([1, 3]);
+    expect(entries[1].romanNumeral).toBe("vi");
   });
 });

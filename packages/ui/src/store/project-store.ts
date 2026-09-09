@@ -21,6 +21,7 @@ import {
   serializeGraph,
   deserializeGraph,
   type Layout,
+  type HarmonyEntry,
 } from "@collinx/core";
 import { createDemoMixer, createTasteStore } from "../data/demoData";
 import { createBrowserTasteFsAdapter } from "../services/tasteFsAdapter";
@@ -561,7 +562,10 @@ export interface ProjectStoreActions {
    * Agent-panel review. Resolves to an OrchestratorRunResult, never throws
    * (ToolRegistry.call surfaces handler failures as status: "error").
    */
-  runOrchestrator: (config: OrchestratorConfigInput) => Promise<OrchestratorRunResult>;
+  runOrchestrator: (
+    config: OrchestratorConfigInput,
+    harmony?: HarmonyEntry[],
+  ) => Promise<OrchestratorRunResult>;
   /**
    * Stage 1: run the real Arranger agent through the ToolRegistry
    * (arranger.expandSection). Real variants are returned for the panel;

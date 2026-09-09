@@ -48,7 +48,6 @@ export class Orchestrator {
   }
 
   orchestrate(
-    notes: NoteEvent[],
     harmony: HarmonyEntry[],
     config: OrchestratorConfig,
   ): OrchestratorResult {
@@ -96,40 +95,6 @@ export class Orchestrator {
       diffs,
       confidence,
     };
-  }
-
-  voicingPlan(
-    phraseRef: string,
-    _players: string[],
-    config: OrchestratorConfig,
-  ): OrchestratorResult {
-    const harmony: HarmonyEntry[] = [
-      { bar: 1, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
-      { bar: 2, beat: 1, chord: { root: "F", quality: "maj" }, durationQn: 2 },
-      { bar: 2, beat: 3, chord: { root: "G", quality: "dom7" }, durationQn: 2 },
-      { bar: 3, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
-      { bar: 4, beat: 1, chord: { root: "A", quality: "min" }, durationQn: 2 },
-      { bar: 4, beat: 3, chord: { root: "F", quality: "maj" }, durationQn: 2 },
-    ];
-
-    const notes: NoteEvent[] = [];
-    for (const entry of harmony) {
-      notes.push({
-        id: randomUUID(),
-        trackId: phraseRef,
-        phraseId: null,
-        bar: entry.bar,
-        beat: entry.beat,
-        durQn: entry.durationQn,
-        pitchMidi: 60,
-        pitchSpelling: "C4",
-        velocity: 0.8,
-        voice: "rh",
-        tags: [],
-      });
-    }
-
-    return this.orchestrate(notes, harmony, config);
   }
 
   checkPlayability(

@@ -1383,6 +1383,9 @@
     "instruments": "instruments",
     "conflictDetection": "Conflict Detection",
     "voicePreview": "Voice Preview",
+    "harmonySection": "Current Harmony",
+    "harmonyEmpty": "No harmony on the chord track yet",
+    "harmonyEmptyHint": "Add notes to the chord track in Compose to generate one, then orchestrate.",
     "presets": {
       "stringQuartet": "String Quartet",
       "brassQuintet": "Brass Quintet",

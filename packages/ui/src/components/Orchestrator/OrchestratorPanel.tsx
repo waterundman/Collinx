@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from "react";
 import {
   type Instrument,
   type HarmonyEntry,
+  HarmonyPlan,
   INSTRUMENTS,
   getInstrumentsByFamily,
   type InstrumentFamily,
@@ -38,6 +39,10 @@ export interface OrchestratorPanelProps {
   harmony?: HarmonyEntry[];
   onOrchestrate?: (config: OrchestratorConfig) => void;
   conflicts?: RegisterConflict[];
+  /** v1.22.0 Stage 1: per-player note counts from the last real
+   *  orchestrator.voicingPlan run (result.perPlayerNotes). Replaces the old
+   *  randomized placeholder; 0 until the first run. */
+  runCounts?: Record<string, number>;
 }
 
 const ENSEMBLE_PRESETS: Record<string, string[]> = {
@@ -54,6 +59,7 @@ export const OrchestratorPanel: React.FC<OrchestratorPanelProps> = ({
   harmony,
   onOrchestrate,
   conflicts,
+  runCounts,
 }) => {
   const { t } = useI18n();
   const [selectedPlayers, setSelectedPlayers] = useState<Set<string>>(new Set());
@@ -136,16 +142,43 @@ export const OrchestratorPanel: React.FC<OrchestratorPanelProps> = ({
   const playerNoteCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const id of selectedPlayers) {
-      counts.set(id, Math.floor(Math.random() * 30) + 5);
+      counts.set(id, runCounts?.[id] ?? 0);
     }
     return counts;
-  }, [selectedPlayers]);
+  }, [selectedPlayers, runCounts]);
+
+  // v1.22.0 Stage 1: no harmony entries (no notes on the chords track) → the
+  // orchestrate button is disabled and the harmony strip shows an empty state.
+  const harmonyEmpty = !harmony || harmony.length === 0;
 
   return (
     <div className={styles.orchestratorPanel} data-testid="orchestrator-panel">
       <div className={styles.panelHeader}>
         <span className={styles.panelTitle}>{t('orchestrator.title')}</span>
         <span className={styles.panelSubtitle}>{t('orchestrator.subtitle')}</span>
+      </div>
+
+      {/* v1.22.0 Stage 1: real harmony progression (HarmonyEntry[] derived
+          from the chords track by core's notesToHarmonyEntries). Rendered as
+          m{bar} + formatted chord symbol, with the roman numeral appended
+          when the core derivation resolved one. */}
+      <div className={styles.section} data-testid="orchestrator-harmony-strip">
+        <label className={styles.label}>{t('orchestrator.harmonySection')}</label>
+        {harmonyEmpty ? (
+          <div className={styles.harmonyEmpty} data-testid="orchestrator-harmony-empty">
+            <div className={styles.harmonyEmptyText}>{t('orchestrator.harmonyEmpty')}</div>
+            <div className={styles.harmonyEmptyHint}>{t('orchestrator.harmonyEmptyHint')}</div>
+          </div>
+        ) : (
+          <div className={styles.harmonyStrip}>
+            {harmony!.map((entry, idx) => (
+              <span key={`${entry.bar}-${entry.beat}-${idx}`} className={styles.harmonyItem} data-testid="orchestrator-harmony-item">
+                m{entry.bar} {HarmonyPlan.formatChordSymbol(entry.chord)}
+                {entry.romanNumeral ? ` (${entry.romanNumeral})` : ""}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className={styles.section}>
@@ -282,6 +315,7 @@ export const OrchestratorPanel: React.FC<OrchestratorPanelProps> = ({
           <button
             className={styles.orchestrateBtn}
             data-testid="orchestrator-run"
+            disabled={harmonyEmpty}
             onClick={handleOrchestrate}
           >
             {t('orchestrator.orchestrate')} ({selectedPlayers.size} {t('orchestrator.instruments')})

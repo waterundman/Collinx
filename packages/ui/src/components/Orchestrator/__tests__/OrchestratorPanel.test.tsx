@@ -3,6 +3,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { OrchestratorPanel, type OrchestratorConfig } from "../OrchestratorPanel";
 import type { RegisterConflict } from "../OrchestratorPanel";
+import type { HarmonyEntry } from "@collinx/core";
 import { I18nProvider } from "../../../providers/I18nProvider";
 
 interface PanelHarness {
@@ -13,6 +14,8 @@ interface PanelHarness {
 function renderPanel(props: {
   conflicts?: RegisterConflict[];
   onOrchestrate?: (config: OrchestratorConfig) => void;
+  harmony?: HarmonyEntry[];
+  runCounts?: Record<string, number>;
 }): PanelHarness {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -23,9 +26,10 @@ function renderPanel(props: {
     root.render(
       <I18nProvider>
         <OrchestratorPanel
-          harmony={[]}
+          harmony={props.harmony ?? []}
           conflicts={props.conflicts}
           onOrchestrate={props.onOrchestrate}
+          runCounts={props.runCounts}
         />
       </I18nProvider>
     );
@@ -40,6 +44,27 @@ function renderPanel(props: {
       });
     },
   };
+}
+
+/** Deterministic harmony literal (C major: I - V7), matching what App's
+ *  notesToHarmonyEntries derivation produces for C4/E4/G4 + G4/B4/D5/F5. */
+function makeHarmony(): HarmonyEntry[] {
+  return [
+    {
+      bar: 1,
+      beat: 1,
+      chord: { root: "C", quality: "maj" },
+      durationQn: 4,
+      romanNumeral: "I",
+    },
+    {
+      bar: 2,
+      beat: 1,
+      chord: { root: "G", quality: "dom7" },
+      durationQn: 4,
+      romanNumeral: "V",
+    },
+  ];
 }
 
 afterEach(() => {
@@ -125,7 +150,11 @@ describe("OrchestratorPanel (Stage 0: real conflicts edge cases)", () => {
 
   it("选中预设后 runOrchestrate 触发 onOrchestrate 回调(真实 action 路径)", () => {
     const onOrchestrate = vi.fn();
-    const { container, cleanup } = renderPanel({ onOrchestrate });
+    // Harmony present so the orchestrate button is enabled (v1.22.0).
+    const { container, cleanup } = renderPanel({
+      onOrchestrate,
+      harmony: makeHarmony(),
+    });
 
     // Apply the string quartet preset so players are selected.
     const presetBtn = container.querySelector(
@@ -154,6 +183,132 @@ describe("OrchestratorPanel (Stage 0: real conflicts edge cases)", () => {
     expect(config.style).toBe("classical");
     expect(config.playabilityPolicy).toBe("moderate");
     expect(typeof config.doubleOctaves).toBe("boolean");
+
+    cleanup();
+  });
+});
+
+// ── v1.22.0 Stage 1: real harmony strip + empty state + real run counts ──
+describe("OrchestratorPanel (v1.22.0 Stage 1: harmony wiring)", () => {
+  it("T02: 真实 HarmonyEntry[] 渲染和声带(m{bar} + 和弦符号 + RN 附注)", () => {
+    const { container, cleanup } = renderPanel({ harmony: makeHarmony() });
+
+    const strip = container.querySelector(
+      '[data-testid="orchestrator-harmony-strip"]'
+    );
+    expect(strip).not.toBeNull();
+    const items = container.querySelectorAll(
+      '[data-testid="orchestrator-harmony-item"]'
+    );
+    expect(items.length).toBe(2);
+    // formatChordSymbol: {root:"C",quality:"maj"} → "C"; dom7 → "7".
+    expect(items[0].textContent).toBe("m1 C (I)");
+    expect(items[1].textContent).toBe("m2 G7 (V)");
+    // Empty state must NOT render when real entries exist.
+    expect(
+      container.querySelector('[data-testid="orchestrator-harmony-empty"]')
+    ).toBeNull();
+
+    cleanup();
+  });
+
+  it("T03: 空 harmony → 空态 + orchestrate 按钮 disabled", () => {
+    const onOrchestrate = vi.fn();
+    const { container, cleanup } = renderPanel({
+      harmony: [],
+      onOrchestrate,
+    });
+
+    expect(
+      container.querySelector('[data-testid="orchestrator-harmony-empty"]')
+    ).not.toBeNull();
+    // No harmony items in the empty state.
+    expect(
+      container.querySelectorAll('[data-testid="orchestrator-harmony-item"]').length
+    ).toBe(0);
+
+    // Select players so the run button exists, then it must be disabled.
+    const presetBtn = container.querySelector(
+      '[data-testid="orchestrator-preset-string_quartet"]'
+    );
+    act(() => {
+      presetBtn!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+    });
+    const runBtn = container.querySelector(
+      '[data-testid="orchestrator-run"]'
+    ) as HTMLButtonElement | null;
+    expect(runBtn).not.toBeNull();
+    expect(runBtn!.disabled).toBe(true);
+
+    cleanup();
+  });
+
+  it("T03b: 有 harmony 时 orchestrate 按钮可用(disabled 解除)", () => {
+    const { container, cleanup } = renderPanel({ harmony: makeHarmony() });
+
+    const presetBtn = container.querySelector(
+      '[data-testid="orchestrator-preset-string_quartet"]'
+    );
+    act(() => {
+      presetBtn!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+    });
+    const runBtn = container.querySelector(
+      '[data-testid="orchestrator-run"]'
+    ) as HTMLButtonElement | null;
+    expect(runBtn).not.toBeNull();
+    expect(runBtn!.disabled).toBe(false);
+
+    cleanup();
+  });
+
+  it("T05: voice preview 显示 runCounts 真实计数(非随机占位)", () => {
+    const { container, cleanup } = renderPanel({
+      harmony: makeHarmony(),
+      runCounts: { violin: 8, viola: 5, cello: 3 },
+    });
+
+    const presetBtn = container.querySelector(
+      '[data-testid="orchestrator-preset-string_quartet"]'
+    );
+    act(() => {
+      presetBtn!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+    });
+
+    const counts = Array.from(
+      container.querySelectorAll('[class*="voiceCount"]')
+    ).map((el) => el.textContent ?? "");
+    expect(counts.length).toBe(3);
+    // Deterministic real counts from the last run — no random values.
+    expect(counts).toContain("8 Notes");
+    expect(counts).toContain("5 Notes");
+    expect(counts).toContain("3 Notes");
+
+    // Not run yet for a newly selected player → 0 notes placeholder.
+    cleanup();
+  });
+
+  it("T05b: 未运行时 voice preview 显示 0 notes 占位", () => {
+    const { container, cleanup } = renderPanel({ harmony: makeHarmony() });
+
+    const presetBtn = container.querySelector(
+      '[data-testid="orchestrator-preset-string_quartet"]'
+    );
+    act(() => {
+      presetBtn!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+    });
+
+    const counts = Array.from(
+      container.querySelectorAll('[class*="voiceCount"]')
+    ).map((el) => el.textContent ?? "");
+    expect(counts).toEqual(["0 Notes", "0 Notes", "0 Notes"]);
 
     cleanup();
   });

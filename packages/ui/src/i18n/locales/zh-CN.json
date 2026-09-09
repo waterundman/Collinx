@@ -1383,6 +1383,9 @@
     "instruments": "件乐器",
     "conflictDetection": "冲突检测",
     "voicePreview": "声部预览",
+    "harmonySection": "当前和声进行",
+    "harmonyEmpty": "chords 轨暂无和声",
+    "harmonyEmptyHint": "在 Compose 页为 chords 轨添加音符后自动生成，可运行配器。",
     "presets": {
       "stringQuartet": "弦乐四重奏",
       "brassQuintet": "铜管五重奏",

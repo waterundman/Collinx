@@ -293,6 +293,50 @@
   opacity: 0.75;
 }
 
+.orchestrateBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.orchestrateBtn:disabled:hover {
+  opacity: 0.45;
+}
+
+/* v1.22.0 Stage 1: harmony progression strip (real HarmonyEntry[] from the
+   chords track). Chip-per-entry layout reusing the panel's tokens. */
+.harmonyStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.harmonyItem {
+  font-size: 11px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-1);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.harmonyEmpty {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.harmonyEmptyText {
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.harmonyEmptyHint {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .conflictList {
   display: flex;
   flex-direction: column;

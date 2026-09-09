@@ -10,6 +10,7 @@ import {
   mixerToDiff,
   type NoteEvent,
   type DiffEnvelope,
+  type HarmonyEntry,
   type MixerState,
   type TasteEvidence,
 } from "@collinx/core";
@@ -2106,6 +2107,9 @@ describe("project-store orchestrator (Stage 0)", () => {
   // in App.tsx. This locks the closed loop: runOrchestrator must return real
   // conflicts produced by the agent's RegisterConflictDetector (which is the
   // same detection a fresh Orchestrator instance performs), never the sample.
+  // v1.22.0 Stage 1: the tool is harmony-driven — the run forwards the
+  // HarmonyEntry[] (App derives them from the chords track) and the returned
+  // conflicts must equal a fresh Orchestrator.orchestrate() on the same input.
   it("T01: runOrchestrator 调用真实 Orchestrator(conflicts 非 sampleConflicts)", async () => {
     const s = setup(makeNotes(), makeMixer());
     const config = {
@@ -2113,10 +2117,14 @@ describe("project-store orchestrator (Stage 0)", () => {
       style: "classical" as const,
       playabilityPolicy: "moderate" as const,
     };
+    const harmony: HarmonyEntry[] = [
+      { bar: 1, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+      { bar: 2, beat: 1, chord: { root: "G", quality: "dom7" }, durationQn: 4 },
+    ];
     let result: OrchestratorRunResult | undefined;
 
     await act(async () => {
-      result = await s.value.actions.runOrchestrator(config);
+      result = await s.value.actions.runOrchestrator(config, harmony);
     });
 
     expect(result).toBeDefined();
@@ -2139,14 +2147,19 @@ describe("project-store orchestrator (Stage 0)", () => {
     }
 
     // Strongest proof of a real call: the returned conflicts are exactly the
-    // deterministic output of a fresh Orchestrator instance for the same input.
+    // deterministic output of a fresh Orchestrator instance for the same
+    // harmony input (orchestrate() replaced the removed voicingPlan()).
     const orchestrator = new Orchestrator();
-    const direct = orchestrator.voicingPlan("verse1", config.players, {
+    const direct = orchestrator.orchestrate(harmony, {
       players: config.players,
       style: config.style,
       playabilityPolicy: config.playabilityPolicy,
     });
     expect(result!.conflicts).toEqual(direct.conflicts);
+
+    // v1.22.0 Stage 1: perPlayerNotes arrives as [pid, count] pairs from the
+    // real run (drives the panel's voice preview).
+    expect(Array.isArray(result!.perPlayerNotes)).toBe(true);
 
     s.cleanup();
   });
@@ -2158,11 +2171,18 @@ describe("project-store orchestrator (Stage 0)", () => {
     const s = setup(makeNotes(), makeMixer());
     expect(s.value.toolCalls).toEqual([]);
 
+    const harmony: HarmonyEntry[] = [
+      { bar: 1, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+      { bar: 2, beat: 1, chord: { root: "G", quality: "dom7" }, durationQn: 4 },
+    ];
     await act(async () => {
-      await s.value.actions.runOrchestrator({
-        players: ["violin", "cello"],
-        playabilityPolicy: "moderate",
-      });
+      await s.value.actions.runOrchestrator(
+        {
+          players: ["violin", "cello"],
+          playabilityPolicy: "moderate",
+        },
+        harmony,
+      );
     });
 
     const calls = s.value.toolCalls.filter(
@@ -2174,6 +2194,9 @@ describe("project-store orchestrator (Stage 0)", () => {
     expect(calls[0].params).toHaveProperty("players");
     expect(calls[0].params.players).toEqual(["violin", "cello"]);
     expect(calls[0].params).toHaveProperty("phraseRef");
+    // v1.22.0 Stage 1: the harmony entries ride along as a required param.
+    expect(calls[0].params).toHaveProperty("harmony");
+    expect(calls[0].params.harmony).toEqual(harmony);
     expect(calls[0].correlationId).toBeDefined();
     expect(calls[0].resultSummary.length).toBeGreaterThan(0);
 
@@ -2185,12 +2208,19 @@ describe("project-store orchestrator (Stage 0)", () => {
   it("T03: 真实提案 diffs 入 pendingDiffs(agent panel 可审批)", async () => {
     const s = setup(makeNotes(), makeMixer());
     const pendingBefore = s.value.pendingDiffs.length;
+    const harmony: HarmonyEntry[] = [
+      { bar: 1, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+      { bar: 2, beat: 1, chord: { root: "G", quality: "dom7" }, durationQn: 4 },
+    ];
 
     await act(async () => {
-      await s.value.actions.runOrchestrator({
-        players: ["violin", "cello"],
-        playabilityPolicy: "moderate",
-      });
+      await s.value.actions.runOrchestrator(
+        {
+          players: ["violin", "cello"],
+          playabilityPolicy: "moderate",
+        },
+        harmony,
+      );
     });
 
     const added = s.value.pendingDiffs.slice(pendingBefore);

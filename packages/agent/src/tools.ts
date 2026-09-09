@@ -1,4 +1,4 @@
-import type { ToolRegistry, AgentBus, NoteEvent, DiffOperation } from "@collinx/core";
+import type { ToolRegistry, AgentBus, NoteEvent, HarmonyEntry, DiffOperation } from "@collinx/core";
 import { randomUUID, TempoMap, createSection, FormRole } from "@collinx/core";
 import { Composer } from "./composer";
 import { Arranger } from "./arranger";
@@ -103,26 +103,35 @@ export function registerBuiltinTools(
     description: "生成配器/声部编排方案",
     permission: "proposal_only",
     parameters: [
-      { name: "phraseRef", type: "string", required: true, description: "乐句引用" },
+      { name: "harmony", type: "array", required: true, description: "和声条目 JSON（HarmonyEntry[]：bar/beat/chord{root,quality}/durationQn）" },
       { name: "players", type: "array", required: true, description: "目标乐器ID列表" },
+      { name: "phraseRef", type: "string", required: false, description: "乐句引用（元数据，仅用于审计/关联，不参与计算）" },
       { name: "style", type: "string", required: false, description: "风格: classical/pop/cinematic/jazz" },
       { name: "playabilityPolicy", type: "string", required: false, description: "可演奏性策略: strict/moderate/lenient" },
       { name: "doubleOctaves", type: "boolean", required: false, description: "允许八度重复" },
       { name: "maxVoices", type: "number", required: false, description: "最大声部数" },
     ],
     handler: async (params) => {
+      const harmony = params.harmony;
+      if (!Array.isArray(harmony)) {
+        return {
+          status: "error",
+          resultType: "data",
+          data: { message: "参数 harmony 必须为 HarmonyEntry[] 数组" },
+          confidence: 0,
+          requiresUserConfirmation: false,
+          auditRef: randomUUID(),
+        };
+      }
+
       const orchestrator = new Orchestrator();
-      const result = orchestrator.voicingPlan(
-        params.phraseRef as string,
-        params.players as string[],
-        {
-          players: params.players as string[],
-          style: (params.style as "classical" | "pop" | "cinematic" | "jazz") ?? "classical",
-          playabilityPolicy: (params.playabilityPolicy as "strict" | "moderate" | "lenient") ?? "moderate",
-          doubleOctaves: params.doubleOctaves as boolean | undefined,
-          maxVoices: params.maxVoices as number | undefined,
-        },
-      );
+      const result = orchestrator.orchestrate(harmony as HarmonyEntry[], {
+        players: params.players as string[],
+        style: (params.style as "classical" | "pop" | "cinematic" | "jazz") ?? "classical",
+        playabilityPolicy: (params.playabilityPolicy as "strict" | "moderate" | "lenient") ?? "moderate",
+        doubleOctaves: params.doubleOctaves as boolean | undefined,
+        maxVoices: params.maxVoices as number | undefined,
+      });
       return {
         status: "ok",
         resultType: "proposal",

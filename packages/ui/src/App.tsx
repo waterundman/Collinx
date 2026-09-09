@@ -12,6 +12,7 @@ import {
   MixerTrack,
   MusicXMLIO,
   midiToSpelling,
+  notesToHarmonyEntries,
 } from "@collinx/core";
 import { PianoRollView } from "./components/PianoRoll/PianoRollView";
 import { ScorePanel } from "./components/Score";
@@ -166,6 +167,10 @@ export function App() {
   const [diffReport, setDiffReport] = useState<TasteDiffReport | null>(null);
   const [arrangerDiff, setArrangerDiff] = useState<DiffEnvelope | null>(null);
   const [orchestratorConflicts, setOrchestratorConflicts] = useState<RegisterConflict[] | undefined>(undefined);
+  // v1.22.0 Stage 1: per-player note counts from the last real orchestrator
+  // run (result.perPlayerNotes, [pid, count] pairs) — replaces the panel's
+  // old Math.random placeholder. Empty until the first run.
+  const [orchestratorRunCounts, setOrchestratorRunCounts] = useState<Record<string, number>>({});
   const [scoreCollisions, setScoreCollisions] = useState<CollisionWarning[]>([]);
   // v1.14: transient status line for the Score panel (auto-layout results,
   // pending part-extraction / MusicXML export notices). Null hides it.
@@ -309,15 +314,6 @@ export function App() {
   const handleApplyArrangerDiff = useCallback((diff: DiffEnvelope) => {
     setArrangerDiff(diff);
   }, []);
-
-  // Stage 0: the Orchestrator panel runs the real Orchestrator agent through
-  // the shared ToolRegistry (orchestrator.voicingPlan). The returned conflicts
-  // come from the agent's RegisterConflictDetector, not from sample data; the
-  // proposal diffs are already enqueued into pendingDiffs by the action.
-  const handleOrchestrate = useCallback(async (config: OrchestratorConfig) => {
-    const result = await actions.runOrchestrator(config);
-    setOrchestratorConflicts(result.conflicts);
-  }, [actions]);
 
   // Stage 1: the Arranger panel runs the real Arranger agent through the
   // shared ToolRegistry (arranger.expandSection). Returned variants come from
@@ -568,6 +564,25 @@ export function App() {
     return first ? `${first.tonic} ${first.mode}` : "C major";
   }, [graph]);
 
+  // v1.22.0 Stage 1: harmony progression derivation for the Orchestrator
+  // panel. The chords track notes feed the real core notesToHarmonyEntries
+  // (grouping/span semantics live in core); App only filters the track and
+  // forwards the key. Entries are empty when the chords track has no notes —
+  // the panel shows an empty state and disables the orchestrate button.
+  const harmonyKeyToKeyParam = useMemo(() => {
+    const [tonic, mode] = harmonyKey.split(" ");
+    return { tonic: tonic || "C", mode: mode || "major" };
+  }, [harmonyKey]);
+
+  const harmonyEntries = useMemo(
+    () =>
+      notesToHarmonyEntries(
+        notes.filter((n) => n.trackId === "chords"),
+        harmonyKeyToKeyParam,
+      ),
+    [notes, harmonyKeyToKeyParam],
+  );
+
   const canExplainHarmony = chordProgression.length > 0;
 
   // v1.18.0 Stage 0: button-triggered harmony explanation. Routes through the
@@ -593,6 +608,26 @@ export function App() {
         setHarmonyError(t("app.teaching.harmonyRunFailed"));
       });
   }, [canExplainHarmony, chordProgression, harmonyKey, userLevel, t]);
+
+  // Stage 0: the Orchestrator panel runs the real Orchestrator agent through
+  // the shared ToolRegistry (orchestrator.voicingPlan). The returned conflicts
+  // come from the agent's RegisterConflictDetector, not from sample data; the
+  // proposal diffs are already enqueued into pendingDiffs by the action.
+  // v1.22.0 Stage 1: the harmony entries derived from the chords track feed
+  // the tool (required harmony param), and the returned perPlayerNotes
+  // ([pid, count] pairs) become the voice-preview run counts. Placed after
+  // the harmonyEntries derivation it depends on.
+  const handleOrchestrate = useCallback(async (config: OrchestratorConfig) => {
+    const result = await actions.runOrchestrator(config, harmonyEntries);
+    setOrchestratorConflicts(result.conflicts);
+    const counts: Record<string, number> = {};
+    if (Array.isArray(result.perPlayerNotes)) {
+      for (const [pid, count] of result.perPlayerNotes as [string, number][]) {
+        counts[pid] = count;
+      }
+    }
+    setOrchestratorRunCounts(counts);
+  }, [actions, harmonyEntries]);
 
   const headerStatus = useMemo(() => {
     switch (activeTab) {
@@ -787,9 +822,10 @@ export function App() {
           </div>
 
           <OrchestratorPanel
-            harmony={[]}
+            harmony={harmonyEntries}
             onOrchestrate={handleOrchestrate}
             conflicts={orchestratorConflicts}
+            runCounts={orchestratorRunCounts}
           />
         </div>
       )}

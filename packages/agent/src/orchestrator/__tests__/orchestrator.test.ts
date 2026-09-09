@@ -35,17 +35,13 @@ describe("Orchestrator", () => {
 
   describe("orchestrate()", () => {
     it("should produce orchestration for string trio", () => {
-      const notes = [
-        makeNote({ bar: 1, beat: 1, pitchMidi: 72, pitchSpelling: "C5" }),
-        makeNote({ bar: 1, beat: 2, pitchMidi: 74, pitchSpelling: "D5" }),
-      ];
       const harmony = makeHarmony();
       const config: OrchestratorConfig = {
         players: ["violin", "viola", "cello"],
         playabilityPolicy: "moderate",
         style: "classical",
       };
-      const result = orchestrator.orchestrate(notes, harmony, config);
+      const result = orchestrator.orchestrate(harmony, config);
 
       expect(result.voicingPlan).toBeDefined();
       expect(result.voicingPlan.chords.length).toBeGreaterThan(0);
@@ -57,13 +53,12 @@ describe("Orchestrator", () => {
     });
 
     it("should produce diffs with valid DiffEnvelope structure", () => {
-      const notes = [makeNote({ bar: 1, beat: 1 })];
       const harmony = makeHarmony();
       const config: OrchestratorConfig = {
         players: ["violin", "viola", "cello"],
         playabilityPolicy: "moderate",
       };
-      const result = orchestrator.orchestrate(notes, harmony, config);
+      const result = orchestrator.orchestrate(harmony, config);
 
       for (const diff of result.diffs) {
         expect(diff.diffId).toBeTruthy();
@@ -78,29 +73,63 @@ describe("Orchestrator", () => {
     });
 
     it("should work with larger ensembles", () => {
-      const notes = [makeNote({ bar: 1, beat: 1, pitchMidi: 72 })];
       const harmony = makeHarmony();
       const config: OrchestratorConfig = {
         players: ["violin", "viola", "cello", "double_bass"],
         playabilityPolicy: "moderate",
       };
-      const result = orchestrator.orchestrate(notes, harmony, config);
+      const result = orchestrator.orchestrate(harmony, config);
 
       expect(result.perPlayerNotes.size).toBe(4);
+    });
+
+    it("should return empty chords and conflicts for empty harmony (A0-2)", () => {
+      const config: OrchestratorConfig = {
+        players: ["violin", "cello"],
+        playabilityPolicy: "moderate",
+      };
+      const result = orchestrator.orchestrate([], config);
+
+      expect(result.voicingPlan.chords).toHaveLength(0);
+      expect(result.conflicts).toHaveLength(0);
+      expect(result.confidence).toBeGreaterThanOrEqual(0);
+      expect(result.confidence).toBeLessThanOrEqual(1);
     });
   });
 
   describe("voicingPlan()", () => {
-    it("should generate voicing plan with default harmony", () => {
+    it("should generate voicing plan driven by harmony arg", () => {
+      const harmony: HarmonyEntry[] = [
+        { bar: 1, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+        { bar: 2, beat: 1, chord: { root: "F", quality: "maj" }, durationQn: 2 },
+        { bar: 2, beat: 3, chord: { root: "G", quality: "dom7" }, durationQn: 2 },
+        { bar: 3, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+        { bar: 4, beat: 1, chord: { root: "A", quality: "min" }, durationQn: 2 },
+        { bar: 4, beat: 3, chord: { root: "F", quality: "maj" }, durationQn: 2 },
+      ];
       const config: OrchestratorConfig = {
         players: ["piano", "cello"],
         playabilityPolicy: "moderate",
       };
-      const result = orchestrator.voicingPlan("phrase1", ["piano", "cello"], config);
+      const result = orchestrator.orchestrate(harmony, config);
 
       expect(result.voicingPlan).toBeDefined();
+      expect(result.voicingPlan.chords.length).toBe(6);
       expect(result.perPlayerNotes.size).toBe(2);
       expect(result.diffs.length).toBeGreaterThan(0);
+      expect(result.confidence).toBeGreaterThanOrEqual(0);
+      expect(result.confidence).toBeLessThanOrEqual(1);
+    });
+
+    it("should yield empty plan for empty harmony", () => {
+      const config: OrchestratorConfig = {
+        players: ["piano", "cello"],
+        playabilityPolicy: "moderate",
+      };
+      const result = orchestrator.orchestrate([], config);
+
+      expect(result.voicingPlan.chords).toHaveLength(0);
+      expect(result.conflicts).toHaveLength(0);
     });
   });
 

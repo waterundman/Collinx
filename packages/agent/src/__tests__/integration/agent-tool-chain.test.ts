@@ -139,6 +139,14 @@ describe("Agent tool chain integration", () => {
       const result = await registry.call(
         "orchestrator.voicingPlan",
         {
+          harmony: [
+            { bar: 1, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+            { bar: 2, beat: 1, chord: { root: "F", quality: "maj" }, durationQn: 2 },
+            { bar: 2, beat: 3, chord: { root: "G", quality: "dom7" }, durationQn: 2 },
+            { bar: 3, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+            { bar: 4, beat: 1, chord: { root: "A", quality: "min" }, durationQn: 2 },
+            { bar: 4, beat: 3, chord: { root: "F", quality: "maj" }, durationQn: 2 },
+          ],
           phraseRef: "phrase-1",
           players: ["piano", "violin", "cello"],
           style: "classical",
@@ -351,6 +359,14 @@ describe("Agent tool chain integration", () => {
       const result = await registry.call(
         "orchestrator.voicingPlan",
         {
+          harmony: [
+            { bar: 1, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+            { bar: 2, beat: 1, chord: { root: "F", quality: "maj" }, durationQn: 2 },
+            { bar: 2, beat: 3, chord: { root: "G", quality: "dom7" }, durationQn: 2 },
+            { bar: 3, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
+            { bar: 4, beat: 1, chord: { root: "A", quality: "min" }, durationQn: 2 },
+            { bar: 4, beat: 3, chord: { root: "F", quality: "maj" }, durationQn: 2 },
+          ],
           phraseRef: "phrase-main",
           players: ["piano", "violin", "cello"],
           style: "classical",
@@ -396,10 +412,6 @@ describe("Agent tool chain integration", () => {
     it("should orchestrate with given config", () => {
       const orchestrator = new Orchestrator();
       const result = orchestrator.orchestrate(
-        [
-          createNoteEvent({ trackId: "melody", bar: 1, beat: 1, durQn: 4, pitchMidi: 60 }),
-          createNoteEvent({ trackId: "melody", bar: 2, beat: 1, durQn: 4, pitchMidi: 64 }),
-        ],
         [
           { bar: 1, beat: 1, chord: { root: "C", quality: "maj" }, durationQn: 4 },
           { bar: 2, beat: 1, chord: { root: "F", quality: "maj" }, durationQn: 4 },
