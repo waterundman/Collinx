@@ -382,7 +382,16 @@
     "mixingDesc": "Effect chain, routing, bus and other mixing settings",
     "notationDesc": "Score display, font, export format and other notation settings",
     "agentDesc": "Agent behavior, permissions, model and other settings",
-    "tasteDesc": "Taste learning, memory, preferences and other settings"
+    "tasteDesc": "Taste learning, memory, preferences and other settings",
+    "device": {
+      "empty": "No devices detected",
+      "unavailable": "Unavailable",
+      "default": "Default",
+      "connected": "Connected",
+      "notSelected": "Not selected",
+      "refreshing": "Refreshing...",
+      "refresh": "Refresh devices"
+    }
   },
   "settings.general": {
     "languageDesc": "Select interface display language",
@@ -1423,6 +1432,8 @@
     "energyCurve": "Energy Curve",
     "confirm": "Confirm Arrangement",
     "selectTemplate": "Please select a form template",
+    "emptyState": "Arranger agent not configured — no arrangement variants available",
+    "runFailed": "Arranger run failed, please retry",
     "role": "Role",
     "bars": "Bars",
     "energy": "Energy",

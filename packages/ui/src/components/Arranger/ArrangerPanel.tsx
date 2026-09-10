@@ -1,18 +1,16 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
-  FormTemplate,
   FormStructure,
   Section,
   EnergyCurve,
   EnergyPoint,
   NoteEvent,
-  TasteGenome,
   DiffEnvelope,
   createDiffEnvelope,
   createFormStructure,
   FORM_TEMPLATES,
-  applyTemplate,
 } from "@collinx/core";
+import type { TasteGenome } from "@collinx/core";
 import { useI18n } from "../../i18n";
 import type {
   ArrangerConfigInput,
@@ -123,57 +121,13 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-function generateVariants(
-  template: FormTemplate,
-  motifs: { id: string; name: string; notes: NoteEvent[] }[],
-  genome?: TasteGenome | null
-): ArrangerVariant[] {
-  const baseStructure = applyTemplate(template);
-  const variants: ArrangerVariant[] = [];
-
-  variants.push({
-    id: "v_base",
-    name: `${template.name} (基准)`,
-    structure: baseStructure,
-    score: 0.85,
-    divergence: 0,
-    energyCurve: EnergyCurve.fromSections(baseStructure.sections),
-  });
-
-  const sectionContrast = parseFloat(
-    genome?.getParameter("form.section_contrast")?.value ?? "0.5"
-  );
-
-  for (let vi = 1; vi <= 4; vi++) {
-    const variantStructure = applyTemplate(template);
-
-    for (const section of variantStructure.sections) {
-      const noise = (Math.random() - 0.5) * 0.3 * (vi / 2);
-      section.energyLevel = clamp(
-        section.energyLevel + noise + sectionContrast * 0.1 * (vi - 2),
-        0.05,
-        0.95
-      );
-    }
-
-    const divergence = 0.1 + (vi - 1) * 0.15 + Math.random() * 0.1;
-    const score =
-      0.85 - divergence * 0.4 + (sectionContrast > 0.5 ? 0.05 : -0.05);
-    const curve = EnergyCurve.fromSections(variantStructure.sections);
-
-    const variantLabels = ["能量聚焦", "段落对比", "平滑过渡", "戏剧弧光"];
-    variants.push({
-      id: `v_${vi}`,
-      name: `${template.name} (${variantLabels[vi - 1] ?? `变体${vi}`})`,
-      structure: variantStructure,
-      score: clamp(score, 0.3, 0.95),
-      divergence: clamp(divergence, 0.05, 0.55),
-      energyCurve: curve,
-    });
-  }
-
-  return variants;
-}
+// v1.23.0 Stage 1 (D2-2): the local demo generator (randomised variant
+// scores / divergence / energy noise) has been removed. Without
+// `onRunArranger` the panel now renders an empty state and produces no
+// variants; a failed run surfaces an error state but keeps the panel alive
+// (v1.18 "failure keeps panel alive"). Production App always wires
+// `onRunArranger` (the real arranger.expandSection path), so this only
+// affects the bare-component API.
 
 function sectionToDiffOps(
   structure: FormStructure,
@@ -299,7 +253,6 @@ function drawEnergyCurve(
 
 export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
   motifs,
-  genome,
   onApplyDiff,
   onRunArranger,
 }) => {
@@ -310,6 +263,10 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
   const [variants, setVariants] = useState<ArrangerVariant[]>([]);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [hoveredSection, setHoveredSection] = useState<string | null>(null);
+  // v1.23.0 Stage 1 (D2-2): run failure surfaces an in-panel error state
+  // rather than crashing — "failure keeps panel alive" (v1.18). Cleared on
+  // the next generate attempt.
+  const [runError, setRunError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const currentTemplate = useMemo(
@@ -339,32 +296,46 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
   const handleGenerate = useCallback(async () => {
     if (!currentTemplate) return;
 
-    // Stage 1: prefer the real Arranger agent (arranger.expandSection via
-    // onRunArranger) over the local demo generator. The source motif is the
-    // concatenation of all non-empty motif notes available to the panel.
-    if (onRunArranger) {
-      const source = motifs
-        .filter((m) => m.notes.length > 0)
-        .flatMap((m) => m.notes);
-      const bars =
-        source.length > 0 ? Math.max(1, Math.max(...source.map((n) => n.bar))) : 4;
+    // v1.23.0 Stage 1 (D2-2): the local demo generator is gone. Without
+    // onRunArranger the panel produces no variants and renders an empty
+    // state (production App always wires onRunArranger — the bare-component
+    // API now shows empty instead of fake data). A failed run surfaces an
+    // error state and keeps the panel alive (v1.18).
+    setRunError(null);
+
+    if (!onRunArranger) {
+      setVariants([]);
+      setSelectedVariant(null);
+      return;
+    }
+
+    const source = motifs
+      .filter((m) => m.notes.length > 0)
+      .flatMap((m) => m.notes);
+    const bars =
+      source.length > 0 ? Math.max(1, Math.max(...source.map((n) => n.bar))) : 4;
+    try {
       const result = await onRunArranger({
         source,
         bars,
         formTemplate: selectedTemplate,
         variantCount: 4,
       });
-      if (result.status !== "ok") return;
+      if (result.status !== "ok") {
+        setVariants([]);
+        setSelectedVariant(null);
+        setRunError(t("arranger.runFailed"));
+        return;
+      }
       const mapped = mapRealVariants(result, currentTemplate.name);
       setVariants(mapped);
       setSelectedVariant(mapped[0]?.id ?? null);
-      return;
+    } catch {
+      setVariants([]);
+      setSelectedVariant(null);
+      setRunError(t("arranger.runFailed"));
     }
-
-    const result = generateVariants(currentTemplate, motifs, genome);
-    setVariants(result);
-    setSelectedVariant(result[0]?.id ?? null);
-  }, [currentTemplate, motifs, genome, onRunArranger, selectedTemplate]);
+  }, [currentTemplate, motifs, onRunArranger, selectedTemplate, t]);
 
   const handleConfirm = useCallback(() => {
     if (!variant) return;
@@ -522,6 +493,27 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
 
       {variants.length === 0 && !currentTemplate && (
         <div className={styles.emptyState}>{t('arranger.selectTemplate')}</div>
+      )}
+
+      {/* v1.23.0 Stage 1 (D2-2): no onRunArranger → empty state (no fake
+          variants); a failed run surfaces an error state but the panel
+          stays alive (v1.18 "failure keeps panel alive"). */}
+      {variants.length === 0 && currentTemplate && !onRunArranger && !runError && (
+        <div
+          className={styles.emptyState}
+          data-testid="arranger-empty-state"
+        >
+          {t('arranger.emptyState')}
+        </div>
+      )}
+
+      {runError && (
+        <div
+          className={styles.emptyState}
+          data-testid="arranger-error-state"
+        >
+          {runError}
+        </div>
       )}
     </div>
   );

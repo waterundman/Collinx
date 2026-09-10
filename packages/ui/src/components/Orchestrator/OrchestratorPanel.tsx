@@ -151,6 +151,19 @@ export const OrchestratorPanel: React.FC<OrchestratorPanelProps> = ({
   // orchestrate button is disabled and the harmony strip shows an empty state.
   const harmonyEmpty = !harmony || harmony.length === 0;
 
+  // v1.23.0 Stage 1 (D2-1): per-bar entry counts drive the strip label. A bar
+  // with a single entry renders `m{bar}` (backward compatible with v1.22.0
+  // assertions); a bar with multiple entries (S0 chordify slice reduction —
+  // e.g. half-bar C→G7) renders `m{bar}.{beat}` so each slice is uniquely
+  // addressed (m1.1, m1.3, ...).
+  const barEntryCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const e of harmony ?? []) {
+      counts.set(e.bar, (counts.get(e.bar) ?? 0) + 1);
+    }
+    return counts;
+  }, [harmony]);
+
   return (
     <div className={styles.orchestratorPanel} data-testid="orchestrator-panel">
       <div className={styles.panelHeader}>
@@ -171,12 +184,18 @@ export const OrchestratorPanel: React.FC<OrchestratorPanelProps> = ({
           </div>
         ) : (
           <div className={styles.harmonyStrip}>
-            {harmony!.map((entry, idx) => (
-              <span key={`${entry.bar}-${entry.beat}-${idx}`} className={styles.harmonyItem} data-testid="orchestrator-harmony-item">
-                m{entry.bar} {HarmonyPlan.formatChordSymbol(entry.chord)}
-                {entry.romanNumeral ? ` (${entry.romanNumeral})` : ""}
-              </span>
-            ))}
+            {harmony!.map((entry, idx) => {
+              const multiInBar = (barEntryCounts.get(entry.bar) ?? 0) > 1;
+              const label = multiInBar
+                ? `m${entry.bar}.${entry.beat}`
+                : `m${entry.bar}`;
+              return (
+                <span key={`${entry.bar}-${entry.beat}-${idx}`} className={styles.harmonyItem} data-testid="orchestrator-harmony-item">
+                  {label} {HarmonyPlan.formatChordSymbol(entry.chord)}
+                  {entry.romanNumeral ? ` (${entry.romanNumeral})` : ""}
+                </span>
+              );
+            })}
           </div>
         )}
       </div>

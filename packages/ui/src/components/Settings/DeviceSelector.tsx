@@ -34,39 +34,12 @@ export interface DeviceSelectorProps {
   className?: string;
 }
 
-/** 默认模拟设备列表 */
-const getMockDevices = (type: DeviceType, direction: DeviceDirection): DeviceInfo[] => {
-  if (type === 'audio') {
-    if (direction === 'input') {
-      return [
-        { id: 'default', name: '系统默认输入设备', isDefault: true, isAvailable: true },
-        { id: 'mic-1', name: '内置麦克风', manufacturer: 'Apple', isAvailable: true },
-        { id: 'mic-2', name: 'USB Audio Device', manufacturer: 'Generic', isAvailable: true },
-        { id: 'mic-3', name: 'External Audio Interface', manufacturer: 'Focusrite', isAvailable: false },
-      ];
-    }
-    return [
-      { id: 'default', name: '系统默认输出设备', isDefault: true, isAvailable: true },
-      { id: 'speaker-1', name: '内置扬声器', manufacturer: 'Apple', isAvailable: true },
-      { id: 'speaker-2', name: '耳机', manufacturer: 'Apple', isAvailable: true },
-      { id: 'speaker-3', name: 'Studio Monitors', manufacturer: 'KRK', isAvailable: true },
-    ];
-  }
-  // MIDI设备
-  if (direction === 'input') {
-    return [
-      { id: 'default', name: '无MIDI输入', isDefault: true, isAvailable: true },
-      { id: 'midi-1', name: 'USB MIDI Keyboard', manufacturer: 'Akai', isAvailable: true },
-      { id: 'midi-2', name: 'MIDI Controller', manufacturer: 'Novation', isAvailable: true },
-      { id: 'midi-3', name: 'Digital Piano', manufacturer: 'Yamaha', isAvailable: false },
-    ];
-  }
-  return [
-    { id: 'default', name: '无MIDI输出', isDefault: true, isAvailable: true },
-    { id: 'midi-out-1', name: 'Virtual MIDI', manufacturer: 'System', isAvailable: true },
-    { id: 'midi-out-2', name: 'MIDI Synth', manufacturer: 'Roland', isAvailable: true },
-  ];
-};
+// v1.23.0 Stage 1 (D2-3): the fake-device filler (initial state + refresh
+// path) has been removed. Without `externalDevices` the selector now renders
+// an empty state ("no devices detected") and a refresh keeps the list empty
+// rather than repopulating with fake entries. The SettingsPage is not yet
+// routed into the App (only SettingsProvider lives in main.tsx), so this only
+// tightens the bare-component API; routing is out of scope for S1.
 
 /**
  * 设备选择器组件
@@ -84,14 +57,12 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
   const { t } = useI18n();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [devices, setDevices] = useState<DeviceInfo[]>(
-    externalDevices || getMockDevices(deviceType, direction)
+    externalDevices ?? []
   );
 
   // 当外部设备列表更新时同步
   useEffect(() => {
-    if (externalDevices) {
-      setDevices(externalDevices);
-    }
+    setDevices(externalDevices ?? []);
   }, [externalDevices]);
 
   // 处理刷新
@@ -100,15 +71,14 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
       setIsRefreshing(true);
       try {
         await onRefresh();
-        // 如果没有外部设备列表，使用模拟数据刷新
-        if (!externalDevices) {
-          setDevices(getMockDevices(deviceType, direction));
-        }
+        // v1.23.0: no mock repopulation. If the host wired externalDevices via
+        // props, the useEffect above syncs the new list; otherwise the panel
+        // stays in the empty state (no fake devices).
       } finally {
         setIsRefreshing(false);
       }
     }
-  }, [onRefresh, isRefreshing, externalDevices, deviceType, direction]);
+  }, [onRefresh, isRefreshing]);
 
   // 获取设备状态文本
   const getDeviceStatus = useCallback((device: DeviceInfo): string => {
@@ -149,20 +119,29 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
         </div>
       </div>
 
-      <select
-        className={styles.deviceSelect}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {devices.map((device) => (
-          <option key={device.id} value={device.id} disabled={!device.isAvailable}>
-            {device.name}
-            {device.manufacturer ? ` (${device.manufacturer})` : ''}
-            {device.isDefault ? ' - 默认' : ''}
-            {!device.isAvailable ? ' - 不可用' : ''}
-          </option>
-        ))}
-      </select>
+      {devices.length === 0 ? (
+        <div
+          className={styles.deviceEmpty}
+          data-testid="device-empty-state"
+        >
+          {t('settings.device.empty')}
+        </div>
+      ) : (
+        <select
+          className={styles.deviceSelect}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {devices.map((device) => (
+            <option key={device.id} value={device.id} disabled={!device.isAvailable}>
+              {device.name}
+              {device.manufacturer ? ` (${device.manufacturer})` : ''}
+              {device.isDefault ? ' - 默认' : ''}
+              {!device.isAvailable ? ' - 不可用' : ''}
+            </option>
+          ))}
+        </select>
+      )}
 
       {onRefresh && (
         <button

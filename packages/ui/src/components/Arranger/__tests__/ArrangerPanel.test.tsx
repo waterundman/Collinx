@@ -136,7 +136,12 @@ describe("ArrangerPanel (Stage 1: real Arranger data source)", () => {
     expect(container.textContent).toContain(real.variants[0].description);
   });
 
-  it("本地 demo 兜底:未提供 onRunArranger 时仍可生成(不崩)", async () => {
+  // v1.23.0 Stage 1 (D2-2): the local demo generator has been removed.
+  // Without `onRunArranger` the panel now renders an empty state and produces
+  // no variants — the bare-component API no longer leaks fake data.
+  // Production App always wires `onRunArranger` (the real
+  // arranger.expandSection path), so this only affects the component API.
+  it("S1-T02a: 未提供 onRunArranger → 空态提示,不产出任何变体 (critical)", async () => {
     const { container, cleanup } = renderPanel({
       motifs: [{ id: "m1", name: "Melody", notes: makeNotes() }],
     });
@@ -149,10 +154,86 @@ describe("ArrangerPanel (Stage 1: real Arranger data source)", () => {
       );
     });
 
-    // The local demo generator still works as a fallback.
+    // No variants produced — empty state is rendered instead.
     const cards = container.querySelectorAll('[data-testid^="arranger-variant-"]');
-    expect(cards.length).toBeGreaterThan(0);
-    expect(container.textContent).not.toBe("");
+    expect(cards.length).toBe(0);
+    const emptyState = container.querySelector(
+      '[data-testid="arranger-empty-state"]'
+    );
+    expect(emptyState).not.toBeNull();
+    // v1.18: assert the i18n key resolved (not the raw key fallback, not a
+    // hard-coded Chinese string). A missing key would render the raw key.
+    expect(emptyState!.textContent).not.toBe("arranger.emptyState");
+    expect(emptyState!.textContent!.trim().length).toBeGreaterThan(0);
+
+    cleanup();
+  });
+
+  it("S1-T02b: onRunArranger 返回 status !== ok → 错误提示,面板存活 (critical)", async () => {
+    const failure: ArrangerRunResult = {
+      status: "error",
+      variants: [],
+      selectedVariant: null,
+      formStructure: null,
+      section: null,
+      energyCurvePoints: [],
+      confidence: 0,
+      diffs: [],
+    };
+    const onRunArranger = vi.fn().mockResolvedValue(failure);
+    const { container, cleanup } = renderPanel({
+      motifs: [{ id: "m1", name: "Melody", notes: makeNotes() }],
+      onRunArranger,
+    });
+
+    const btn = container.querySelector('[data-testid="arranger-generate"]');
+    await act(async () => {
+      btn!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+    });
+
+    // No variants produced; error state rendered (panel stays alive).
+    const cards = container.querySelectorAll('[data-testid^="arranger-variant-"]');
+    expect(cards.length).toBe(0);
+    const errorState = container.querySelector(
+      '[data-testid="arranger-error-state"]'
+    );
+    expect(errorState).not.toBeNull();
+    // v1.18: key resolved (not the raw key fallback).
+    expect(errorState!.textContent).not.toBe("arranger.runFailed");
+    expect(errorState!.textContent!.trim().length).toBeGreaterThan(0);
+    // The panel itself is still mounted.
+    expect(
+      container.querySelector('[data-testid="arranger-panel"]')
+    ).not.toBeNull();
+
+    cleanup();
+  });
+
+  it("S1-T02c: onRunArranger 抛异常 → 错误提示,面板存活 (critical)", async () => {
+    const onRunArranger = vi.fn().mockRejectedValue(new Error("agent down"));
+    const { container, cleanup } = renderPanel({
+      motifs: [{ id: "m1", name: "Melody", notes: makeNotes() }],
+      onRunArranger,
+    });
+
+    const btn = container.querySelector('[data-testid="arranger-generate"]');
+    await act(async () => {
+      btn!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+    });
+
+    const cards = container.querySelectorAll('[data-testid^="arranger-variant-"]');
+    expect(cards.length).toBe(0);
+    const errorState = container.querySelector(
+      '[data-testid="arranger-error-state"]'
+    );
+    expect(errorState).not.toBeNull();
+    // v1.18: key resolved (not the raw key fallback).
+    expect(errorState!.textContent).not.toBe("arranger.runFailed");
+    expect(errorState!.textContent!.trim().length).toBeGreaterThan(0);
 
     cleanup();
   });

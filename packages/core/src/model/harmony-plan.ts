@@ -287,24 +287,33 @@ export function pitchSetToRomanNumeral(
 }
 
 /**
- * 从和弦轨音符派生 HarmonyEntry[]。
+ * 从和弦轨音符派生 HarmonyEntry[]（v1.23.0 起：chordify 式垂直切片 + 贪心归约）。
  *
- * 已知限界（v1.22.0）：
- * - 仅按 bar 分组，bar 内多于一个和弦的变化会被合并为单一 entry；
- * - 无法识别为三/七和弦的 bar 整体丢失（不产生 entry）；
- * - 不处理重叠/跨小节的连音与装饰音。
+ * 已知限界（v1.23.0）：
+ * - 零 durQn 音符按其 onset 计入所在切片，可能污染该切片音名集；若因此
+ *   和弦不可识别，该段照常丢弃（与无法识别段的处理一致）；
+ * - 不处理跨小节的连音与装饰音（音符严格按所属 bar 归组，切片不出 bar）。
  *
  * 规则：
  * 1. 空数组 / 全无效输入 → []。
- * 2. 按 bar 分组（对齐 v1.19 App.tsx:544 chordProgression 先例）。
- * 3. 每组 pitch names = 组内音符 pitchSpelling 去八度数字（`replace(/\d+$/, "")`）
- *    去重保序；pitchSpelling 非法/空时回退由 pitchMidi 推名（midiToSpelling）。
- * 4. entry.beat = 组内最小 beat；durationQn = 组内时间跨度
- *    max(beat+durQn) − min(beat)（同时态三音组求和会翻倍，跨度才正确）。
- * 5. chord = pitchSetToChordSymbol(names)；undefined → 跳过该 bar。
- * 6. 有 key 时：romanNumeral = pitchSetToRomanNumeral(names, tonic, mode)，
+ * 2. 按 bar 分组；bar 内以唯一 onset（beat）升序切分垂直切片
+ *    （chordify 式：每个音高变化产生新切片，半开区间 [onset_i, onset_{i+1})，
+ *    末切片区间终点 = bar 内音符最大终点 max(beat+durQn)，若 ≤ 最后 onset
+ *    则该切片长为 0，守卫不产生负 durationQn）。
+ * 3. 切片音名集 = 所有与区间相交音符的 pitchSpelling 去八度数字
+ *    （`replace(/\d+$/, "")`）去重保序，pitchSpelling 非法/空时回退由
+ *    pitchMidi 推名（midiToSpelling）；零 durQn 音符计入其 onset 所在切片。
+ * 4. 贪心累积归约：从左到右累积当前段音名集，pitchSetToChordSymbol 成功 →
+ *    立即产出 entry（beat = 段起点，durationQn = 段终点 − 段起点，段终点 =
+ *    下一切片起点，末段 = bar 内音符最大终点），清空累积，下一切片起新段；
+ *    失败 → 继续累积（琶音语义：{C}→{C,E}→{C,E,G} 只产出一条）。
+ * 5. 尾部子集延长：走完后残余累积（末尾失败切片）若是最后产出和弦音名集的
+ *    子集 → 把该和弦 durationQn 延长至残余切片终点；非子集 → 丢弃。
+ * 6. 相邻同和弦合并：同 bar 内连续两段 root+quality 相同 → 合并，
+ *    beat = 首段起点，durationQn = 合并总跨度。
+ * 7. 有 key 时：每段以该段音名集调 pitchSetToRomanNumeral(names, tonic, mode)，
  *    undefined 则省略字段；无 key 省略。
- * 7. 按 bar 升序输出。
+ * 8. 按 bar + beat 升序输出。
  */
 export function notesToHarmonyEntries(
   chordNotes: NoteEvent[],
@@ -322,38 +331,8 @@ export function notesToHarmonyEntries(
   if (byBar.size === 0) return [];
 
   const entries: HarmonyEntry[] = [];
-
   for (const [bar, group] of byBar) {
-    const names: string[] = [];
-    for (const n of group) {
-      let name = n.pitchSpelling ? n.pitchSpelling.replace(/\d+$/, "") : "";
-      if (!name || !PITCH_TOKEN_RE.test(name)) {
-        name = midiToSpelling(n.pitchMidi).replace(/\d+$/, "");
-      }
-      if (!names.includes(name)) names.push(name);
-    }
-
-    const chord = pitchSetToChordSymbol(names);
-    if (!chord) continue;
-
-    const beats = group.map((n) => n.beat);
-    const minBeat = Math.min(...beats);
-    const maxEnd = Math.max(...group.map((n) => n.beat + (n.durQn ?? 0)));
-    const durationQn = maxEnd - minBeat;
-
-    const entry: HarmonyEntry = {
-      bar,
-      beat: minBeat,
-      chord,
-      durationQn,
-    };
-
-    if (key) {
-      const rn = pitchSetToRomanNumeral(names, key.tonic, key.mode);
-      if (rn) entry.romanNumeral = rn;
-    }
-
-    entries.push(entry);
+    entries.push(...reduceBarToHarmonyEntries(bar, group, key));
   }
 
   entries.sort((a, b) => {
@@ -362,6 +341,105 @@ export function notesToHarmonyEntries(
   });
 
   return entries;
+}
+
+/** 音符音名：pitchSpelling 去八度数字，非法/空回退 midiToSpelling。 */
+function notePitchName(n: NoteEvent): string {
+  let name = n.pitchSpelling ? n.pitchSpelling.replace(/\d+$/, "") : "";
+  if (!name || !PITCH_TOKEN_RE.test(name)) {
+    name = midiToSpelling(n.pitchMidi).replace(/\d+$/, "");
+  }
+  return name;
+}
+
+/** 单 bar 的 chordify 式垂直切片 + 贪心累积归约（含尾部子集延长与同和弦合并）。 */
+function reduceBarToHarmonyEntries(
+  bar: number,
+  group: NoteEvent[],
+  key?: { tonic: string; mode: string },
+): HarmonyEntry[] {
+  // 唯一 onset 升序为切片起点；末切片终点 = bar 内音符最大终点
+  const onsets = Array.from(new Set(group.map((n) => n.beat))).sort((a, b) => a - b);
+  const maxEnd = Math.max(...group.map((n) => n.beat + (n.durQn ?? 0)));
+
+  const sliceEnd = (i: number): number =>
+    i + 1 < onsets.length ? onsets[i + 1] : maxEnd;
+
+  // 切片音名集：与 [onset_i, sliceEnd) 半开区间相交的音符；零 durQn 音符计入其 onset 所在切片
+  const sliceNames: string[][] = onsets.map((start, i) => {
+    const end = sliceEnd(i);
+    const names: string[] = [];
+    for (const n of group) {
+      const dur = n.durQn ?? 0;
+      const intersects =
+        dur > 0
+          ? n.beat < end && n.beat + dur > start
+          : n.beat >= start && n.beat < end;
+      if (!intersects) continue;
+      const name = notePitchName(n);
+      if (name && !names.includes(name)) names.push(name);
+    }
+    return names;
+  });
+
+  // 贪心累积归约
+  const produced: { entry: HarmonyEntry; names: string[]; end: number }[] = [];
+  let pending: string[] = [];
+  let segStart = onsets[0];
+  let segOpen = true;
+
+  for (let i = 0; i < onsets.length; i++) {
+    if (!segOpen) {
+      segStart = onsets[i];
+      segOpen = true;
+    }
+    for (const name of sliceNames[i]) {
+      if (!pending.includes(name)) pending.push(name);
+    }
+    const chord = pitchSetToChordSymbol(pending);
+    if (chord) {
+      const entry: HarmonyEntry = {
+        bar,
+        beat: segStart,
+        chord,
+        durationQn: Math.max(0, sliceEnd(i) - segStart),
+      };
+      if (key) {
+        const rn = pitchSetToRomanNumeral(pending, key.tonic, key.mode);
+        if (rn) entry.romanNumeral = rn;
+      }
+      produced.push({ entry, names: [...pending], end: sliceEnd(i) });
+      pending = [];
+      segOpen = false;
+    }
+  }
+
+  // 尾部子集延长：残余累积 ⊆ 最后产出和弦音名集 → 延长其 durationQn；否则丢弃
+  if (pending.length > 0 && produced.length > 0) {
+    const last = produced[produced.length - 1];
+    if (pending.every((name) => last.names.includes(name))) {
+      last.end = maxEnd;
+      last.entry.durationQn = Math.max(last.entry.durationQn, maxEnd - last.entry.beat);
+    }
+  }
+
+  // 相邻同和弦合并（同 bar 内连续两段 root+quality 相同）
+  const merged: typeof produced = [];
+  for (const seg of produced) {
+    const prev = merged[merged.length - 1];
+    if (
+      prev &&
+      prev.entry.chord.root === seg.entry.chord.root &&
+      prev.entry.chord.quality === seg.entry.chord.quality
+    ) {
+      prev.end = seg.end;
+      prev.entry.durationQn = Math.max(0, prev.end - prev.entry.beat);
+    } else {
+      merged.push(seg);
+    }
+  }
+
+  return merged.map((seg) => seg.entry);
 }
 
 export class HarmonyPlan {

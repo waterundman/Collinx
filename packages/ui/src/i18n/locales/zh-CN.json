@@ -382,7 +382,16 @@
     "mixingDesc": "效果链、路由、总线等混音设置",
     "notationDesc": "谱面显示、字体、导出格式等记谱设置",
     "agentDesc": "Agent行为、权限、模型等设置",
-    "tasteDesc": "Taste学习、记忆、偏好等设置"
+    "tasteDesc": "Taste学习、记忆、偏好等设置",
+    "device": {
+      "empty": "未检测到设备",
+      "unavailable": "不可用",
+      "default": "默认",
+      "connected": "已连接",
+      "notSelected": "未选择",
+      "refreshing": "刷新中...",
+      "refresh": "刷新设备"
+    }
   },
   "settings.general": {
     "languageDesc": "选择界面显示语言",
@@ -1423,6 +1432,8 @@
     "energyCurve": "能量曲线",
     "confirm": "确认编排方案",
     "selectTemplate": "请选择曲式模板",
+    "emptyState": "未配置编排代理 — 无可用编排变体",
+    "runFailed": "编排运行失败，请重试",
     "role": "角色",
     "bars": "小节",
     "energy": "能量",

@@ -313,3 +313,69 @@ describe("OrchestratorPanel (v1.22.0 Stage 1: harmony wiring)", () => {
     cleanup();
   });
 });
+
+// ── v1.23.0 Stage 1 (D2-1): multi-entry bar → m{bar}.{beat} strip labels ──
+describe("OrchestratorPanel (v1.23.0 Stage 1: harmony strip bar.beat labels)", () => {
+  /** S0 chordify slice reduction: a half-bar C→G7 progression in bar 1 now
+   *  yields two HarmonyEntry slices (beat 1 C maj + beat 3 G7 dom7). The
+   *  strip label switches from `m{bar}` to `m{bar}.{beat}` for each slice so
+   *  both are uniquely addressed. Single-entry bars stay `m{bar}` (v1.22.0
+   *  backward-compat assertions in T02 above must still pass unchanged). */
+  function makeMultiEntryHarmony(): HarmonyEntry[] {
+    return [
+      {
+        bar: 1,
+        beat: 1,
+        chord: { root: "C", quality: "maj" },
+        durationQn: 2,
+        romanNumeral: "I",
+      },
+      {
+        bar: 1,
+        beat: 3,
+        chord: { root: "G", quality: "dom7" },
+        durationQn: 2,
+        romanNumeral: "V",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        chord: { root: "C", quality: "maj" },
+        durationQn: 4,
+        romanNumeral: "I",
+      },
+    ];
+  }
+
+  it("S1-T01a: 同 bar 多 entry → m1.1 / m1.3 标签;单 entry bar → m2 (critical)", () => {
+    const { container, cleanup } = renderPanel({
+      harmony: makeMultiEntryHarmony(),
+    });
+
+    const items = container.querySelectorAll(
+      '[data-testid="orchestrator-harmony-item"]'
+    );
+    expect(items.length).toBe(3);
+    // Bar 1 has two entries → each slice addressed as m1.1 / m1.3.
+    expect(items[0].textContent).toBe("m1.1 C (I)");
+    expect(items[1].textContent).toBe("m1.3 G7 (V)");
+    // Bar 2 has a single entry → m2 (backward compatible with v1.22.0).
+    expect(items[2].textContent).toBe("m2 C (I)");
+
+    cleanup();
+  });
+
+  it("S1-T01b: 单 entry per bar → m{bar} (v1.22 断言不变,回归保护)", () => {
+    // Two bars, one entry each — the v1.22.0 T02 case must still hold.
+    const { container, cleanup } = renderPanel({ harmony: makeHarmony() });
+
+    const items = container.querySelectorAll(
+      '[data-testid="orchestrator-harmony-item"]'
+    );
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toBe("m1 C (I)");
+    expect(items[1].textContent).toBe("m2 G7 (V)");
+
+    cleanup();
+  });
+});

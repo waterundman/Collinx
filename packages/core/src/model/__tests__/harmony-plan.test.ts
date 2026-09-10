@@ -602,3 +602,221 @@ describe("notesToHarmonyEntries", () => {
     expect(entries[1].romanNumeral).toBe("vi");
   });
 });
+
+// v1.23.0 Stage 0：chordify 式垂直切片 + 贪心归约（bar 内子和弦解析 / harmonic rhythm）
+describe("notesToHarmonyEntries slice-reduce (v1.23.0)", () => {
+  const key = { tonic: "C", mode: "major" };
+
+  function note(
+    bar: number,
+    beat: number,
+    durQn: number,
+    pitchMidi: number,
+    pitchSpelling?: string,
+  ): NoteEvent {
+    return {
+      id: `s0-${bar}-${beat}-${pitchMidi}`,
+      trackId: "chords",
+      phraseId: null,
+      bar,
+      beat,
+      durQn,
+      pitchMidi,
+      pitchSpelling: pitchSpelling ?? midiToSpelling(pitchMidi),
+      velocity: 0.8,
+      voice: "rh",
+      tags: [],
+    };
+  }
+
+  // S0-T01: 半小节双和弦 → 2 entries（半开区间：beat3 起 C4 组已结束不进切片2）
+  it("splits half-bar dual chords into two entries (S0-T01)", () => {
+    const notes = [
+      note(1, 1, 2, 60), // C4
+      note(1, 1, 2, 64), // E4
+      note(1, 1, 2, 67), // G4
+      note(1, 3, 2, 67), // G4
+      note(1, 3, 2, 71), // B4
+      note(1, 3, 2, 74), // D5
+      note(1, 3, 2, 77), // F5
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({
+      bar: 1, beat: 1, durationQn: 2,
+      chord: { root: "C", quality: "maj" },
+    });
+    expect(entries[1]).toMatchObject({
+      bar: 1, beat: 3, durationQn: 2,
+      chord: { root: "G", quality: "dom7" },
+    });
+  });
+
+  // S0-T02: 琶音 → 1 entry dur3（v1.22 既有断言保持）
+  it("reduces an arpeggio into a single entry (S0-T02)", () => {
+    const notes = [
+      note(1, 1, 1, 60), // C4
+      note(1, 2, 1, 64), // E4
+      note(1, 3, 1, 67), // G4
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      bar: 1, beat: 1, durationQn: 3,
+      chord: { root: "C", quality: "maj" },
+    });
+  });
+
+  // S0-T03: C→C7 → 2 entries，不同 root+quality 不合并
+  it("does not merge C into C7 (S0-T03)", () => {
+    const notes = [
+      note(1, 1, 2, 60), // C4
+      note(1, 1, 2, 64), // E4
+      note(1, 1, 2, 67), // G4
+      note(1, 3, 2, 72), // C5
+      note(1, 3, 2, 76), // E5
+      note(1, 3, 2, 79), // G5
+      note(1, 3, 2, 70, "Bb4"), // Bb4
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({
+      bar: 1, beat: 1, durationQn: 2,
+      chord: { root: "C", quality: "maj" },
+    });
+    expect(entries[1]).toMatchObject({
+      bar: 1, beat: 3, durationQn: 2,
+      chord: { root: "C", quality: "dom7" },
+    });
+  });
+
+  // S0-T04: 尾部子集延长 dur4 / 非子集尾丢弃 dur2
+  it("extends last chord when tail slice is a pitch subset (S0-T04)", () => {
+    const notes = [
+      note(1, 1, 2, 60), // C4
+      note(1, 1, 2, 64), // E4
+      note(1, 1, 2, 67), // G4
+      note(1, 3, 2, 76), // E5
+      note(1, 3, 2, 79), // G5
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      bar: 1, beat: 1, durationQn: 4,
+      chord: { root: "C", quality: "maj" },
+    });
+  });
+
+  it("discards non-subset tail slice (S0-T04)", () => {
+    const notes = [
+      note(1, 1, 2, 60), // C4
+      note(1, 1, 2, 64), // E4
+      note(1, 1, 2, 67), // G4
+      note(1, 3, 2, 60), // C4
+      note(1, 3, 2, 62), // D4
+      note(1, 3, 2, 67), // G4
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      bar: 1, beat: 1, durationQn: 2,
+      chord: { root: "C", quality: "maj" },
+    });
+  });
+
+  // S0-T05: 相邻同和弦合并 → 1 entry dur2
+  it("merges adjacent identical chords within a bar (S0-T05)", () => {
+    const notes = [
+      note(1, 1, 1, 60), // C4
+      note(1, 1, 1, 64), // E4
+      note(1, 1, 1, 67), // G4
+      note(1, 2, 1, 72), // C5
+      note(1, 2, 1, 76), // E5
+      note(1, 2, 1, 79), // G5
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      bar: 1, beat: 1, durationQn: 2,
+      chord: { root: "C", quality: "maj" },
+    });
+  });
+
+  // S0-T06: 跨切片延音 → 切片1 只有 {C} 失败被吸收；切片2 {C,E,G} 识别
+  it("absorbs failing slices into the next segment across sustains (S0-T06)", () => {
+    const notes = [
+      note(1, 1, 3, 60), // C4 延音跨切片
+      note(1, 3, 1, 64), // E4
+      note(1, 3, 1, 67), // G4
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      bar: 1, beat: 1, durationQn: 3,
+      chord: { root: "C", quality: "maj" },
+    });
+  });
+
+  // S0-T08: RN 逐段填充 / 省略
+  it("fills romanNumeral per segment when key given (S0-T08)", () => {
+    const notes = [
+      note(1, 1, 2, 60), // C maj
+      note(1, 1, 2, 64),
+      note(1, 1, 2, 67),
+      note(1, 3, 2, 67), // G7
+      note(1, 3, 2, 71),
+      note(1, 3, 2, 74),
+      note(1, 3, 2, 77),
+    ];
+    const entries = notesToHarmonyEntries(notes, key);
+    expect(entries).toHaveLength(2);
+    expect(entries[0].romanNumeral).toBe("I");
+    expect(entries[1].romanNumeral).toBe("V");
+  });
+
+  it("fills vi for A minor segment with key (S0-T08)", () => {
+    const notes = [
+      note(1, 1, 1, 57), // A3
+      note(1, 2, 1, 60), // C4
+      note(1, 3, 1, 64), // E4
+    ];
+    const entries = notesToHarmonyEntries(notes, key);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].romanNumeral).toBe("vi");
+  });
+
+  it("omits romanNumeral on every segment when no key (S0-T08)", () => {
+    const notes = [
+      note(1, 1, 2, 60),
+      note(1, 1, 2, 64),
+      note(1, 1, 2, 67),
+      note(1, 3, 2, 67),
+      note(1, 3, 2, 71),
+      note(1, 3, 2, 74),
+      note(1, 3, 2, 77),
+    ];
+    const entries = notesToHarmonyEntries(notes);
+    expect(entries).toHaveLength(2);
+    expect("romanNumeral" in entries[0]).toBe(false);
+    expect("romanNumeral" in entries[1]).toBe(false);
+  });
+
+  // S0-T09: 零 durQn 不崩溃 + 空/无效输入 → []
+  it("does not crash on zero durQn notes (S0-T09)", () => {
+    const notes = [
+      note(1, 1, 2, 60),
+      note(1, 1, 2, 64),
+      note(1, 1, 2, 67),
+      note(1, 3, 0, 72), // 零 durQn
+    ];
+    expect(() => notesToHarmonyEntries(notes)).not.toThrow();
+    const entries = notesToHarmonyEntries(notes);
+    expect(Array.isArray(entries)).toBe(true);
+  });
+
+  it("returns [] for empty or all-invalid input (S0-T09)", () => {
+    expect(notesToHarmonyEntries([])).toEqual([]);
+    expect(notesToHarmonyEntries([null as unknown as NoteEvent])).toEqual([]);
+    expect(notesToHarmonyEntries([{ bar: "x" } as unknown as NoteEvent])).toEqual([]);
+  });
+});
