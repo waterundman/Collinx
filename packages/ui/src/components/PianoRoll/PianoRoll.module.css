@@ -108,6 +108,16 @@
   background: var(--piano-black-playing);
 }
 
+/* v1.25.0 Stage 1 (D2-1): MIDI 输入键位高亮。复用既有 playing 配色变量，
+   但作为独立 class 由 activePitches prop 驱动，不改 .playing 语义。 */
+.whiteKey.keyActive {
+  background: var(--piano-white-playing);
+}
+
+.blackKey.keyActive {
+  background: var(--piano-black-playing);
+}
+
 .gridContainer {
   flex: 1;
   position: relative;

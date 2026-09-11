@@ -39,6 +39,7 @@ import {
 } from "./data/demoData";
 import { useProjectStore } from "./hooks/useProjectStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useMidiInput } from "./hooks/useMidiInput";
 import type {
   ArrangerConfigInput,
   ArrangerRunResult,
@@ -266,10 +267,84 @@ export function App() {
 
   const genome = useMemo(() => tasteStore.getCurrentGenome(), [genomeVersion, tasteStore]);
 
-  const handleNoteAdd = (note: Omit<NoteEvent, "id">) => {
+  // v1.25.0 Stage 1 (D2-2): MIDI 录入闭环状态。
+  // - activePitches：当前按下的 pitch 集合，直接驱动 PianoRollView 键位高亮。
+  // - inputCursor：录入光标（最小闭环，App 层 useState；store 无全局 transport）。
+  //   4/4 基准，初始 {bar:1, beat:1}，每落盘一音 beat += durQn，beat>4 →
+  //   bar+1 / beat-=4。tempo/transport 感知 defer 到后续 Stage，不实现。
+  const [activePitches, setActivePitches] = useState<Set<number>>(() => new Set());
+  const [inputCursor, setInputCursor] = useState({ bar: 1, beat: 1 });
+  const inputCursorRef = useRef(inputCursor);
+  inputCursorRef.current = inputCursor;
+
+  // noteon 的 velocity 需在 noteoff 落盘时使用（onNoteOff 回调签名只带 note），
+  // 以 note → velocity 映射暂存。
+  const activeVelocitiesRef = useRef(new Map<number, number>());
+
+  const handleNoteAdd = useCallback((note: Omit<NoteEvent, "id">) => {
     const newNote = createNoteEvent(note);
-    actions.addNote(newNote);
-  };
+    // 经 actionsRef 读取（store actions 引用随渲染重建，见上方 actionsRef 注释）
+    actionsRef.current.addNote(newNote);
+  }, []);
+
+  // durQn = clamp(实测拍数, 0.25, 8)。最小闭环暂以固定 1.0 拍作为"实测拍数"
+  // （与 PianoRoll 鼠标添加音符的 durQn:1 同构）；真实的按住时长计时依赖
+  // transport/tempo，defer。
+  const clampDurQn = (beats: number) => Math.min(8, Math.max(0.25, beats));
+
+  const handleMidiNoteOn = useCallback((note: number, velocity: number) => {
+    activeVelocitiesRef.current.set(note, velocity);
+    setActivePitches((prev) => {
+      if (prev.has(note)) return prev;
+      const next = new Set(prev);
+      next.add(note);
+      return next;
+    });
+  }, []);
+
+  const handleMidiNoteOff = useCallback((note: number) => {
+    // 移除高亮（函数式更新）
+    setActivePitches((prev) => {
+      if (!prev.has(note)) return prev;
+      const next = new Set(prev);
+      next.delete(note);
+      return next;
+    });
+    // 落盘：字段构造与 PianoRoll 鼠标添加音符路径同构
+    // （usePianoRollInteraction.handleDoubleClick → trackId:"default"），
+    // bar/beat 取落盘前的录入光标位置，复用既有 handleNoteAdd →
+    // createNoteEvent → actions.addNote 路径。
+    const velocity = activeVelocitiesRef.current.get(note) ?? 100;
+    activeVelocitiesRef.current.delete(note);
+    const cursor = inputCursorRef.current;
+    const durQn = clampDurQn(1.0);
+    handleNoteAdd({
+      trackId: "default",
+      phraseId: null,
+      bar: cursor.bar,
+      beat: cursor.beat,
+      durQn,
+      pitchMidi: note,
+      pitchSpelling: "",
+      velocity: velocity / 127,
+      voice: "rh",
+      tags: [],
+    });
+    // 光标步进（函数式更新）：beat 累计，beat>4 → bar+1 / beat 回绕（4/4）
+    setInputCursor((prev) => {
+      let bar = prev.bar;
+      let beat = prev.beat + durQn;
+      while (beat > 4) {
+        bar += 1;
+        beat -= 4;
+      }
+      return { bar, beat };
+    });
+  }, [handleNoteAdd]);
+
+  // v1.25.0 Stage 1 (D2-2): MIDI 输入绑定（读 settings.midi.midiDevice.input，
+  // enabled 默认 true；回调经 hook 内部 ref 稳定，失败路径全程静默）。
+  useMidiInput({ onNoteOn: handleMidiNoteOn, onNoteOff: handleMidiNoteOff });
 
   const handleNoteMove = (noteId: string, newBar: number, newBeat: number, newPitch: number) => {
     actions.moveNote(noteId, newBar, newBeat, newPitch);
@@ -764,6 +839,7 @@ export function App() {
                 onNoteResize={handleNoteResize}
                 onNoteDelete={handleNoteDelete}
                 onNoteSelect={setSelectedIds}
+                activePitches={activePitches}
               />
             </div>
           </div>

@@ -19,6 +19,11 @@ interface PianoRollViewProps {
   onNoteSelect?: (noteIds: string[]) => void;
   selectedNoteIds?: string[];
   height?: number;
+  /**
+   * v1.25.0 Stage 1 (D2-1): 当前 MIDI 按下的 pitch 集合（App 层录入闭环）。
+   * undefined / 空集时零行为变化（键位 className 输出与既有路径完全一致）。
+   */
+  activePitches?: Set<number>;
 }
 
 type ToolMode = "select" | "draw";
@@ -73,6 +78,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   onNoteSelect,
   selectedNoteIds = [],
   height,
+  activePitches,
 }) => {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -392,11 +398,21 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
       <div className={styles.mainArea}>
         <div className={styles.keyboard} ref={keyboardRef}>
           <div style={{ transform: `translateY(${-scrollY}px)`, position: "relative" }}>
-            {keyboardKeys.map((key) =>
-              key.isBlack ? (
+            {keyboardKeys.map((key) => {
+              // v1.25.0 Stage 1 (D2-1): MIDI 输入高亮落点选在键位 DOM 层而非
+              // canvas 格位——(1) noteon/noteoff 与物理按键一一对应，键位高亮
+              // 最符合演奏直觉；(2) canvas 走既有 drawCanvas 绘制管线，不触碰
+              // 它可保证 activePitches 为空/undefined 时零行为变化；(3) 键位是
+              // DOM 元素，高亮 class 可被测试直接断言。
+              const isActive = activePitches?.has(key.midi) ?? false;
+              return key.isBlack ? (
                 <div
                   key={key.midi}
-                  className={styles.blackKey}
+                  className={
+                    isActive
+                      ? `${styles.blackKey} ${styles.keyActive}`
+                      : styles.blackKey
+                  }
                   style={{
                     top: `${key.y - scrollY}px`,
                     height: `${key.height}px`,
@@ -405,7 +421,11 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
               ) : (
                 <div
                   key={key.midi}
-                  className={styles.whiteKey}
+                  className={
+                    isActive
+                      ? `${styles.whiteKey} ${styles.keyActive}`
+                      : styles.whiteKey
+                  }
                   style={{
                     top: `${key.y - scrollY}px`,
                     height: `${key.height}px`,
@@ -414,8 +434,8 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
                 >
                   {key.name}
                 </div>
-              )
-            )}
+              );
+            })}
           </div>
         </div>
 
