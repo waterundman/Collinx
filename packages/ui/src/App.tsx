@@ -916,6 +916,8 @@ export function App() {
                 onNoteDelete={handleNoteDelete}
                 onNoteSelect={setSelectedIds}
                 activePitches={activePitches}
+                cursorPosition={inputCursor}
+                quantizeGridHint={recording.quantizeGrid}
               />
             </div>
           </div>

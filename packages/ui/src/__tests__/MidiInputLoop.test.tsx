@@ -31,7 +31,16 @@
  * （loadSettings → deepMerge 自动补缺失块），测试先 seed localStorage 再
  * 挂载 Provider，afterEach 清理。
  */
-import { describe, it, expect, afterEach, vi } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  afterEach,
+  beforeEach,
+  beforeAll,
+  afterAll,
+  vi,
+} from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { PianoRollView } from "../components/PianoRoll/PianoRollView";
@@ -863,6 +872,255 @@ describe("v1.26 MidiSettings recording wiring (S1-T05)", () => {
     // clamp 下界：0 → 1
     await setInputValue(fixedInput, "0");
     expect(readMidi().recording.fixedVelocity).toBe(1);
+
+    cleanup();
+  });
+});
+
+// ── v1.27.0 Stage 1 (S1-T01/T02): App 接线 cursorPosition / quantizeGridHint ──
+//
+// 断言策略（选 a，canvas mock）：S0 已在组件级验证 createRecordingCtx +
+// vi.spyOn(HTMLCanvasElement.prototype, "getContext") 模式可行；App 渲染下
+// PianoRollView 仍是唯一 canvas 消费方，把同一 spy 提到 App 全量渲染层即可
+// 直接断言 draw call（accent 竖线 x 值 / m 标签 / globalAlpha），比 prop 层
+// spy（方案 b，只能证明"传了值"）多覆盖"值 → 绘制"整段链路，且复用 S0
+// harness 成本低。app 初始 cursor(1,1) 第一帧即画 m1.1，落盘后断言 m1.2
+// 出现且 fillText 调用顺序在 m1.1 之后（位置前进）。
+describe("v1.27 App cursor wiring (S1-T01/T02)", () => {
+  type DrawCall = { op: string; args: unknown[] };
+
+  // 与 S0 PianoRollView.test.tsx 同款记录型 ctx（跨测试文件 import 会执行
+  // 其 describe 注册，故复制）
+  function createRecordingCtx() {
+    const calls: DrawCall[] = [];
+    const methods = [
+      "scale",
+      "clearRect",
+      "fillRect",
+      "beginPath",
+      "moveTo",
+      "lineTo",
+      "stroke",
+      "fill",
+      "fillText",
+      "closePath",
+      "quadraticCurveTo",
+    ];
+    const target: Record<string, unknown> = {};
+    for (const m of methods) {
+      target[m] = (...args: unknown[]) => {
+        calls.push({ op: m, args });
+      };
+    }
+    target.createLinearGradient = (...args: unknown[]) => {
+      calls.push({ op: "createLinearGradient", args });
+      return { addColorStop: () => {} };
+    };
+    const ctx = new Proxy(target, {
+      get(t, prop) {
+        if (typeof prop === "string" && prop in t) return t[prop];
+        return undefined;
+      },
+      set(t, prop, value) {
+        calls.push({ op: `set:${String(prop)}`, args: [value] });
+        Reflect.set(t, prop, value);
+        return true;
+      },
+    });
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
+  }
+
+  function NotesProbe() {
+    const { notes } = useProjectStore();
+    return (
+      <div
+        data-testid="probe-notes"
+        data-count={String(notes.length)}
+        data-notes={JSON.stringify(notes)}
+      />
+    );
+  }
+
+  function renderAppWithRecording(recording: Record<string, unknown>) {
+    seedRecordingSettings({
+      velocityMode: "live",
+      fixedVelocity: 100,
+      ...recording,
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    let root: Root;
+    act(() => {
+      root = createRoot(container);
+      root.render(
+        <I18nProvider>
+          <ProjectProvider>
+            <SettingsProvider>
+              <App />
+              <NotesProbe />
+            </SettingsProvider>
+          </ProjectProvider>
+        </I18nProvider>
+      );
+    });
+    const readNotes = () => {
+      const probe = container.querySelector('[data-testid="probe-notes"]');
+      if (!probe) throw new Error("probe-notes not found");
+      return JSON.parse(probe.getAttribute("data-notes")!) as Array<
+        Record<string, unknown>
+      >;
+    };
+    return {
+      container,
+      readNotes,
+      cleanup() {
+        act(() => {
+          root.unmount();
+          container.remove();
+        });
+      },
+    };
+  }
+
+  // 默认 canvasSize {width:800, height:600}、pixelsPerBeat 40、scrollX 0
+  //（ResizeObserver stub 不触发回调）。App 侧 viewRange={startBar:1, endBar:8}。
+  const CANVAS_H = 600;
+
+  const { ctx, calls } = createRecordingCtx();
+
+  beforeAll(() => {
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  /** 竖线绘制集合：moveTo(x, 0) + lineTo(x, CANVAS_H) 的 x 值序列（同 S0） */
+  function verticalLineXs(): number[] {
+    const xs: number[] = [];
+    for (let i = 0; i < calls.length; i++) {
+      const c = calls[i];
+      if (
+        c.op === "moveTo" &&
+        c.args[1] === 0 &&
+        calls[i + 1]?.op === "lineTo" &&
+        calls[i + 1].args[0] === c.args[0] &&
+        calls[i + 1].args[1] === CANVAS_H
+      ) {
+        xs.push(Number(c.args[0]));
+      }
+    }
+    return xs;
+  }
+
+  const fillTexts = (): string[] =>
+    calls.filter((c) => c.op === "fillText").map((c) => String(c.args[0]));
+
+  const propSets = (name: string): unknown[] =>
+    calls.filter((c) => c.op === `set:${name}`).map((c) => c.args[0]);
+
+  it("S1-T01: 落盘步进 → cursor 竖线 x 前进(-0.5→39.5→79.5) + m 标签顺序 (critical)", async () => {
+    const port = makeMockPort("default");
+    stubRequestMidiAccess(makeMockAccess([port]));
+
+    const { readNotes, cleanup } = renderAppWithRecording({
+      quantizeGrid: 0,
+    });
+    await flush();
+
+    const before = readNotes();
+
+    // 初始 cursor (1,1)：首帧已画 accent 竖线（2px）+ m1.1 标签
+    expect(fillTexts()).toContain("m1.1");
+    expect(verticalLineXs()).toContain(-0.5);
+    expect(propSets("lineWidth")).toContain(2);
+
+    // 音1: 500ms=1拍 → 落(1,1) → cursor 前进到 (1,2)（ticks=1 → x=40 → 39.5）
+    dispatchMidi(port, [0x90, 60, 90], 1000);
+    dispatchMidi(port, [0x80, 60, 0], 1500);
+    await waitFor(() => readNotes().length === before.length + 1);
+    await waitFor(() => fillTexts().includes("m1.2"));
+
+    // 音2 → cursor 前进到 (1,3)（ticks=2 → x=80 → 79.5）
+    dispatchMidi(port, [0x90, 62, 90], 3000);
+    dispatchMidi(port, [0x80, 62, 0], 3500);
+    await waitFor(() => readNotes().length === before.length + 2);
+    await waitFor(() => fillTexts().includes("m1.3"));
+
+    // 标签按落盘顺序前进：m1.1 → m1.2 → m1.3
+    const texts = fillTexts();
+    expect(texts.indexOf("m1.2")).toBeGreaterThan(texts.indexOf("m1.1"));
+    expect(texts.indexOf("m1.3")).toBeGreaterThan(texts.indexOf("m1.2"));
+    // 竖线 x 随步进前进（Math.round(x)+0.5-1 取整，与 S0-T01 同式）
+    const xs = verticalLineXs();
+    expect(xs).toContain(-0.5);
+    expect(xs).toContain(39.5);
+    expect(xs).toContain(79.5);
+
+    cleanup();
+  });
+
+  it("S1-T02: grid=0.25 → cursor 前进=量化落点+durQn(整数拍步进) + hint 传递(zoom 后细分线) (non-critical)", async () => {
+    const port = makeMockPort("default");
+    stubRequestMidiAccess(makeMockAccess([port]));
+
+    const { container, readNotes, cleanup } = renderAppWithRecording({
+      quantizeGrid: 0.25,
+    });
+    await flush();
+
+    const before = readNotes();
+
+    // 音1: 500ms=1拍 → landing snap(1)=1, durQn=1 → 落(1,1) → cursor (1,2)
+    dispatchMidi(port, [0x90, 60, 90], 1000);
+    dispatchMidi(port, [0x80, 60, 0], 1500);
+    await waitFor(() => readNotes().length === before.length + 1);
+    await waitFor(() => fillTexts().includes("m1.2"));
+
+    // 音2: landing snap(2)=2, durQn=1 → 落(1,2) → cursor (1,3)
+    dispatchMidi(port, [0x90, 62, 90], 3000);
+    dispatchMidi(port, [0x80, 62, 0], 3500);
+    await waitFor(() => readNotes().length === before.length + 2);
+    await waitFor(() => fillTexts().includes("m1.3"));
+
+    // cursor x 随量化落点+durQn 整数拍步进：39.5 → 79.5
+    const xs = verticalLineXs();
+    expect(xs).toContain(39.5);
+    expect(xs).toContain(79.5);
+
+    // quantizeGridHint 传递断言：默认 pixelsPerBeat=40 → 40*0.25=10<12
+    // 密度不足零绘制；zoom-in 后 48*0.25=12 达标 → 细分线出现。若 App 未把
+    // recording.quantizeGrid 传给 quantizeGridHint，两条断言均不成立。
+    expect(propSets("globalAlpha")).not.toContain(0.25);
+    expect(verticalLineXs()).not.toContain(12.5);
+    act(() => {
+      container
+        .querySelector('[data-testid="piano-roll-zoom-in"]')!
+        .dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true })
+        );
+    });
+    expect(propSets("globalAlpha")).toContain(0.25);
+    // beat0 内 k=1 细分线：sx = 1*0.25*48 = 12 → 12.5
+    expect(verticalLineXs()).toContain(12.5);
 
     cleanup();
   });

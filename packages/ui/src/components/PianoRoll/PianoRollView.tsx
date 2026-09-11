@@ -24,6 +24,10 @@ interface PianoRollViewProps {
    * undefined / 空集时零行为变化（键位 className 输出与既有路径完全一致）。
    */
   activePitches?: Set<number>;
+  /** v1.27.0: MIDI 录入光标（下一个落盘位置，非播放头）。undefined 零行为变化 */
+  cursorPosition?: { bar: number; beat: number };
+  /** v1.27.0: 量化网格细分提示（与 settings.midi.recording.quantizeGrid 同型）。undefined/0 零行为变化 */
+  quantizeGridHint?: 0 | 0.25 | 0.5 | 1;
 }
 
 type ToolMode = "select" | "draw";
@@ -79,6 +83,8 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   selectedNoteIds = [],
   height,
   activePitches,
+  cursorPosition,
+  quantizeGridHint,
 }) => {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -146,6 +152,13 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     const totalBeats =
       (viewRange.endBar - viewRange.startBar + 1) * BEATS_PER_BAR;
 
+    // v1.27.0 (D1-3): 量化网格细分线开关——hint 为 0/undefined 或像素密度
+    // 不足（细分间距 < 12px）时不画，保持既有行为完全不变。
+    const drawSubGrid =
+      quantizeGridHint !== undefined &&
+      quantizeGridHint > 0 &&
+      pixelsPerBeat * quantizeGridHint >= 12;
+
     for (let beat = 0; beat <= totalBeats; beat++) {
       const x = beat * pixelsPerBeat - scrollX;
       if (x < -2 || x > w + 2) continue;
@@ -163,6 +176,55 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
         ctx.fillStyle = getCSSVar('--text-muted');
         ctx.font = "10px sans-serif";
         ctx.fillText(`${barNum}`, x + 3, 12);
+      }
+
+      if (drawSubGrid && beat < totalBeats) {
+        // 每对相邻 beat 竖线之间画 quantizeGridHint 细分线（0.25 → 拍内
+        // +0.25/+0.5/+0.75 三条；0.5 → +0.5 一条；1 → 无）。0.25 透明度与
+        // 既有 border-primary 色、0.5 线宽，取整方式与 beat 线一致。
+        const subSteps = Math.round(1 / (quantizeGridHint as number)) - 1;
+        ctx.globalAlpha = 0.25;
+        try {
+          for (let k = 1; k <= subSteps; k++) {
+            const sx = x + k * (quantizeGridHint as number) * pixelsPerBeat;
+            if (sx < -2 || sx > w + 2) continue;
+            ctx.strokeStyle = getCSSVar('--border-primary');
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(Math.round(sx) + 0.5, 0);
+            ctx.lineTo(Math.round(sx) + 0.5, h);
+            ctx.stroke();
+          }
+        } finally {
+          // v1.27.0 (D2-3): 防护——stroke 抛出时避免 alpha=0.25 泄漏到同帧
+          // 后续 cursor/音符绘制（canvas.width 重置仅跨帧自愈）。正常路径
+          // 行为不变（仍画完后恢复 1），S0-T04b 的 alpha 序列断言不受影响。
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
+    // v1.27.0 (D1-2): MIDI 录入光标竖线（下一个落盘位置，非播放头）。
+    // 越界（bar 超出 viewRange / x 出画布）不画；undefined 不画。
+    if (cursorPosition) {
+      const { bar, beat } = cursorPosition;
+      const inViewRange =
+        bar >= viewRange.startBar && bar <= viewRange.endBar;
+      const cursorTicks =
+        (bar - viewRange.startBar) * BEATS_PER_BAR + (beat - 1);
+      const cursorX = cursorTicks * pixelsPerBeat - scrollX;
+      if (inViewRange && cursorX >= 0 && cursorX <= w) {
+        ctx.strokeStyle = getCSSVar('--accent-purple');
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.round(cursorX) + 0.5 - 1, 0);
+        ctx.lineTo(Math.round(cursorX) + 0.5 - 1, h);
+        ctx.stroke();
+
+        // 位置标签：与既有 bar 号标签同款（x+3, 12, 10px sans-serif）。
+        ctx.fillStyle = getCSSVar('--accent-purple');
+        ctx.font = "10px sans-serif";
+        ctx.fillText(`m${bar}.${beat}`, cursorX + 3, 12);
       }
     }
 
@@ -260,6 +322,8 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     canvasSize,
     selectedNoteIds,
     interaction,
+    cursorPosition,
+    quantizeGridHint,
   ]);
 
   useEffect(() => {
