@@ -443,7 +443,22 @@
     "sostenuto": "Sostenuto Pedal",
     "soft": "Soft Pedal",
     "testMIDI": "Test MIDI",
-    "testResult": "Test Result"
+    "testResult": "Test Result",
+    "recording": {
+      "title": "Recording",
+      "quantizeGrid": "Quantize Grid",
+      "quantizeGridDesc": "Snap recorded note onsets to the selected grid",
+      "gridOff": "Off",
+      "gridQuarter": "1/4 beat",
+      "gridHalf": "1/2 beat",
+      "gridWhole": "1 beat",
+      "velocityMode": "Velocity Mode",
+      "velocityModeDesc": "Record the live note velocity or use a fixed value",
+      "velocityLive": "Live",
+      "velocityFixed": "Fixed",
+      "fixedVelocity": "Fixed Velocity",
+      "fixedVelocityDesc": "Velocity used when mode is Fixed (1-127)"
+    }
   },
   "settings.mixing": {
     "title": "Mixing Settings",

@@ -3,6 +3,8 @@ import { useI18n } from '../../i18n/hooks';
 import { useSettings } from '../../hooks/useSettings';
 import { useDeviceEnumeration } from '../../hooks/useDeviceEnumeration';
 import { enumerateMidiDevices } from '../../services/device-enumeration';
+import { DEFAULT_SETTINGS } from '../../types/settings';
+import type { MidiSettings as MidiSettingsType } from '../../types/settings';
 import { DeviceSelector } from './DeviceSelector';
 import styles from './AudioMidiSettings.module.css';
 
@@ -19,6 +21,10 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
   const { t } = useI18n();
   const { settings, updateSettings, resetCategory } = useSettings();
   const { midi } = settings;
+  // v1.26.0 (D2-3): 录入设置块。真实 Provider 经 deepMerge 必有 recording；
+  // 兜底默认值以兼容旧 settings 夹具（测试 mock 未含该块时仍可渲染）。
+  const recording: MidiSettingsType['recording'] =
+    midi.recording ?? DEFAULT_SETTINGS.midi.recording;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 处理输入设备变更
@@ -51,6 +57,39 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
       },
     });
   }, [midi, updateSettings]);
+
+  // v1.26.0 (D2-3): 录入设置变更（与 handleChannelChange 同构）
+  const handleQuantizeGridChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const grid = parseFloat(e.target.value);
+    updateSettings({
+      midi: {
+        ...midi,
+        recording: { ...recording, quantizeGrid: grid as MidiSettingsType['recording']['quantizeGrid'] },
+      },
+    });
+  }, [midi, recording, updateSettings]);
+
+  const handleVelocityModeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const mode = e.target.value;
+    updateSettings({
+      midi: {
+        ...midi,
+        recording: { ...recording, velocityMode: mode as MidiSettingsType['recording']['velocityMode'] },
+      },
+    });
+  }, [midi, recording, updateSettings]);
+
+  const handleFixedVelocityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = parseInt(e.target.value, 10);
+    if (Number.isNaN(raw)) return;
+    const fixedVelocity = Math.min(127, Math.max(1, raw));
+    updateSettings({
+      midi: {
+        ...midi,
+        recording: { ...recording, fixedVelocity },
+      },
+    });
+  }, [midi, recording, updateSettings]);
 
   // v1.24.0 (D2-4): 真实设备枚举替换假刷新（原定时器模拟已删除）。
   // 挂载时枚举一次，刷新按钮经 refresh 重新枚举。
@@ -212,6 +251,83 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
           <p className={styles.settingDescription}>
             {t('settings.midi.currentChannel', { channel: midi.midiChannel }) || `当前通道: ${midi.midiChannel}`}
           </p>
+        </div>
+      </div>
+
+      {/* v1.26.0 (D2-3): 录入设置（量化网格 / 力度模式 / 固定力度） */}
+      <div className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t('settings.midi.recording.title') || '录入设置'}</h3>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel} htmlFor="recordingGrid">
+              {t('settings.midi.recording.quantizeGrid') || '量化网格'}
+            </label>
+          </div>
+          <p className={styles.settingDescription}>
+            {t('settings.midi.recording.quantizeGridDesc') || '将录入音符的落点对齐到所选网格'}
+          </p>
+          <div className={styles.settingControl}>
+            <select
+              id="recordingGrid"
+              data-testid="recording-grid"
+              className={styles.selectControl}
+              value={String(recording.quantizeGrid)}
+              onChange={handleQuantizeGridChange}
+            >
+              <option value="0">{t('settings.midi.recording.gridOff') || 'Off'}</option>
+              <option value="0.25">{t('settings.midi.recording.gridQuarter') || '1/4 beat'}</option>
+              <option value="0.5">{t('settings.midi.recording.gridHalf') || '1/2 beat'}</option>
+              <option value="1">{t('settings.midi.recording.gridWhole') || '1 beat'}</option>
+            </select>
+          </div>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel} htmlFor="recordingVelocityMode">
+              {t('settings.midi.recording.velocityMode') || '力度模式'}
+            </label>
+          </div>
+          <p className={styles.settingDescription}>
+            {t('settings.midi.recording.velocityModeDesc') || '记录实时力度或使用固定力度值'}
+          </p>
+          <div className={styles.settingControl}>
+            <select
+              id="recordingVelocityMode"
+              data-testid="recording-velocity-mode"
+              className={styles.selectControl}
+              value={recording.velocityMode}
+              onChange={handleVelocityModeChange}
+            >
+              <option value="live">{t('settings.midi.recording.velocityLive') || 'Live'}</option>
+              <option value="fixed">{t('settings.midi.recording.velocityFixed') || 'Fixed'}</option>
+            </select>
+          </div>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel} htmlFor="recordingFixedVelocity">
+              {t('settings.midi.recording.fixedVelocity') || '固定力度'}
+            </label>
+          </div>
+          <p className={styles.settingDescription}>
+            {t('settings.midi.recording.fixedVelocityDesc') || '固定模式使用的力度值 (1-127)'}
+          </p>
+          <div className={styles.settingControl}>
+            <input
+              id="recordingFixedVelocity"
+              data-testid="recording-fixed-velocity"
+              type="number"
+              className={styles.selectControl}
+              min={1}
+              max={127}
+              value={recording.fixedVelocity}
+              disabled={recording.velocityMode !== 'fixed'}
+              onChange={handleFixedVelocityChange}
+            />
+          </div>
         </div>
       </div>
 

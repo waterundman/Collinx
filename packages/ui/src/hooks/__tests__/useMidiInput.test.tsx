@@ -128,11 +128,11 @@ describe('useMidiInput (S0-T03~T06)', () => {
     expect(requestMIDIAccess).toHaveBeenCalledWith({ sysex: false });
     expect(port1.onmidimessage).toBeTypeOf('function');
 
-    // 直调 handler（伪造 MIDIMessageEvent.data，绕事件构造）
+    // 直调 handler（伪造 MIDIMessageEvent.data，无 timeStamp → 走兜底路径）
     (port1.onmidimessage as (e: { data: Uint8Array }) => void)({
       data: new Uint8Array([0x90, 0x3c, 0x64]),
     });
-    expect(onNoteOn).toHaveBeenCalledWith(60, 100);
+    expect(onNoteOn).toHaveBeenCalledWith(60, 100, expect.any(Number));
 
     h.unmount();
   });
@@ -228,5 +228,61 @@ describe('useMidiInput (S0-T03~T06)', () => {
     // statechange 监听在清理时移除
     h2.unmount();
     expect(access.onstatechange).toBeNull();
+  });
+
+  // ── v1.26.0 D1-2: timeStamp 透传与兜底 ──
+  it('S0-T07 (v1.26): handler 注入 timeStamp=1234 → 第三参透传 noteon/noteoff (critical)', async () => {
+    const onNoteOn = vi.fn();
+    const onNoteOff = vi.fn();
+    const port = makeMockPort('dev-1');
+    vi.stubGlobal('navigator', {
+      requestMIDIAccess: vi.fn().mockResolvedValue(makeMockAccess([port])),
+    });
+
+    const h = renderHookHarness({ onNoteOn, onNoteOff }, 'dev-1');
+    await flush();
+
+    const handler = port.onmidimessage as (e: {
+      data: Uint8Array;
+      timeStamp?: number;
+    }) => void;
+
+    // noteon：{ data, timeStamp: 1234 } → onNoteOn(60, 100, 1234)
+    handler({ data: new Uint8Array([0x90, 60, 100]), timeStamp: 1234 });
+    expect(onNoteOn).toHaveBeenCalledTimes(1);
+    expect(onNoteOn).toHaveBeenCalledWith(60, 100, 1234);
+
+    // noteoff：同样透传 timeStamp
+    handler({ data: new Uint8Array([0x80, 60, 64]), timeStamp: 2345 });
+    expect(onNoteOff).toHaveBeenCalledTimes(1);
+    expect(onNoteOff).toHaveBeenCalledWith(60, 2345);
+
+    h.unmount();
+  });
+
+  it('S0-T08 (v1.26): 事件无 timeStamp 字段 → performance.now() 兜底，不 throw (critical)', async () => {
+    const onNoteOn = vi.fn();
+    const onNoteOff = vi.fn();
+    const port = makeMockPort('dev-1');
+    vi.stubGlobal('navigator', {
+      requestMIDIAccess: vi.fn().mockResolvedValue(makeMockAccess([port])),
+    });
+
+    const h = renderHookHarness({ onNoteOn, onNoteOff }, 'dev-1');
+    await flush();
+
+    const handler = port.onmidimessage as (e: { data: Uint8Array }) => void;
+
+    // jsdom / 异常事件对象无 timeStamp → 兜底 performance.now()（有限数）
+    handler({ data: new Uint8Array([0x90, 60, 100]) });
+    expect(onNoteOn).toHaveBeenCalledTimes(1);
+    const ts = onNoteOn.mock.calls[0]![2] as number;
+    expect(Number.isFinite(ts)).toBe(true);
+
+    handler({ data: new Uint8Array([0x80, 60, 64]) });
+    expect(onNoteOff).toHaveBeenCalledTimes(1);
+    expect(Number.isFinite(onNoteOff.mock.calls[0]![1] as number)).toBe(true);
+
+    h.unmount();
   });
 });

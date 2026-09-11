@@ -40,6 +40,8 @@ import {
 import { useProjectStore } from "./hooks/useProjectStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useMidiInput } from "./hooks/useMidiInput";
+import { useSettings } from "./hooks/useSettings";
+import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
 import type {
   ArrangerConfigInput,
   ArrangerRunResult,
@@ -65,6 +67,56 @@ function formatAutosaveTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * v1.26.0 Stage 1 (D2-1): noteoff 落盘计算纯辅助函数。
+ *
+ * - durQn = clamp(elapsedMs→拍, 0.25, 8)（elapsed<=0 → 0 拍走 clamp 下限）
+ * - landing = snapBeat(cursor.beat, grid)；landing > 4 → bar 回绕（4/4）
+ * - cursor 前进：从落盘位置起 landing + durQn，beat > 4 → bar 回绕
+ *   （量化落点 + 实测时长，下一音从上一音结束处开始）
+ *
+ * 抽成纯函数的原因：landing>4 回绕分支在 cursor 恒有界的运行时不变量下
+ * （每次步进后 while 归位）不可经公开 MIDI API 直达，纯函数直测可覆盖
+ * 该防御分支；集成层用 1.3 拍序列覆盖 cursor 回绕 → 落点进下一小节。
+ */
+export interface NoteOffPlacement {
+  /** 落盘位置（已回绕） */
+  bar: number;
+  beat: number;
+  durQn: number;
+  /** cursor 前进后的位置 */
+  nextCursor: { bar: number; beat: number };
+}
+
+export function computeNoteOffPlacement(input: {
+  cursor: { bar: number; beat: number };
+  elapsedMs: number;
+  bpm: number;
+  grid: number;
+}): NoteOffPlacement {
+  const { cursor, elapsedMs, bpm, grid } = input;
+  const beats = elapsedToBeats(elapsedMs, bpm);
+  const durQn = Math.min(8, Math.max(0.25, beats));
+  let bar = cursor.bar;
+  let landing = snapBeat(cursor.beat, grid);
+  while (landing > 4) {
+    bar += 1;
+    landing -= 4;
+  }
+  let nextBar = bar;
+  let nextBeat = landing + durQn;
+  while (nextBeat > 4) {
+    nextBar += 1;
+    nextBeat -= 4;
+  }
+  return {
+    bar,
+    beat: landing,
+    durQn,
+    nextCursor: { bar: nextBar, beat: nextBeat },
+  };
 }
 
 export function App() {
@@ -270,16 +322,24 @@ export function App() {
   // v1.25.0 Stage 1 (D2-2): MIDI 录入闭环状态。
   // - activePitches：当前按下的 pitch 集合，直接驱动 PianoRollView 键位高亮。
   // - inputCursor：录入光标（最小闭环，App 层 useState；store 无全局 transport）。
-  //   4/4 基准，初始 {bar:1, beat:1}，每落盘一音 beat += durQn，beat>4 →
-  //   bar+1 / beat-=4。tempo/transport 感知 defer 到后续 Stage，不实现。
+  //   4/4 基准，初始 {bar:1, beat:1}，每落盘一音自上一音结束处继续步进，
+  //   beat>4 → bar+1 / beat-=4。
+  //   v1.26.0 (D2-1)：durQn 改为实测（timeStamp 差 → 拍），落点按
+  //   settings.midi.recording.quantizeGrid 量化；velocity 支持 fixed 模式。
   const [activePitches, setActivePitches] = useState<Set<number>>(() => new Set());
   const [inputCursor, setInputCursor] = useState({ bar: 1, beat: 1 });
   const inputCursorRef = useRef(inputCursor);
   inputCursorRef.current = inputCursor;
 
-  // noteon 的 velocity 需在 noteoff 落盘时使用（onNoteOff 回调签名只带 note），
-  // 以 note → velocity 映射暂存。
-  const activeVelocitiesRef = useRef(new Map<number, number>());
+  // noteon 的 velocity + tOn（接收时刻 timeStamp）需在 noteoff 落盘时使用，
+  // 以 note → {velocity, tOn} 映射暂存。tOn 非有限数时兜底 performance.now()
+  // （useMidiInput 已兜底，此处双保险）。
+  const activeVelocitiesRef = useRef(
+    new Map<number, { velocity: number; tOn: number }>()
+  );
+
+  const { settings } = useSettings();
+  const recording = settings.midi.recording;
 
   const handleNoteAdd = useCallback((note: Omit<NoteEvent, "id">) => {
     const newNote = createNoteEvent(note);
@@ -287,60 +347,76 @@ export function App() {
     actionsRef.current.addNote(newNote);
   }, []);
 
-  // durQn = clamp(实测拍数, 0.25, 8)。最小闭环暂以固定 1.0 拍作为"实测拍数"
-  // （与 PianoRoll 鼠标添加音符的 durQn:1 同构）；真实的按住时长计时依赖
-  // transport/tempo，defer。
-  const clampDurQn = (beats: number) => Math.min(8, Math.max(0.25, beats));
+  const handleMidiNoteOn = useCallback(
+    (note: number, velocity: number, timeStamp: number) => {
+      const tOn =
+        typeof timeStamp === "number" && Number.isFinite(timeStamp)
+          ? timeStamp
+          : performance.now();
+      activeVelocitiesRef.current.set(note, { velocity, tOn });
+      setActivePitches((prev) => {
+        if (prev.has(note)) return prev;
+        const next = new Set(prev);
+        next.add(note);
+        return next;
+      });
+    },
+    []
+  );
 
-  const handleMidiNoteOn = useCallback((note: number, velocity: number) => {
-    activeVelocitiesRef.current.set(note, velocity);
-    setActivePitches((prev) => {
-      if (prev.has(note)) return prev;
-      const next = new Set(prev);
-      next.add(note);
-      return next;
-    });
-  }, []);
-
-  const handleMidiNoteOff = useCallback((note: number) => {
-    // 移除高亮（函数式更新）
-    setActivePitches((prev) => {
-      if (!prev.has(note)) return prev;
-      const next = new Set(prev);
-      next.delete(note);
-      return next;
-    });
-    // 落盘：字段构造与 PianoRoll 鼠标添加音符路径同构
-    // （usePianoRollInteraction.handleDoubleClick → trackId:"default"），
-    // bar/beat 取落盘前的录入光标位置，复用既有 handleNoteAdd →
-    // createNoteEvent → actions.addNote 路径。
-    const velocity = activeVelocitiesRef.current.get(note) ?? 100;
-    activeVelocitiesRef.current.delete(note);
-    const cursor = inputCursorRef.current;
-    const durQn = clampDurQn(1.0);
-    handleNoteAdd({
-      trackId: "default",
-      phraseId: null,
-      bar: cursor.bar,
-      beat: cursor.beat,
-      durQn,
-      pitchMidi: note,
-      pitchSpelling: "",
-      velocity: velocity / 127,
-      voice: "rh",
-      tags: [],
-    });
-    // 光标步进（函数式更新）：beat 累计，beat>4 → bar+1 / beat 回绕（4/4）
-    setInputCursor((prev) => {
-      let bar = prev.bar;
-      let beat = prev.beat + durQn;
-      while (beat > 4) {
-        bar += 1;
-        beat -= 4;
-      }
-      return { bar, beat };
-    });
-  }, [handleNoteAdd]);
+  const handleMidiNoteOff = useCallback(
+    (note: number, timeStamp: number) => {
+      // 移除高亮（函数式更新）
+      setActivePitches((prev) => {
+        if (!prev.has(note)) return prev;
+        const next = new Set(prev);
+        next.delete(note);
+        return next;
+      });
+      // 落盘：字段构造与 PianoRoll 鼠标添加音符路径同构
+      // （usePianoRollInteraction.handleDoubleClick → trackId:"default"）。
+      // v1.26.0 (D2-1)：实测时长（tOff - tOn → 拍，bpm 取 cursor 处 tempo）
+      // + 量化落点 + fixed velocity 模式；纯计算抽至 computeNoteOffPlacement。
+      const entry =
+        activeVelocitiesRef.current.get(note) ?? {
+          velocity: 100,
+          tOn: performance.now(),
+        };
+      activeVelocitiesRef.current.delete(note);
+      const tOff =
+        typeof timeStamp === "number" && Number.isFinite(timeStamp)
+          ? timeStamp
+          : performance.now();
+      const elapsed = Math.max(0, tOff - entry.tOn);
+      const cursor = inputCursorRef.current;
+      const placement = computeNoteOffPlacement({
+        cursor,
+        elapsedMs: elapsed,
+        bpm: tempoMap.bpmAt(cursor.bar, cursor.beat),
+        grid: recording.quantizeGrid,
+      });
+      const velocity =
+        recording.velocityMode === "fixed"
+          ? recording.fixedVelocity / 127
+          : entry.velocity / 127;
+      handleNoteAdd({
+        trackId: "default",
+        phraseId: null,
+        bar: placement.bar,
+        beat: placement.beat,
+        durQn: placement.durQn,
+        pitchMidi: note,
+        pitchSpelling: "",
+        velocity,
+        voice: "rh",
+        tags: [],
+      });
+      // cursor 前进：从落盘位置起 landing + durQn（computeNoteOffPlacement
+      // 已含 beat>4 → bar+1 / beat-=4 回绕，见 placement.nextCursor）
+      setInputCursor(placement.nextCursor);
+    },
+    [handleNoteAdd, recording, tempoMap]
+  );
 
   // v1.25.0 Stage 1 (D2-2): MIDI 输入绑定（读 settings.midi.midiDevice.input，
   // enabled 默认 true；回调经 hook 内部 ref 稳定，失败路径全程静默）。

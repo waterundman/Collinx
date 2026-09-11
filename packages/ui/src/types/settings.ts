@@ -30,6 +30,12 @@ export interface MidiSettings {
   };
   midiMapping: Record<string, string>;
   midiChannel: number; // MIDI通道 (1-16)
+  /** v1.26.0 录入设置 */
+  recording: {
+    quantizeGrid: 0 | 0.25 | 0.5 | 1;
+    velocityMode: 'live' | 'fixed';
+    fixedVelocity: number; // 1-127
+  };
 }
 
 /** 混音设置 */
@@ -107,6 +113,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
     },
     midiMapping: {},
     midiChannel: 1,
+    // v1.26.0 (D2-2): 默认值 = v1.25 行为零回归（grid off + live velocity）
+    recording: {
+      quantizeGrid: 0,
+      velocityMode: 'live',
+      fixedVelocity: 100,
+    },
   },
   mixer: {
     defaultFXChain: [],
