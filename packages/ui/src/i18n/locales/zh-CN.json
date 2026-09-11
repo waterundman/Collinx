@@ -390,7 +390,9 @@
       "connected": "已连接",
       "notSelected": "未选择",
       "refreshing": "刷新中...",
-      "refresh": "刷新设备"
+      "refresh": "刷新设备",
+      "permissionDenied": "设备权限被拒绝，请在浏览器设置中允许后重试",
+      "unavailableApi": "设备枚举不可用（需要 HTTPS 环境）"
     }
   },
   "settings.general": {
@@ -1583,6 +1585,9 @@
       "load": "加载工程",
       "restoreAutosave": "恢复自动保存 ({{time}})",
       "autosaveRestoreFailed": "恢复自动保存快照失败，当前工程未受影响，可重试。"
+    },
+    "settings": {
+      "open": "设置"
     }
   }
 }

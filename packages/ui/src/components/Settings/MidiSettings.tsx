@@ -1,6 +1,8 @@
 import React, { useCallback, useState, useRef } from 'react';
 import { useI18n } from '../../i18n/hooks';
 import { useSettings } from '../../hooks/useSettings';
+import { useDeviceEnumeration } from '../../hooks/useDeviceEnumeration';
+import { enumerateMidiDevices } from '../../services/device-enumeration';
 import { DeviceSelector } from './DeviceSelector';
 import styles from './AudioMidiSettings.module.css';
 
@@ -50,13 +52,12 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
     });
   }, [midi, updateSettings]);
 
-  // 刷新MIDI设备
-  const handleRefreshMidiDevices = useCallback(async () => {
-    // 在Web环境中，实际获取MIDI设备需要使用Web MIDI API
-    // 这里模拟刷新操作
-    await new Promise(resolve => setTimeout(resolve, 500));
-    console.log('MIDI devices refreshed');
-  }, []);
+  // v1.24.0 (D2-4): 真实设备枚举替换假刷新（原定时器模拟已删除）。
+  // 挂载时枚举一次，刷新按钮经 refresh 重新枚举。
+  // 注意：enumerateMidiDevices 内部调用 requestMIDIAccess，会触发浏览器
+  // MIDI 授权弹窗（预期行为）。
+  const midiDevices = useDeviceEnumeration(enumerateMidiDevices);
+  const handleRefreshMidiDevices = midiDevices.refresh;
 
   // 导出MIDI映射
   const handleExportMapping = useCallback(() => {
@@ -149,19 +150,33 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
       {/* MIDI设备选择 */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>{t('settings.midi.device') || 'MIDI设备'}</h3>
-        
+
+        {/* D2-4: 权限三态提示（denied/unavailable 时显示；DeviceSelector 既有空态照旧） */}
+        {midiDevices.permission === 'denied' && (
+          <p className={styles.settingDescription} data-testid="device-permission-warning">
+            {t('settings.device.permissionDenied')}
+          </p>
+        )}
+        {midiDevices.permission === 'unavailable' && (
+          <p className={styles.settingDescription} data-testid="device-permission-warning">
+            {t('settings.device.unavailableApi')}
+          </p>
+        )}
+
         <DeviceSelector
           deviceType="midi"
           direction="input"
           value={midi.midiDevice.input}
+          devices={midiDevices.input}
           onChange={handleInputChange}
           onRefresh={handleRefreshMidiDevices}
         />
-        
+
         <DeviceSelector
           deviceType="midi"
           direction="output"
           value={midi.midiDevice.output}
+          devices={midiDevices.output}
           onChange={handleOutputChange}
           onRefresh={handleRefreshMidiDevices}
         />

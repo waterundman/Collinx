@@ -31,6 +31,7 @@ import { AgentPanel, AgentChat, ToolCallTimeline } from "./components/Agent";
 import { GraphView, NodeDetail } from "./components/KnowledgeGraph";
 import type { ConnectedNode, GraphData } from "./components/KnowledgeGraph";
 import { TopBar, TabPill } from "./components/Shell";
+import { SettingsPage } from "./components/Settings";
 import styles from "./App.module.css";
 import {
   createDefaultLayout,
@@ -68,6 +69,11 @@ function formatAutosaveTime(iso: string): string {
 export function App() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<TabId>("compose");
+
+  // v1.24.0 Stage 1 (D1-1): settings modal open state — SettingsPage is a
+  // role="dialog" modal that unmounts conditionally (Escape handled inside
+  // SettingsPage via its onClose prop).
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Stage 1/2: real diff/rollback state + AgentBus + notes/graph from the
   // project store. Notes and graph are single source of truth in ProjectGraph.
@@ -673,6 +679,14 @@ export function App() {
         >
           {t("app.project.load")}
         </button>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          data-testid="open-settings"
+          className={styles.topBarButton}
+        >
+          {t("app.settings.open")}
+        </button>
         {autosaveRecovery ? (
           <button
             type="button"
@@ -966,6 +980,10 @@ export function App() {
           onWriteToReject={handleWriteToReject}
         />
       )}
+
+      {/* v1.24.0 Stage 1 (D1-2): settings modal, conditionally mounted.
+          Escape-to-close lives inside SettingsPage (onKeyDown → onClose). */}
+      {settingsOpen && <SettingsPage onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

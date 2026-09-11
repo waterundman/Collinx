@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo } from 'react';
 import { useI18n } from '../../i18n/hooks';
 import { useSettings } from '../../hooks/useSettings';
+import { useDeviceEnumeration } from '../../hooks/useDeviceEnumeration';
+import { enumerateAudioDevices } from '../../services/device-enumeration';
 import { DeviceSelector } from './DeviceSelector';
 import styles from './AudioMidiSettings.module.css';
 
@@ -100,13 +102,10 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
     });
   }, [audio, updateSettings]);
 
-  // 刷新音频设备
-  const handleRefreshAudioDevices = useCallback(async () => {
-    // 在Web环境中，实际获取音频设备需要使用Web Audio API
-    // 这里模拟刷新操作
-    await new Promise(resolve => setTimeout(resolve, 500));
-    console.log('Audio devices refreshed');
-  }, []);
+  // v1.24.0 (D2-3): 真实设备枚举替换假刷新（原定时器+日志模拟已删除）。
+  // 挂载时枚举一次，刷新按钮经 refresh 重新枚举。
+  const audioDevices = useDeviceEnumeration(enumerateAudioDevices);
+  const handleRefreshAudioDevices = audioDevices.refresh;
 
   // 重置音频设置
   const handleReset = useCallback(() => {
@@ -126,19 +125,33 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
       {/* 音频设备选择 */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>{t('settings.audio.device') || '音频设备'}</h3>
-        
+
+        {/* D2-3: 权限三态提示（denied/unavailable 时显示；DeviceSelector 既有空态照旧） */}
+        {audioDevices.permission === 'denied' && (
+          <p className={styles.settingDescription} data-testid="device-permission-warning">
+            {t('settings.device.permissionDenied')}
+          </p>
+        )}
+        {audioDevices.permission === 'unavailable' && (
+          <p className={styles.settingDescription} data-testid="device-permission-warning">
+            {t('settings.device.unavailableApi')}
+          </p>
+        )}
+
         <DeviceSelector
           deviceType="audio"
           direction="input"
           value={audio.audioDevice.input}
+          devices={audioDevices.input}
           onChange={handleInputChange}
           onRefresh={handleRefreshAudioDevices}
         />
-        
+
         <DeviceSelector
           deviceType="audio"
           direction="output"
           value={audio.audioDevice.output}
+          devices={audioDevices.output}
           onChange={handleOutputChange}
           onRefresh={handleRefreshAudioDevices}
         />

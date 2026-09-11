@@ -390,7 +390,9 @@
       "connected": "Connected",
       "notSelected": "Not selected",
       "refreshing": "Refreshing...",
-      "refresh": "Refresh devices"
+      "refresh": "Refresh devices",
+      "permissionDenied": "Device permission denied. Allow it in browser settings and retry",
+      "unavailableApi": "Device enumeration unavailable (HTTPS required)"
     }
   },
   "settings.general": {
@@ -1583,6 +1585,9 @@
       "load": "Load Project",
       "restoreAutosave": "Restore autosave ({{time}})",
       "autosaveRestoreFailed": "Failed to restore the autosave snapshot. Your current project is unchanged — you can try again."
+    },
+    "settings": {
+      "open": "Settings"
     }
   }
 }

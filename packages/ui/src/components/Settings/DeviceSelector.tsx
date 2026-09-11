@@ -82,14 +82,16 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
 
   // 获取设备状态文本
   const getDeviceStatus = useCallback((device: DeviceInfo): string => {
-    if (!device.isAvailable) return t('settings.device.unavailable') || '不可用';
+    // v1.24.0: isAvailable 仅在显式 false 时视为不可用（音频枚举无该字段，
+    // undefined 表示未知/可用，不能误标为不可用）
+    if (device.isAvailable === false) return t('settings.device.unavailable') || '不可用';
     if (device.isDefault) return t('settings.device.default') || '默认';
     return t('settings.device.connected') || '已连接';
   }, [t]);
 
   // 获取设备状态样式
   const getStatusDotClass = useCallback((device: DeviceInfo): string => {
-    if (!device.isAvailable) return `${styles.statusDot} ${styles.statusDotError}`;
+    if (device.isAvailable === false) return `${styles.statusDot} ${styles.statusDotError}`;
     return styles.statusDot;
   }, []);
 
@@ -133,11 +135,15 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
           onChange={(e) => onChange(e.target.value)}
         >
           {devices.map((device) => (
-            <option key={device.id} value={device.id} disabled={!device.isAvailable}>
+            <option
+              key={device.id}
+              value={device.id}
+              disabled={device.isAvailable === false}
+            >
               {device.name}
               {device.manufacturer ? ` (${device.manufacturer})` : ''}
               {device.isDefault ? ' - 默认' : ''}
-              {!device.isAvailable ? ' - 不可用' : ''}
+              {device.isAvailable === false ? ' - 不可用' : ''}
             </option>
           ))}
         </select>
