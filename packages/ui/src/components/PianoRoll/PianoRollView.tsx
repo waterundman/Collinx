@@ -28,6 +28,10 @@ interface PianoRollViewProps {
   cursorPosition?: { bar: number; beat: number };
   /** v1.27.0: 量化网格细分提示（与 settings.midi.recording.quantizeGrid 同型）。undefined/0 零行为变化 */
   quantizeGridHint?: 0 | 0.25 | 0.5 | 1;
+  /** v1.28.0: cursor 越视口自动滚动跟随（if-needed 最小平移语义，DAW 惯例）。
+   *  右缘阈值 w-48 / 左出时左缘留 48px；clamp [0, maxScrollX]。
+   *  默认 false 零行为变化。 */
+  autoScrollFollow?: boolean;
 }
 
 type ToolMode = "select" | "draw";
@@ -37,6 +41,8 @@ const KEYBOARD_WIDTH = 56;
 const BEATS_PER_BAR = 4;
 const MIN_PIXELS_PER_BEAT = 15;
 const MAX_PIXELS_PER_BEAT = 200;
+/** v1.28.0 (D1-2): autoScrollFollow 的右缘/左缘留白（px）。 */
+const FOLLOW_EDGE_MARGIN = 48;
 
 function getCSSVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -85,6 +91,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   activePitches,
   cursorPosition,
   quantizeGridHint,
+  autoScrollFollow,
 }) => {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -221,10 +228,21 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
         ctx.lineTo(Math.round(cursorX) + 0.5 - 1, h);
         ctx.stroke();
 
-        // 位置标签：与既有 bar 号标签同款（x+3, 12, 10px sans-serif）。
+        // v1.28.0 (D1-1): 顶部倒三角图标（与竖线同色）——顶点 (cursorX, 8)、
+        // 两上角 (cursorX∓4, 0)，实心填充。
+        ctx.fillStyle = getCSSVar('--accent-purple');
+        ctx.beginPath();
+        ctx.moveTo(cursorX, 8);
+        ctx.lineTo(cursorX - 4, 0);
+        ctx.lineTo(cursorX + 4, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        // 位置标签：与既有 bar 号标签同款（x+6, 12, 10px sans-serif）；
+        // v1.28.0 起由 +3 右移至 +6，避让三角半宽 4px。
         ctx.fillStyle = getCSSVar('--accent-purple');
         ctx.font = "10px sans-serif";
-        ctx.fillText(`m${bar}.${beat}`, cursorX + 3, 12);
+        ctx.fillText(`m${bar}.${beat}`, cursorX + 6, 12);
       }
     }
 
@@ -329,6 +347,49 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   useEffect(() => {
     drawCanvas();
   }, [drawCanvas]);
+
+  // v1.28.0 (D1-2): cursor 越视口自动滚动跟随——if-needed 最小平移语义（DAW 惯例）：
+  // 仅在 cursor 越过右缘阈值 w-48 或左出画布时平移，落在视口内不动。独立 effect
+  // （不并入上面的重绘 effect）；setScrollX 后由 drawCanvas 的 scrollX 依赖链
+  // 自然触发重绘。scrollX 读自闭包，驱动事件是 cursorPosition 变化（父层重渲染
+  // 时闭包必然新鲜）；仍将 scrollX 列入 deps 以满足 exhaustive-deps，effect 幂等
+  // （平移到位后走 else 分支 return）不会自激循环。
+  useEffect(() => {
+    if (!autoScrollFollow || !cursorPosition) return;
+    const { bar, beat } = cursorPosition;
+    if (bar < viewRange.startBar || bar > viewRange.endBar) return;
+
+    const cursorTicks =
+      (bar - viewRange.startBar) * BEATS_PER_BAR + (beat - 1);
+    const w = canvasSize.width;
+    const cursorX = cursorTicks * pixelsPerBeat - scrollX;
+
+    let newScrollX: number;
+    if (cursorX > w - FOLLOW_EDGE_MARGIN) {
+      newScrollX = cursorTicks * pixelsPerBeat - (w - FOLLOW_EDGE_MARGIN);
+    } else if (cursorX < 0) {
+      newScrollX = cursorTicks * pixelsPerBeat - FOLLOW_EDGE_MARGIN;
+    } else {
+      return;
+    }
+
+    const maxScrollX = Math.max(
+      0,
+      (viewRange.endBar - viewRange.startBar + 1) *
+        BEATS_PER_BAR *
+        pixelsPerBeat -
+        w
+    );
+    newScrollX = Math.max(0, Math.min(newScrollX, maxScrollX));
+    if (newScrollX !== scrollX) setScrollX(newScrollX);
+  }, [
+    autoScrollFollow,
+    cursorPosition,
+    pixelsPerBeat,
+    scrollX,
+    canvasSize.width,
+    viewRange,
+  ]);
 
   const getCanvasCoords = useCallback(
     (e: React.MouseEvent): { x: number; y: number } => {

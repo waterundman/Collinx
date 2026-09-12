@@ -918,6 +918,7 @@ export function App() {
                 activePitches={activePitches}
                 cursorPosition={inputCursor}
                 quantizeGridHint={recording.quantizeGrid}
+                autoScrollFollow
               />
             </div>
           </div>

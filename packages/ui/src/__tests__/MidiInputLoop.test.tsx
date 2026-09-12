@@ -1125,3 +1125,318 @@ describe("v1.27 App cursor wiring (S1-T01/T02)", () => {
     cleanup();
   });
 });
+
+// ── v1.28.0 Stage 1 (S1-T01/T02): App 接线 autoScrollFollow（录入跟随） ──
+//
+// 断言策略：沿用上段 v1.27 App 级 canvas spy harness（getContext → 记录型 ctx），
+// 在 App 全量渲染下断言 draw call —— 滚动是否发生、滚动量是否为推导值。
+//
+// harness 实态（读后确认；数值全部由公式推导，禁止魔法数）：
+//   - canvasSize = { width: 800, height: 600 }：PianoRollView 的 useState 初值，
+//     ResizeObserver stub 不回调 → 恒为初值；
+//   - pixelsPerBeat = 40（useState 初值）、BEATS_PER_BAR = 4；
+//   - App 调用点 viewRange = { startBar: 1, endBar: 8 }（App.tsx:911）
+//     → totalBeats = (8-1+1)*4 = 32 → totalWidth = 32*40 = 1280
+//     → maxScrollX = 1280 - 800 = 480；
+//   - FOLLOW_EDGE_MARGIN = 48（PianoRollView.tsx:45）→ 右缘阈值 = 800 - 48 = 752。
+//
+// cursor 步进推导（120bpm；每音 noteon→noteoff 相隔 500ms = 1 拍 → durQn=1，
+// 与 v1.25/v1.26 既有锚点一致）：
+//   第 N 音后 inputCursor = bar 1+floor(N/4) / beat (N mod 4)+1
+//   → cursorTicks = (bar-1)*4 + (beat-1) = N；未滚动时 cursorX = N*40。
+//   N ≤ 18 → cursorX ≤ 720 ≤ 752 不触发；
+//   N = 19 → cursorX = 760 > 752 → newScrollX = 760-752 = 8（0 ≤ 8 ≤ 480 未钳制）；
+//   N = 20 → cursorX = 800-8 = 792 > 752 → newScrollX = 800-752 = 48。
+//   故取 N = 20：末帧 scrollX = 48，cursor 竖线 x = 20*40 - 48 = 752 → 751.5。
+//
+// S1-T02 对照方案选择：App 现无条件传 autoScrollFollow=true，App 级"关闭跟随"
+// 场景不可得（新增测试专用 prop 会污染生产接口，违反"既有接线零变化"）。故采用
+// 同文件组件级直渲 PianoRollView 作对照：同一 canvas harness、同 viewRange /
+// cursorPosition，仅缺 autoScrollFollow 一项 → 唯一差异即该 flag，可隔离因果因子。
+describe("v1.28.0 App autoScrollFollow wiring (S1-T01/T02)", () => {
+  type DrawCall = { op: string; args: unknown[] };
+
+  // 与 S0 PianoRollView.test.tsx / 上段 v1.27 同款记录型 ctx（跨测试文件 import
+  // 会执行其 describe 注册，故复制）。
+  function createRecordingCtx() {
+    const calls: DrawCall[] = [];
+    const methods = [
+      "scale",
+      "clearRect",
+      "fillRect",
+      "beginPath",
+      "moveTo",
+      "lineTo",
+      "stroke",
+      "fill",
+      "fillText",
+      "closePath",
+      "quadraticCurveTo",
+    ];
+    const target: Record<string, unknown> = {};
+    for (const m of methods) {
+      target[m] = (...args: unknown[]) => {
+        calls.push({ op: m, args });
+      };
+    }
+    target.createLinearGradient = (...args: unknown[]) => {
+      calls.push({ op: "createLinearGradient", args });
+      return { addColorStop: () => {} };
+    };
+    const ctx = new Proxy(target, {
+      get(t, prop) {
+        if (typeof prop === "string" && prop in t) return t[prop];
+        return undefined;
+      },
+      set(t, prop, value) {
+        calls.push({ op: `set:${String(prop)}`, args: [value] });
+        Reflect.set(t, prop, value);
+        return true;
+      },
+    });
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
+  }
+
+  function NotesProbe() {
+    const { notes } = useProjectStore();
+    return (
+      <div
+        data-testid="probe-notes"
+        data-count={String(notes.length)}
+        data-notes={JSON.stringify(notes)}
+      />
+    );
+  }
+
+  function renderAppWithRecording(recording: Record<string, unknown>) {
+    seedRecordingSettings({
+      velocityMode: "live",
+      fixedVelocity: 100,
+      ...recording,
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    let root: Root;
+    act(() => {
+      root = createRoot(container);
+      root.render(
+        <I18nProvider>
+          <ProjectProvider>
+            <SettingsProvider>
+              <App />
+              <NotesProbe />
+            </SettingsProvider>
+          </ProjectProvider>
+        </I18nProvider>
+      );
+    });
+    const readNotes = () => {
+      const probe = container.querySelector('[data-testid="probe-notes"]');
+      if (!probe) throw new Error("probe-notes not found");
+      return JSON.parse(probe.getAttribute("data-notes")!) as Array<
+        Record<string, unknown>
+      >;
+    };
+    return {
+      container,
+      readNotes,
+      cleanup() {
+        act(() => {
+          root.unmount();
+          container.remove();
+        });
+      },
+    };
+  }
+
+  // harness 实态常量（见上方推导）
+  const CANVAS_W = 800;
+  const CANVAS_H = 600;
+  const PPB = 40;
+  const BEATS_PER_BAR = 4;
+  const FOLLOW_EDGE_MARGIN = 48;
+  const RIGHT_EDGE = CANVAS_W - FOLLOW_EDGE_MARGIN; // 752
+  /** 触发跟随所需音数：cursorX = N*PPB > RIGHT_EDGE → N ≥ 19；取 20 使滚动量确定。 */
+  const NOTE_COUNT = 20;
+  /** 未越缘音数：cursorX = 18*40 = 720 ≤ 752。 */
+  const PRE_EDGE = 18;
+
+  const { ctx, calls } = createRecordingCtx();
+
+  beforeAll(() => {
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  /** 每帧以 drawCanvas 起手的 ctx.scale(dpr,dpr) 为界切分（同 S0 frames()）。 */
+  function frames(): DrawCall[][] {
+    const out: DrawCall[][] = [];
+    let cur: DrawCall[] | null = null;
+    for (const c of calls) {
+      if (c.op === "scale") {
+        cur = [];
+        out.push(cur);
+      }
+      if (cur) cur.push(c);
+    }
+    return out;
+  }
+
+  function lastFrame(): DrawCall[] {
+    const fs = frames();
+    return fs.length > 0 ? fs[fs.length - 1] : [];
+  }
+
+  /** 竖线绘制（moveTo(x, 0) + lineTo(x, CANVAS_H)）：网格线与 cursor 竖线共用。 */
+  function verticalLineXsIn(frame: DrawCall[]): number[] {
+    const xs: number[] = [];
+    for (let i = 0; i < frame.length; i++) {
+      const c = frame[i];
+      if (
+        c.op === "moveTo" &&
+        c.args[1] === 0 &&
+        frame[i + 1]?.op === "lineTo" &&
+        frame[i + 1].args[0] === c.args[0] &&
+        frame[i + 1].args[1] === CANVAS_H
+      ) {
+        xs.push(Number(c.args[0]));
+      }
+    }
+    return xs;
+  }
+
+  /** cursor 位置标签（m{bar}.{beat}）及其 x/y。 */
+  function cursorLabelsIn(frame: DrawCall[]) {
+    return frame
+      .filter((c) => c.op === "fillText" && /^m\d+\.\d+$/.test(String(c.args[0])))
+      .map((c) => ({
+        text: String(c.args[0]),
+        x: Number(c.args[1]),
+        y: Number(c.args[2]),
+      }));
+  }
+
+  it("S1-T01: App 接线后同步进序列 → cursor 越右缘(752) 触发跟随，末帧竖线落回视口内 (critical)", async () => {
+    const port = makeMockPort("default");
+    stubRequestMidiAccess(makeMockAccess([port]));
+
+    const { readNotes, cleanup } = renderAppWithRecording({ quantizeGrid: 0 });
+    await flush();
+
+    const before = readNotes();
+
+    // 音高循环取用（仅避免同 pitch 叠加；pitchMidi 不参与 cursor 推导）
+    const PITCHES = Array.from({ length: NOTE_COUNT }, (_, i) => 60 + (i % 12));
+
+    // 前 18 音：cursorTicks ≤ 18 → cursorX ≤ 720 ≤ 752 → 不触发跟随
+    PITCHES.slice(0, PRE_EDGE).forEach((pitch, i) => {
+      const tOn = 1000 + i * 2000;
+      dispatchMidi(port, [0x90, pitch, 90], tOn);
+      dispatchMidi(port, [0x80, pitch, 0], tOn + 500);
+    });
+    await waitFor(() => readNotes().length === before.length + PRE_EDGE);
+
+    // 未越缘：末帧 scrollX=0 → beat0 在 0.5、cursor 竖线在 719.5
+    const preLines = verticalLineXsIn(lastFrame());
+    expect(preLines).toContain(Math.round(0 * PPB) + 0.5);
+    expect(preLines).toContain(Math.round(PRE_EDGE * PPB) + 0.5 - 1);
+    expect(preLines).not.toContain(RIGHT_EDGE - 0.5); // 751.5 = 跟随后的位置
+
+    // 第 19、20 音：越过右缘 → 跟随滚动
+    PITCHES.slice(PRE_EDGE).forEach((pitch, i) => {
+      const idx = PRE_EDGE + i;
+      const tOn = 1000 + idx * 2000;
+      dispatchMidi(port, [0x90, pitch, 90], tOn);
+      dispatchMidi(port, [0x80, pitch, 0], tOn + 500);
+    });
+    await waitFor(() => readNotes().length === before.length + NOTE_COUNT);
+
+    // 推导末帧：scrollX = 20*40 - 752 = 48；cursorX = 800 - 48 = 752
+    const EXPECTED_SCROLL_X = NOTE_COUNT * PPB - RIGHT_EDGE;
+    expect(EXPECTED_SCROLL_X).toBe(48);
+    const expectedCursorX = NOTE_COUNT * PPB - EXPECTED_SCROLL_X;
+    expect(expectedCursorX).toBe(752);
+
+    // 滚动发生 → 至少一次 setScrollX 引发的第二帧
+    expect(frames().length).toBeGreaterThanOrEqual(2);
+
+    const lines = verticalLineXsIn(lastFrame());
+    const cursorLine = Math.round(expectedCursorX) + 0.5 - 1; // 751.5
+    expect(lines).toContain(cursorLine);
+    expect(cursorLine).toBeGreaterThanOrEqual(0);
+    expect(cursorLine).toBeLessThanOrEqual(CANVAS_W);
+    // 网格同步平移：beat2 → 2*40 - 48 = 32 → 32.5
+    expect(lines).toContain(Math.round(2 * PPB - EXPECTED_SCROLL_X) + 0.5);
+    // 反证未滚动：cursor 竖线会是 799.5、beat0 会是 0.5（scrollX=0 才出现）
+    expect(lines).not.toContain(Math.round(NOTE_COUNT * PPB) + 0.5 - 1);
+    expect(lines).not.toContain(Math.round(0 * PPB) + 0.5);
+
+    // 标签右移 6px：x = 752 + 6 = 758；落点 bar6 beat1（N=20 → ticks 20）
+    const labels = cursorLabelsIn(lastFrame());
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatchObject({
+      text: "m6.1",
+      x: expectedCursorX + 6,
+      y: 12,
+    });
+    expect(labels[0].x).toBeLessThanOrEqual(CANVAS_W);
+
+    cleanup();
+  });
+
+  it("S1-T02: 对照——同 viewRange/cursor 但不传 autoScrollFollow → 不滚动 (non-critical)", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    let root: Root;
+    act(() => {
+      root = createRoot(container);
+      root.render(
+        <I18nProvider>
+          <PianoRollView
+            notes={[]}
+            tempoMap={tempoMapStub}
+            viewRange={{ startBar: 1, endBar: 8 }}
+            cursorPosition={{ bar: 6, beat: 1 }} // = S1-T01 第 20 音后的 App inputCursor
+          />
+        </I18nProvider>
+      );
+    });
+
+    // 未传 autoScrollFollow（默认 false）→ 无滚动副作用 → 仅一帧
+    expect(frames()).toHaveLength(1);
+    const lines = verticalLineXsIn(lastFrame());
+    expect(lines).toContain(Math.round(0 * PPB) + 0.5); // beat0 → 0.5（scrollX=0）
+    // cursor ticks = (6-1)*4 + (1-1) = 20 → cursorX = 800 → 799.5（未跟随）
+    expect(lines).toContain(Math.round(20 * PPB) + 0.5 - 1);
+    expect(lines).not.toContain(RIGHT_EDGE - 0.5); // 751.5（仅跟随开启才出现）
+    expect(cursorLabelsIn(lastFrame())[0]).toMatchObject({
+      text: "m6.1",
+      x: 800 + 6,
+    });
+
+    act(() => {
+      root.unmount();
+      container.remove();
+    });
+  });
+});
