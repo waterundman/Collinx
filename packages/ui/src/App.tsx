@@ -40,6 +40,7 @@ import {
 import { useProjectStore } from "./hooks/useProjectStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useMidiInput } from "./hooks/useMidiInput";
+import { useMidiOutput } from "./hooks/useMidiOutput";
 import { useSettings } from "./hooks/useSettings";
 import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
 import type {
@@ -117,6 +118,20 @@ export function computeNoteOffPlacement(input: {
     durQn,
     nextCursor: { bar: nextBar, beat: nextBeat },
   };
+}
+
+/** v1.29.0 Stage 1 (D2-3): 试听音符发声时长（ms）。最小闭环固定值，非设置项。 */
+const AUDITION_DURATION_MS = 300;
+
+/**
+ * v1.29.0 Stage 1 (D2-3): 归一化 velocity(0-1) → MIDI velocity(1-127) 纯函数。
+ * NoteEvent.velocity 为 0-1（落盘时由 entry.velocity / 127 得到，见
+ * handleMidiNoteOff）；试听落点为其逆运算：先 round(v*127) 取整，再 clamp
+ * 到 MIDI 合法区间 [1,127]（velocity 0 在多数合成器上等价 note off，故下界
+ * 取 1）。抽为导出纯函数以对齐 computeNoteOffPlacement 先例，便于直测。
+ */
+export function computeAuditionVelocity(normalizedVelocity01: number): number {
+  return Math.max(1, Math.min(127, Math.round(normalizedVelocity01 * 127)));
 }
 
 export function App() {
@@ -421,6 +436,17 @@ export function App() {
   // v1.25.0 Stage 1 (D2-2): MIDI 输入绑定（读 settings.midi.midiDevice.input，
   // enabled 默认 true；回调经 hook 内部 ref 稳定，失败路径全程静默）。
   useMidiInput({ onNoteOn: handleMidiNoteOn, onNoteOff: handleMidiNoteOff });
+
+  // v1.29.0 Stage 1 (D2-3): MIDI 输出试听——PianoRollView clean click 音符时
+  // 经 useMidiOutput 立即发声（静默失败；无绑定端口则 no-op）。velocity 由
+  // NoteEvent 归一化值换算为 MIDI 1-127，时长固定 AUDITION_DURATION_MS。
+  const { playNote } = useMidiOutput();
+  const handleNoteAudition = useCallback(
+    (pitchMidi: number, velocity01: number) => {
+      playNote(pitchMidi, computeAuditionVelocity(velocity01), AUDITION_DURATION_MS);
+    },
+    [playNote]
+  );
 
   const handleNoteMove = (noteId: string, newBar: number, newBeat: number, newPitch: number) => {
     actions.moveNote(noteId, newBar, newBeat, newPitch);
@@ -915,6 +941,7 @@ export function App() {
                 onNoteResize={handleNoteResize}
                 onNoteDelete={handleNoteDelete}
                 onNoteSelect={setSelectedIds}
+                onNoteAudition={handleNoteAudition}
                 activePitches={activePitches}
                 cursorPosition={inputCursor}
                 quantizeGridHint={recording.quantizeGrid}

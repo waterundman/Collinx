@@ -18,6 +18,11 @@ export interface UsePianoRollInteractionParams {
   onNoteResize?: (noteId: string, newDurQn: number) => void;
   onNoteDelete?: (noteId: string) => void;
   onNoteSelect?: (noteIds: string[]) => void;
+  /**
+   * v1.29.0 Stage 1 (D2-1): clean click 试听回调（pitchMidi 0-127 /
+   * velocity 归一化 0-1，即 NoteEvent 原字段）。undefined 零行为变化。
+   */
+  onNoteAudition?: (pitchMidi: number, velocity: number) => void;
   selectedNoteIds: string[];
 }
 
@@ -33,6 +38,7 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
     onNoteResize,
     onNoteDelete,
     onNoteSelect,
+    onNoteAudition,
     selectedNoteIds,
   } = params;
 
@@ -135,6 +141,19 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
         const deltaX = canvasX - draggingState.startX;
         const deltaY = canvasY - draggingState.startY;
 
+        // v1.29.0 Stage 1 (D2-1): 首次发生位移即置 hasMoved —— 它是
+        // handleMouseUp 中 clean-click 判定的唯一依据（未拖动才试听）。
+        // 原实现从未置位（恒 false），会使任何 mousedown+mouseup 都被当作
+        // clean click；此处补置，仅在 false→true 时 setState，避免每次
+        // mousemove 触发重渲染（对既有 onNoteMove/onNoteResize 无影响）。
+        // 副作用（既有行为修正，S1 验证登记）：拖拽结束不再重复触发
+        // onNoteSelect —— 但 handleMouseDown 命中时已 onNoteSelect([id])，
+        // 净选中结果不变。本调用内后续 move/resize 仍读旧 draggingState，
+        // 而 hasMoved 非其计算输入，故无首帧位移丢失。
+        if (!draggingState.hasMoved && (deltaX !== 0 || deltaY !== 0)) {
+          setDraggingState({ ...draggingState, hasMoved: true });
+        }
+
         if (draggingState.mode === "move") {
           const deltaBeats = deltaX / pixelsPerBeat;
           const originalBeats =
@@ -167,10 +186,17 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
     (canvasX: number, canvasY: number) => {
       if (draggingState && !draggingState.hasMoved) {
         onNoteSelect?.([draggingState.noteId]);
+        // v1.29.0 Stage 1 (D2-1): clean click（按下后未拖动、命中既有音符）
+        // 触发一次试听。拖拽（hasMoved）/ 空白点击（draggingState 为 null）
+        // / 双击添加（走 handleDoubleClick）均不进入此分支。
+        const note = notes.find((n) => n.id === draggingState.noteId);
+        if (note) {
+          onNoteAudition?.(note.pitchMidi, note.velocity);
+        }
       }
       setDraggingState(null);
     },
-    [draggingState, onNoteSelect]
+    [draggingState, onNoteSelect, onNoteAudition, notes]
   );
 
   const handleDoubleClick = useCallback(

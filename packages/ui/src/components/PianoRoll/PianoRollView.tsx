@@ -17,6 +17,9 @@ interface PianoRollViewProps {
   onNoteResize?: (noteId: string, newDurQn: number) => void;
   onNoteDelete?: (noteId: string) => void;
   onNoteSelect?: (noteIds: string[]) => void;
+  /** v1.29.0 Stage 1 (D2-2): clean click 试听（pitchMidi 0-127 / velocity 0-1）。
+   *  undefined 零行为变化（与 v1.25-v1.28 先例一致，仅透传给交互 hook）。 */
+  onNoteAudition?: (pitchMidi: number, velocity: number) => void;
   selectedNoteIds?: string[];
   height?: number;
   /**
@@ -86,6 +89,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   onNoteResize,
   onNoteDelete,
   onNoteSelect,
+  onNoteAudition,
   selectedNoteIds = [],
   height,
   activePitches,
@@ -117,6 +121,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     onNoteResize,
     onNoteDelete,
     onNoteSelect,
+    onNoteAudition,
     selectedNoteIds,
   });
 
