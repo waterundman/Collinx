@@ -29,12 +29,38 @@ interface PianoRollViewProps {
   activePitches?: Set<number>;
   /** v1.27.0: MIDI 录入光标（下一个落盘位置，非播放头）。undefined 零行为变化 */
   cursorPosition?: { bar: number; beat: number };
+  /**
+   * v2.0.0 Stage 1 (D1-2): 播放头位置（transport 播放位置，与录入光标语义正交，
+   * 两者可同时显示）。beat 允许小数（连续播放头）：竖线 x 用连续 beat 值绘制，
+   * 顶部倒三角 + 位置标签 `m{bar}.{floor(beat)}` 取整显示；橙色
+   * （--accent-sunset，区别于光标的 --accent-purple）。
+   * 越界（bar 超出 viewRange / x 出画布）不绘制。
+   * undefined = 零行为变化（绘制调用序列与 v1.29 逐字节一致）。
+   */
+  playheadPosition?: { bar: number; beat: number };
   /** v1.27.0: 量化网格细分提示（与 settings.midi.recording.quantizeGrid 同型）。undefined/0 零行为变化 */
   quantizeGridHint?: 0 | 0.25 | 0.5 | 1;
   /** v1.28.0: cursor 越视口自动滚动跟随（if-needed 最小平移语义，DAW 惯例）。
    *  右缘阈值 w-48 / 左出时左缘留 48px；clamp [0, maxScrollX]。
-   *  默认 false 零行为变化。 */
+   *  默认 false 零行为变化。
+   *  v2.0.0 Stage 2 (D2-1): 跟随目标泛化为 `playheadPosition ?? cursorPosition`
+   *  （播放头优先）；仅给 cursorPosition 时与 v1.28 逐字节一致。 */
   autoScrollFollow?: boolean;
+  /** v2.0.0 Stage 2 (D2-4): transport 运行代次（App 在 play/stop 时自增）。
+   *  **值变化**即复位内部 followSuspended=false（Ableton 语义：手动平移会挂起
+   *  跟随，直到 transport 停止/重启）。undefined 或同值重渲染 = 零行为变化。 */
+  transportRunId?: number;
+  /**
+   * v2.0.0 Stage 2.1 (S2.1 裁决): 是否允许播放头作为自动跟随权威。
+   * D2-1 字面规则 `playheadPosition ?? cursorPosition`（播放头优先）只承诺
+   * 「仅给 cursorPosition 时与 v1.28 一致」，却未考虑 App **同时恒传**
+   * playheadPosition（idle 时恒为 m1.1）的接线场景 —— 那会让跟随目标永远停在
+   * x=0 的播放头，静默杀掉 v1.28 的录入光标自动跟随。故 S2.1 裁决：按 transport
+   * 是否运行切换跟随权威。`false` = 忽略播放头、回退到 cursorPosition；未给
+   * cursorPosition 时即不跟随。**默认 true**（不传时行为与 S2 一致，既有组件级
+   * 用例不受影响）。
+   */
+  followPlayhead?: boolean;
 }
 
 type ToolMode = "select" | "draw";
@@ -94,8 +120,11 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   height,
   activePitches,
   cursorPosition,
+  playheadPosition,
   quantizeGridHint,
   autoScrollFollow,
+  transportRunId,
+  followPlayhead = true,
 }) => {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -107,6 +136,35 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
   const [toolMode, setToolMode] = useState<ToolMode>("select");
   const animationRef = useRef<number>(0);
+
+  // v2.0.0 Stage 2 (D2-4): 手动平移挂起跟随；transportRunId 值变化即复位。
+  const [followSuspended, setFollowSuspended] = useState(false);
+  // v2.0.0 Stage 2 (D2-2): 中键拖拽平移状态（client 坐标 + 起始滚动量）。
+  const panStateRef = useRef<{
+    startX: number;
+    startY: number;
+    startScrollX: number;
+    startScrollY: number;
+  } | null>(null);
+
+  // v2.0.0 Stage 2 (D2-3): 平移上界。maxScrollY = (MAX_PITCH-MIN_PITCH+1)*18 - h
+  // （= 930 @h=600）；maxScrollX 与既有 follow effect 公式一致。
+  const maxScrollX = Math.max(
+    0,
+    (viewRange.endBar - viewRange.startBar + 1) *
+      BEATS_PER_BAR *
+      pixelsPerBeat -
+      canvasSize.width
+  );
+  const maxScrollY = Math.max(
+    0,
+    (MAX_PITCH - MIN_PITCH + 1) * NOTE_HEIGHT - canvasSize.height
+  );
+
+  // v2.0.0 Stage 2 (D2-1): 跟随目标 = 播放头优先，回退到录入光标。
+  // v2.0.0 Stage 2.1 (S2.1 裁决): followPlayhead=false 时忽略播放头（回退到
+  // 录入光标），用于 App 在 transport 未运行时保住 v1.28 的录入光标自动跟随。
+  const followTarget = (followPlayhead ? playheadPosition : undefined) ?? cursorPosition;
 
   const keyboardKeys = useMemo(() => buildKeyboardKeys(), []);
 
@@ -251,6 +309,40 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
       }
     }
 
+    // v2.0.0 Stage 1 (D1-2): 播放头竖线（与录入光标正交，可同时显示）。
+    // 橙色（--accent-sunset）区别于光标紫色；竖线 x 用连续小数 beat（平滑
+    // 移动），顶部倒三角几何复用 v1.28 光标写法，位置标签取 floor(beat)。
+    // 越界（bar 超出 viewRange / x 出画布）不画；undefined 不画（零行为变化）。
+    if (playheadPosition) {
+      const { bar, beat } = playheadPosition;
+      const inViewRange = bar >= viewRange.startBar && bar <= viewRange.endBar;
+      const playheadTicks =
+        (bar - viewRange.startBar) * BEATS_PER_BAR + (beat - 1);
+      const playheadX = playheadTicks * pixelsPerBeat - scrollX;
+      if (inViewRange && playheadX >= 0 && playheadX <= w) {
+        ctx.strokeStyle = getCSSVar('--accent-sunset');
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(playheadX, 0);
+        ctx.lineTo(playheadX, h);
+        ctx.stroke();
+
+        // 顶部倒三角（与竖线同色）：顶点 (playheadX, 8)、两上角 (playheadX∓4, 0)。
+        ctx.fillStyle = getCSSVar('--accent-sunset');
+        ctx.beginPath();
+        ctx.moveTo(playheadX, 8);
+        ctx.lineTo(playheadX - 4, 0);
+        ctx.lineTo(playheadX + 4, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        // 位置标签：beat 为小数（连续播放头）→ 显示取整；x = 竖线 + 6 避让三角。
+        ctx.fillStyle = getCSSVar('--accent-sunset');
+        ctx.font = "10px sans-serif";
+        ctx.fillText(`m${bar}.${Math.floor(beat)}`, playheadX + 6, 12);
+      }
+    }
+
     for (let midi = MIN_PITCH; midi <= MAX_PITCH; midi++) {
       const y = (MAX_PITCH - midi) * NOTE_HEIGHT + NOTE_HEIGHT - scrollY;
       if (y < -2 || y > h + 2) continue;
@@ -346,6 +438,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     selectedNoteIds,
     interaction,
     cursorPosition,
+    playheadPosition,
     quantizeGridHint,
   ]);
 
@@ -353,47 +446,60 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     drawCanvas();
   }, [drawCanvas]);
 
-  // v1.28.0 (D1-2): cursor 越视口自动滚动跟随——if-needed 最小平移语义（DAW 惯例）：
-  // 仅在 cursor 越过右缘阈值 w-48 或左出画布时平移，落在视口内不动。独立 effect
+  // v2.0.0 Stage 2 (D2-4): transportRunId **值变化**（非"值存在"）才复位挂起。
+  // v2.0.0 S5 (D5-4)：**删除已被证明冗余的 prevTransportRunIdRef 守卫**——deps 只有
+  // [transportRunId]，React 的依赖比较（Object.is）本身即等价于"值变化"，父层同值
+  // 重渲染不会重跑本 effect（原守卫的注释声称的作用已由 deps 承担）。挂载时首跑一次
+  // setFollowSuspended(false) 为 no-op（初值已是 false）。S2 验证期以变异证实删守卫后
+  // T16 仍绿、删整个 effect 才变红。
+  useEffect(() => {
+    setFollowSuspended(false);
+  }, [transportRunId]);
+
+  // v1.28.0 (D1-2): 越视口自动滚动跟随——if-needed 最小平移语义（DAW 惯例）：
+  // 仅在目标越过右缘阈值 w-48 或左出画布时平移，落在视口内不动。独立 effect
   // （不并入上面的重绘 effect）；setScrollX 后由 drawCanvas 的 scrollX 依赖链
-  // 自然触发重绘。scrollX 读自闭包，驱动事件是 cursorPosition 变化（父层重渲染
+  // 自然触发重绘。scrollX 读自闭包，驱动事件是 followTarget 变化（父层重渲染
   // 时闭包必然新鲜）；仍将 scrollX 列入 deps 以满足 exhaustive-deps，effect 幂等
   // （平移到位后走 else 分支 return）不会自激循环。
+  //
+  // v2.0.0 Stage 2 (D2-1): 目标由 cursorPosition 泛化为 followTarget
+  // （playheadPosition ?? cursorPosition）。仅给 cursor 时 followTarget ===
+  // cursorPosition，几何与依赖与 v1.28 完全一致（零回归）。
+  // v2.0.0 Stage 2.1 (S2.1 裁决): followPlayhead 进 deps —— 其值翻转会改变
+  // followTarget，必须重跑本 effect（初值 true，不传时不改变既有行为）。
+  // v2.0.0 Stage 2 (D2-4): followSuspended 为真时不再自动平移（手动平移已挂起）。
   useEffect(() => {
-    if (!autoScrollFollow || !cursorPosition) return;
-    const { bar, beat } = cursorPosition;
+    if (!autoScrollFollow || followSuspended || !followTarget) return;
+    const { bar, beat } = followTarget;
     if (bar < viewRange.startBar || bar > viewRange.endBar) return;
 
-    const cursorTicks =
+    const targetTicks =
       (bar - viewRange.startBar) * BEATS_PER_BAR + (beat - 1);
     const w = canvasSize.width;
-    const cursorX = cursorTicks * pixelsPerBeat - scrollX;
+    const targetX = targetTicks * pixelsPerBeat - scrollX;
 
     let newScrollX: number;
-    if (cursorX > w - FOLLOW_EDGE_MARGIN) {
-      newScrollX = cursorTicks * pixelsPerBeat - (w - FOLLOW_EDGE_MARGIN);
-    } else if (cursorX < 0) {
-      newScrollX = cursorTicks * pixelsPerBeat - FOLLOW_EDGE_MARGIN;
+    if (targetX > w - FOLLOW_EDGE_MARGIN) {
+      newScrollX = targetTicks * pixelsPerBeat - (w - FOLLOW_EDGE_MARGIN);
+    } else if (targetX < 0) {
+      newScrollX = targetTicks * pixelsPerBeat - FOLLOW_EDGE_MARGIN;
     } else {
       return;
     }
 
-    const maxScrollX = Math.max(
-      0,
-      (viewRange.endBar - viewRange.startBar + 1) *
-        BEATS_PER_BAR *
-        pixelsPerBeat -
-        w
-    );
     newScrollX = Math.max(0, Math.min(newScrollX, maxScrollX));
     if (newScrollX !== scrollX) setScrollX(newScrollX);
   }, [
     autoScrollFollow,
-    cursorPosition,
+    followSuspended,
+    followTarget,
+    followPlayhead,
     pixelsPerBeat,
     scrollX,
     canvasSize.width,
     viewRange,
+    maxScrollX,
   ]);
 
   const getCanvasCoords = useCallback(
@@ -409,6 +515,9 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
 
   const onCanvasMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      // v2.0.0 Stage 2 (D2-2): 中键/右键走各自通道（中键平移经 pointer 事件），
+      // 不再进入音符交互。左键（button 0）行为不变。
+      if (e.button !== 0) return;
       const { x, y } = getCanvasCoords(e);
       interaction.handleMouseDown(x, y);
     },
@@ -439,17 +548,102 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     [getCanvasCoords, interaction]
   );
 
+  // v2.0.0 Stage 2 (D2-2): 滚轮语义重映射（D1 决策，替换 v1.28 的 wheel=缩放）：
+  //   plain wheel      → scrollY 纵向平移
+  //   Shift+wheel      → scrollX 横向平移
+  //   Ctrl/⌘+wheel     → pixelsPerBeat 缩放（工具栏 +/- 按钮不受影响，仍可用）
+  // 平移均 clamp；任何平移置 followSuspended=true 挂起跟随（D2-4）。
+  const clamp = (v: number, lo: number, hi: number) =>
+    Math.max(lo, Math.min(v, hi));
+
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       e.preventDefault();
-      const scaleFactor = 1.1;
-      const newPpb = e.deltaY > 0
-        ? Math.max(MIN_PIXELS_PER_BEAT, pixelsPerBeat / scaleFactor)
-        : Math.min(MAX_PIXELS_PER_BEAT, pixelsPerBeat * scaleFactor);
-      setPixelsPerBeat(newPpb);
+      if (e.ctrlKey || e.metaKey) {
+        const scaleFactor = 1.1;
+        const newPpb =
+          e.deltaY > 0
+            ? Math.max(MIN_PIXELS_PER_BEAT, pixelsPerBeat / scaleFactor)
+            : Math.min(MAX_PIXELS_PER_BEAT, pixelsPerBeat * scaleFactor);
+        setPixelsPerBeat(newPpb);
+        // 缩放改变总宽 → 重新钳制 scrollX，避免越界。
+        setScrollX((prev) =>
+          clamp(
+            prev,
+            0,
+            Math.max(
+              0,
+              (viewRange.endBar - viewRange.startBar + 1) *
+                BEATS_PER_BAR *
+                newPpb -
+                canvasSize.width
+            )
+          )
+        );
+        return;
+      }
+      if (e.shiftKey) {
+        setScrollX((prev) => clamp(prev + e.deltaY, 0, maxScrollX));
+      } else {
+        // v2.0.0 S5 (D5-2): 触控板横向滚动（deltaX）驱动 scrollX。鼠标滚轮的
+        // deltaX 通常为 0，故既有 "plain wheel → scrollY" 语义不受影响；触控板
+        // 斜向手势可同时平移两轴。非有限防御：合成事件可能缺 deltaX（undefined），
+        // 不做防御会让 prev + undefined = NaN 污染 scrollX。
+        const deltaX = Number.isFinite(e.deltaX) ? e.deltaX : 0;
+        if (deltaX !== 0) {
+          setScrollX((prev) => clamp(prev + deltaX, 0, maxScrollX));
+        }
+        setScrollY((prev) => clamp(prev + e.deltaY, 0, maxScrollY));
+      }
+      setFollowSuspended(true);
     },
-    [pixelsPerBeat]
+    [pixelsPerBeat, maxScrollX, maxScrollY, canvasSize.width, viewRange]
   );
+
+  // v2.0.0 Stage 2 (D2-2): 中键拖拽平移（pointerdown button===1 → move → up）。
+  const onCanvasPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      panStateRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        startScrollX: scrollX,
+        startScrollY: scrollY,
+      };
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    },
+    [scrollX, scrollY]
+  );
+
+  const onCanvasPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      const pan = panStateRef.current;
+      if (!pan) return;
+      const dx = e.clientX - pan.startX;
+      const dy = e.clientY - pan.startY;
+      setScrollX(clamp(pan.startScrollX - dx, 0, maxScrollX));
+      setScrollY(clamp(pan.startScrollY - dy, 0, maxScrollY));
+      setFollowSuspended(true);
+    },
+    [maxScrollX, maxScrollY]
+  );
+
+  const onCanvasPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (e.button !== 1) return;
+      panStateRef.current = null;
+    },
+    []
+  );
+
+  // v2.0.0 S5 (D5-3): 手势被浏览器中断（pointercancel——如系统手势接管、触控板
+  // 手势抢占）时清理平移状态。缺此清理会让 panStateRef 残留，导致后续
+  // pointermove 继续平移（视觉上"卡住"）。注：cancel 事件的 button 不可靠
+  // （常为 -1 或 0），故**不按 button 过滤**，直接清状态。
+  const onCanvasPointerCancel = useCallback(() => {
+    panStateRef.current = null;
+  }, []);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -582,6 +776,10 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
             onMouseLeave={onCanvasMouseUp}
             onDoubleClick={onCanvasDoubleClick}
             onWheel={handleWheel}
+            onPointerDown={onCanvasPointerDown}
+            onPointerMove={onCanvasPointerMove}
+            onPointerUp={onCanvasPointerUp}
+            onPointerCancel={onCanvasPointerCancel}
             style={{ cursor: cursorStyle }}
           />
         </div>

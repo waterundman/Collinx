@@ -49,17 +49,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettings } from './useSettings';
 import { encodeNoteOn, encodeNoteOff } from '../services/midi-output';
+import type { MidiOutputPortLike } from './useTransport';
 
 export interface UseMidiOutputResult {
   /** 输出端口已绑定 */
   isAvailable: boolean;
   /** 立即发 noteOn，并在 performance.now() + durationMs 时刻调度 noteOff（timestamp 调度，无 setTimeout 抖动） */
   playNote: (note: number, velocity: number, durationMs: number) => void;
+  /**
+   * 暴露当前绑定的输出端口（v2.0.0 S0 / D0-7 additive 扩展，供 useTransport 注入）。
+   * 未绑定（无设备 / 不支持 / 未匹配）→ null。既有 isAvailable / playNote 行为不变。
+   */
+  getOutputPort: () => MidiOutputPortLike | null;
 }
 
 /** MIDIOutput 最小结构（避免依赖 lib.dom 的 Web MIDI 类型）。
  *  clear 可选：部分实现/旧浏览器无此方法。 */
-interface MidiOutputPortLike {
+interface BoundMidiOutputPort {
   id: string;
   state?: string;
   send(data: Uint8Array, timestamp?: number): void;
@@ -71,7 +77,7 @@ interface MidiOutputPortLike {
  *  形参为 lib.dom EventTarget 签名的子集，结构兼容；本 hook 只注册/移除
  *  statechange，不写 onstatechange 属性（原因见文件头）。 */
 interface MidiAccessLike {
-  outputs: { values(): Iterable<MidiOutputPortLike> };
+  outputs: { values(): Iterable<BoundMidiOutputPort> };
   addEventListener(type: string, handler: () => void): void;
   removeEventListener(type: string, handler: () => void): void;
 }
@@ -86,7 +92,7 @@ export function useMidiOutput(): UseMidiOutputResult {
   const [isAvailable, setIsAvailable] = useState(false);
 
   // playNote 从 ref 读端口：设备热插拔/重绑不改变 playNote 引用
-  const portRef = useRef<MidiOutputPortLike | null>(null);
+  const portRef = useRef<BoundMidiOutputPort | null>(null);
   // 已发出的音符：note → 已换算 channel（0-15），供清理时逐条补发 noteOff 防卡音
   const soundingNotesRef = useRef<Map<number, number>>(new Map());
   // settings 通道为 1-16，编码需要 0-15；每渲染同步，保证 playNote 引用稳定
@@ -104,7 +110,7 @@ export function useMidiOutput(): UseMidiOutputResult {
 
     // 依据 access 当前状态重新评估绑定：匹配 id 且未断连 → 绑定；否则解绑
     const syncBinding = (a: MidiAccessLike): void => {
-      let target: MidiOutputPortLike | undefined;
+      let target: BoundMidiOutputPort | undefined;
       for (const port of a.outputs.values()) {
         if (port.id === deviceId) {
           target = port;
@@ -188,5 +194,11 @@ export function useMidiOutput(): UseMidiOutputResult {
     []
   );
 
-  return { isAvailable, playNote };
+  // v2.0.0 S0 / D0-7：暴露输出端口访问器（引用稳定），供 useTransport 经依赖注入取用。
+  // BoundMidiOutputPort 结构兼容 MidiOutputPortLike（id 必填可赋给可选、send 方法参数双变）。
+  const getOutputPort = useCallback((): MidiOutputPortLike | null => {
+    return portRef.current;
+  }, []);
+
+  return { isAvailable, playNote, getOutputPort };
 }

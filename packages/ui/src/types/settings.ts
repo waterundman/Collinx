@@ -36,6 +36,13 @@ export interface MidiSettings {
     velocityMode: 'live' | 'fixed';
     fixedVelocity: number; // 1-127
   };
+  /** v2.0.0 Stage 2 (D2-5) 播放设置 */
+  playback: {
+    /** 播放头越视口时自动滚动跟随（原 v1.28 硬编码 true 的开关化） */
+    followPlayhead: boolean;
+    /** count-in 预备小节数（S3 消费；0 = 无 count-in） */
+    countInBars: 0 | 1 | 2;
+  };
 }
 
 /** 混音设置 */
@@ -118,6 +125,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
       quantizeGrid: 0,
       velocityMode: 'live',
       fixedVelocity: 100,
+    },
+    // v2.0.0 Stage 2 (D2-5): followPlayhead=true 与 v1.28 硬编码接线一致（零回归）；
+    // countInBars=1 为 DAW 惯例默认（S3 消费）。
+    playback: {
+      followPlayhead: true,
+      countInBars: 1,
     },
   },
   mixer: {

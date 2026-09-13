@@ -458,6 +458,17 @@
       "velocityFixed": "固定",
       "fixedVelocity": "固定力度",
       "fixedVelocityDesc": "固定模式使用的力度值 (1-127)"
+    },
+    "playback": {
+      "title": "播放设置",
+      "followPlayhead": "跟随播放头",
+      "followPlayheadDesc": "播放头移出视口时自动滚动跟随",
+      "followPlayheadEnable": "启用跟随",
+      "countInBars": "Count-in 小节数",
+      "countInBarsDesc": "起播前的预备小节数（0 = 不预备）",
+      "countInOff": "关闭",
+      "countInOne": "1 小节",
+      "countInTwo": "2 小节"
     }
   },
   "settings.mixing": {
@@ -1517,6 +1528,13 @@
     "draw": "绘制",
     "quantize": "量化",
     "zoom": "缩放"
+  },
+  "transport": {
+    "play": "播放",
+    "pause": "暂停",
+    "stop": "停止",
+    "position": "位置",
+    "countIn": "预备…"
   },
   "app": {
     "tabs": {

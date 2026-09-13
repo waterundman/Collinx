@@ -153,4 +153,17 @@ describe("v1.29.0 computeAuditionVelocity 纯函数 (S1-T03)", () => {
     expect(computeAuditionVelocity(1.5)).toBe(127); // 190.5 → clamp 上界 127
     expect(computeAuditionVelocity(-0.2)).toBe(1); // -25.4 → clamp 下界 1
   });
+
+  // v2.0.0 Stage 4（S4-T-S4-5c，P3）：非有限 velocity 防御。NaN/±Infinity
+  // 穿过原 Math.round(v*127) 会成 NaN → 编成 0 → 试听静音。加 Number.isFinite
+  // 防御（非有限 → 1）。有限输入结果完全不变。
+  it("T-S4-5c: 非有限 velocity → 1（NaN/±Infinity）；有限输入不变 (critical)", () => {
+    expect(computeAuditionVelocity(NaN)).toBe(1);
+    expect(computeAuditionVelocity(Infinity)).toBe(1);
+    expect(computeAuditionVelocity(-Infinity)).toBe(1);
+    // 有限输入不变（回归 S1-T03）
+    expect(computeAuditionVelocity(0)).toBe(1);
+    expect(computeAuditionVelocity(0.5)).toBe(64);
+    expect(computeAuditionVelocity(1)).toBe(127);
+  });
 });

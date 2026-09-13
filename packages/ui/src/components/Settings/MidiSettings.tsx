@@ -25,6 +25,9 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
   // 兜底默认值以兼容旧 settings 夹具（测试 mock 未含该块时仍可渲染）。
   const recording: MidiSettingsType['recording'] =
     midi.recording ?? DEFAULT_SETTINGS.midi.recording;
+  // v2.0.0 Stage 2 (D2-5): 播放设置块（旧 settings 夹具缺该块时回落默认值）。
+  const playback: MidiSettingsType['playback'] =
+    midi.playback ?? DEFAULT_SETTINGS.midi.playback;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 处理输入设备变更
@@ -90,6 +93,29 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
       },
     });
   }, [midi, recording, updateSettings]);
+
+  // v2.0.0 Stage 2 (D2-5): 播放设置变更（followPlayhead / countInBars）
+  const handleFollowPlayheadChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    updateSettings({
+      midi: {
+        ...midi,
+        playback: { ...playback, followPlayhead: e.target.checked },
+      },
+    });
+  }, [midi, playback, updateSettings]);
+
+  const handleCountInBarsChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const countInBars = parseInt(e.target.value, 10);
+    updateSettings({
+      midi: {
+        ...midi,
+        playback: {
+          ...playback,
+          countInBars: countInBars as MidiSettingsType['playback']['countInBars'],
+        },
+      },
+    });
+  }, [midi, playback, updateSettings]);
 
   // v1.24.0 (D2-4): 真实设备枚举替换假刷新（原定时器模拟已删除）。
   // 挂载时枚举一次，刷新按钮经 refresh 重新枚举。
@@ -327,6 +353,61 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
               disabled={recording.velocityMode !== 'fixed'}
               onChange={handleFixedVelocityChange}
             />
+          </div>
+        </div>
+      </div>
+
+      {/* v2.0.0 Stage 2 (D2-5): 播放设置（跟随播放头 / count-in 小节数） */}
+      <div className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t('settings.midi.playback.title', { defaultValue: '播放设置' })}</h3>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel} htmlFor="playbackFollowPlayhead">
+              {t('settings.midi.playback.followPlayhead', { defaultValue: '跟随播放头' })}
+            </label>
+          </div>
+          <p className={styles.settingDescription}>
+            {t('settings.midi.playback.followPlayheadDesc', { defaultValue: '播放头移出视口时自动滚动跟随' })}
+          </p>
+          <div className={styles.settingControl}>
+            <label className={styles.checkboxControl}>
+              <input
+                id="playbackFollowPlayhead"
+                data-testid="playback-follow-playhead"
+                type="checkbox"
+                className={styles.checkboxInput}
+                checked={playback.followPlayhead}
+                onChange={handleFollowPlayheadChange}
+              />
+              <span className={styles.checkboxLabel}>
+                {t('settings.midi.playback.followPlayheadEnable', { defaultValue: '启用跟随' })}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel} htmlFor="playbackCountInBars">
+              {t('settings.midi.playback.countInBars', { defaultValue: 'Count-in 小节数' })}
+            </label>
+          </div>
+          <p className={styles.settingDescription}>
+            {t('settings.midi.playback.countInBarsDesc', { defaultValue: '起播前的预备小节数（0 = 不预备）' })}
+          </p>
+          <div className={styles.settingControl}>
+            <select
+              id="playbackCountInBars"
+              data-testid="playback-count-in"
+              className={styles.selectControl}
+              value={String(playback.countInBars)}
+              onChange={handleCountInBarsChange}
+            >
+              <option value="0">{t('settings.midi.playback.countInOff', { defaultValue: '关闭' })}</option>
+              <option value="1">{t('settings.midi.playback.countInOne', { defaultValue: '1 小节' })}</option>
+              <option value="2">{t('settings.midi.playback.countInTwo', { defaultValue: '2 小节' })}</option>
+            </select>
           </div>
         </div>
       </div>

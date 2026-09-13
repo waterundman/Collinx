@@ -395,3 +395,38 @@ describe('useMidiOutput 多音 noteOff 补发 (S0 缺陷清偿)', () => {
     expect(Array.from(port.send.mock.calls[0]![0] as Uint8Array)[0]).toBe(0x92);
   });
 });
+
+// ── v2.0.0 S0 / D0-7: 输出端口访问器（additive 扩展，既有行为零回归） ──
+//
+// useTransport 经 getOutputPort 取得输出端口（依赖注入）。本组为纯追加，
+// 断言无设备 → null、有设备 → 绑定的同一 port 实例。
+describe('useMidiOutput.getOutputPort (v2.0.0 S0 additive 扩展)', () => {
+  it('S0-T07b: 无设备时 getOutputPort() 返回 null；有设备时返回绑定 port (critical)', async () => {
+    // (a) 无 requestMIDIAccess（不支持 Web MIDI）→ 未绑定端口
+    vi.stubGlobal('navigator', {});
+    const h1 = renderHookHarness('dev-out-1', 1);
+    await flush();
+    expect(h1.getResult().getOutputPort()).toBeNull();
+    h1.unmount();
+
+    // (b) 有匹配设备 → 返回 portRef 中绑定的同一 port 实例
+    const port = makeMockPort('dev-out-1');
+    vi.stubGlobal('navigator', {
+      requestMIDIAccess: vi
+        .fn()
+        .mockResolvedValue(makeMockAccess([port], new Map())),
+    });
+    const h2 = renderHookHarness('dev-out-1', 1);
+    await flush();
+    expect(h2.getResult().isAvailable).toBe(true);
+    expect(h2.getResult().getOutputPort()).toBe(port);
+    h2.unmount();
+
+    // 卸载后（清理 portRef）→ 再次挂载无设备 → null
+    vi.stubGlobal('navigator', {});
+    const h3 = renderHookHarness('dev-out-1', 1);
+    await flush();
+    expect(h3.getResult().getOutputPort()).toBeNull();
+    h3.unmount();
+  });
+});

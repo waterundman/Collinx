@@ -1,0 +1,76 @@
+/* TransportBar（v2.0.0 Stage 1 / D1-1）
+ * 全局 transport 工具条：play/pause + stop 控件 + 位置双形态显示。
+ * 配色仅用既有点设计令牌（design-tokens.css），强调色取 --accent-sunset
+ * （与钢琴卷播放头同色，形成 transport 视觉语言）。 */
+
+.transportBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 var(--space-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--transition-normal), border-color var(--transition-normal),
+    color var(--transition-normal);
+}
+
+.button:hover {
+  border-color: var(--accent-sunset);
+  color: var(--accent-sunset);
+}
+
+.button:active {
+  background: var(--bg-elevated);
+}
+
+.button:focus-visible {
+  outline: 1px solid var(--accent-sunset);
+  outline-offset: 1px;
+}
+
+.position {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.barBeat {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-sunset);
+}
+
+.time {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

@@ -458,6 +458,17 @@
       "velocityFixed": "Fixed",
       "fixedVelocity": "Fixed Velocity",
       "fixedVelocityDesc": "Velocity used when mode is Fixed (1-127)"
+    },
+    "playback": {
+      "title": "Playback",
+      "followPlayhead": "Follow Playhead",
+      "followPlayheadDesc": "Auto-scroll the view when the playhead moves out of sight",
+      "followPlayheadEnable": "Enable follow",
+      "countInBars": "Count-in Bars",
+      "countInBarsDesc": "Number of count-in bars before playback starts (0 = none)",
+      "countInOff": "Off",
+      "countInOne": "1 bar",
+      "countInTwo": "2 bars"
     }
   },
   "settings.mixing": {
@@ -1517,6 +1528,13 @@
     "draw": "Draw",
     "quantize": "Quantize",
     "zoom": "Zoom"
+  },
+  "transport": {
+    "play": "Play",
+    "pause": "Pause",
+    "stop": "Stop",
+    "position": "Position",
+    "countIn": "Count-in…"
   },
   "app": {
     "tabs": {

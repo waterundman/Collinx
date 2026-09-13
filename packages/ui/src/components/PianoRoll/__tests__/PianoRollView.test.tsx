@@ -3,6 +3,17 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { NoteEvent } from "@collinx/core";
 import { PianoRollView } from "../PianoRollView";
+import {
+  // v2.0.0 S5 (D5-1 / T24)：录制型 canvas ctx 已抽到共享模块（原此处内联定义，
+  // 与 MidiInputLoop.test.tsx 的两份逐字节重复）。行为等价是硬约束——S1-T09 的
+  // 388 条 golden 逐字节比对会捕获任何录制行为差异。
+  createRecordingCtx,
+  type DrawCall,
+} from "../../../test-utils/canvas-ctx";
+// v2.0.0 Stage 1 (T09): 改动前（v1.29）仅给 cursorPosition 时的完整绘制调用序列
+// golden（由未含 playhead 分支的实现录制）；用于证明新增 playhead 分支在
+// playheadPosition===undefined 时逐字节零行为变化。
+import cursorOnlyGolden from "./fixtures/pianoRollDrawCalls.cursorOnly.json";
 
 describe("PianoRollView", () => {
   const emptyNotes: NoteEvent[] = [];
@@ -85,46 +96,8 @@ describe("PianoRollView", () => {
 // 约束：不使用 @testing-library/react（任务要求）。
 // ---------------------------------------------------------------------------
 
-type DrawCall = { op: string; args: unknown[] };
-
-function createRecordingCtx() {
-  const calls: DrawCall[] = [];
-  const methods = [
-    "scale",
-    "clearRect",
-    "fillRect",
-    "beginPath",
-    "moveTo",
-    "lineTo",
-    "stroke",
-    "fill",
-    "fillText",
-    "closePath",
-    "quadraticCurveTo",
-  ];
-  const target: Record<string, unknown> = {};
-  for (const m of methods) {
-    target[m] = (...args: unknown[]) => {
-      calls.push({ op: m, args });
-    };
-  }
-  target.createLinearGradient = (...args: unknown[]) => {
-    calls.push({ op: "createLinearGradient", args });
-    return { addColorStop: () => {} };
-  };
-  const ctx = new Proxy(target, {
-    get(t, prop) {
-      if (typeof prop === "string" && prop in t) return t[prop];
-      return undefined;
-    },
-    set(t, prop, value) {
-      calls.push({ op: `set:${String(prop)}`, args: [value] });
-      Reflect.set(t, prop, value);
-      return true;
-    },
-  });
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
-}
+// v2.0.0 S5 (D5-1 / T24)：`DrawCall` 与 `createRecordingCtx` 已抽到
+// `src/test-utils/canvas-ctx.ts` 共享（见文件头 import）。此处原为内联定义。
 
 describe("PianoRollView v1.27.0 cursor / quantize-grid draw calls", () => {
   type ViewProps = React.ComponentProps<typeof PianoRollView>;
@@ -625,3 +598,835 @@ describe("PianoRollView v1.28.0 cursor icon / auto-scroll-follow draw calls", ()
     expect(cursorLabelsIn(lastFrame())[0]).toMatchObject({ text: "m1.1", x: 6 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// v2.0.0 Stage 1（S1-T08）：播放头（playheadPosition）绘制。
+//
+// 与 cursorPosition 语义正交，独立成块绘制在 cursor 之后：
+//   橙色（--accent-sunset，区别于 cursor 的 --accent-purple）2px 竖线 +
+//   顶部倒三角（几何同 v1.28 cursor：顶点 (x,8) / 两上角 (x∓4,0)）+
+//   m{bar}.{floor(beat)} 标签（beat 为小数，标签取整、竖线 x 用连续值）。
+// 越界（bar 超 viewRange / x 出画布）不绘制；undefined 不绘制。
+//
+// jsdom 无样式表 → getCSSVar 恒返回 ""，两条竖线颜色无法区分；故本段
+// spy getComputedStyle 桩出变量值（--accent-purple / --accent-sunset），
+// 以断言两线颜色确实不同。T09 golden 段不桩颜色（保持与录制时一致）。
+// ---------------------------------------------------------------------------
+
+describe("PianoRollView v2.0.0 playhead draw calls (S1-T08)", () => {
+  type ViewProps = React.ComponentProps<typeof PianoRollView> & {
+    playheadPosition?: { bar: number; beat: number };
+  };
+
+  const baseProps: ViewProps = {
+    notes: [],
+    tempoMap: {} as any,
+    viewRange: { startBar: 1, endBar: 16 },
+  };
+
+  const CANVAS_H = 600;
+  const PPB = 40; // pixelsPerBeat 初值
+  const BEATS_PER_BAR = 4;
+
+  /** 变量 → 颜色桩值（仅本段使用，用于区分 cursor/playhead）。 */
+  const COLOR_BY_VAR: Record<string, string> = {
+    "--accent-purple": "#a29bfe",
+    "--accent-sunset": "#ff7a17",
+  };
+
+  const { ctx, calls } = createRecordingCtx();
+  let root: Root | null = null;
+  let container: HTMLDivElement | null = null;
+
+  beforeAll(() => {
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
+    vi.spyOn(window, "getComputedStyle").mockImplementation(
+      () =>
+        ({
+          getPropertyValue: (name: string) => COLOR_BY_VAR[name] ?? "",
+        }) as unknown as CSSStyleDeclaration
+    );
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    root = null;
+    container?.remove();
+    container = null;
+  });
+
+  function renderView(props: ViewProps): void {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    act(() => {
+      root = createRoot(container!);
+      root.render(React.createElement(PianoRollView, props));
+    });
+  }
+
+  /** 以每帧开头的 ctx.scale(dpr, dpr) 为界切分（一帧一次）。 */
+  function frames(): DrawCall[][] {
+    const out: DrawCall[][] = [];
+    let cur: DrawCall[] | null = null;
+    for (const c of calls) {
+      if (c.op === "scale") {
+        cur = [];
+        out.push(cur);
+      }
+      if (cur) cur.push(c);
+    }
+    return out;
+  }
+
+  function lastFrame(): DrawCall[] {
+    const fs = frames();
+    return fs.length > 0 ? fs[fs.length - 1] : [];
+  }
+
+  /** 竖线绘制（moveTo(x,0) + lineTo(x,h)）：网格线 / cursor / playhead 共用模板。 */
+  function verticalLineXsIn(frame: DrawCall[]): number[] {
+    const xs: number[] = [];
+    for (let i = 0; i < frame.length; i++) {
+      const c = frame[i];
+      if (
+        c.op === "moveTo" &&
+        c.args[1] === 0 &&
+        frame[i + 1]?.op === "lineTo" &&
+        frame[i + 1].args[0] === c.args[0] &&
+        frame[i + 1].args[1] === CANVAS_H
+      ) {
+        xs.push(Number(c.args[0]));
+      }
+    }
+    return xs;
+  }
+
+  /** 倒三角序列：moveTo(apex,8) → lineTo(∓,0) → lineTo(∓,0) → closePath → fill。 */
+  function trianglesIn(frame: DrawCall[]) {
+    const out: { apex: number[]; left: number[]; right: number[] }[] = [];
+    for (let i = 0; i < frame.length; i++) {
+      const m = frame[i];
+      const l1 = frame[i + 1];
+      const l2 = frame[i + 2];
+      if (
+        m?.op === "moveTo" &&
+        m.args[1] === 8 &&
+        l1?.op === "lineTo" &&
+        l1.args[1] === 0 &&
+        l2?.op === "lineTo" &&
+        l2.args[1] === 0 &&
+        frame[i + 3]?.op === "closePath" &&
+        frame[i + 4]?.op === "fill"
+      ) {
+        out.push({
+          apex: m.args as number[],
+          left: l1.args as number[],
+          right: l2.args as number[],
+        });
+      }
+    }
+    return out;
+  }
+
+  /** m{bar}.{beat} 位置标签（cursor 与 playhead 共用格式）及 x/y。 */
+  function positionLabelsIn(frame: DrawCall[]) {
+    return frame
+      .filter((c) => c.op === "fillText" && /^m\d+\.\d+$/.test(String(c.args[0])))
+      .map((c) => ({
+        text: String(c.args[0]),
+        x: Number(c.args[1]),
+        y: Number(c.args[2]),
+      }));
+  }
+
+  const propSets = (name: string): unknown[] =>
+    calls.filter((c) => c.op === `set:${name}`).map((c) => c.args[0]);
+
+  it("S1-T08: 仅给 playheadPosition → 橙色竖线 + 倒三角 + m{bar}.{floor(beat)} 标签于预期 x", () => {
+    // playheadTicks = (3-1)*4 + (2.5-1) = 9.5 → x = 9.5*40 = 380（连续小数 beat）。
+    const playheadX = 9.5 * PPB;
+    expect(playheadX).toBe(380);
+
+    renderView({ ...baseProps, playheadPosition: { bar: 3, beat: 2.5 } });
+    const frame = lastFrame();
+
+    // 竖线 x 用连续 beat 值（未取整），非 cursor 的 Math.round(x)+0.5-1。
+    expect(verticalLineXsIn(frame)).toContain(playheadX);
+
+    // 倒三角顶点 (380,8)、两上角 (376,0)/(384,0)。
+    const tris = trianglesIn(frame);
+    expect(tris).toHaveLength(1);
+    expect(tris[0].apex).toEqual([380, 8]);
+    expect(tris[0].left).toEqual([376, 0]);
+    expect(tris[0].right).toEqual([384, 0]);
+
+    // beat=2.5 为小数 → 标签取 floor=2；x = 380 + 6 = 386，y = 12。
+    const labels = positionLabelsIn(frame);
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatchObject({ text: "m3.2", x: playheadX + 6, y: 12 });
+
+    // 橙色（--accent-sunset），且无 cursor 的紫色。
+    expect(propSets("strokeStyle")).toContain("#ff7a17");
+    expect(propSets("fillStyle")).toContain("#ff7a17");
+    expect(propSets("strokeStyle")).not.toContain("#a29bfe");
+    expect(propSets("fillStyle")).not.toContain("#a29bfe");
+  });
+
+  it("S1-T08b: playheadPosition 与 cursorPosition 同给 → 两线 x/颜色独立", () => {
+    // cursor {bar:3,beat:3}: ticks = (3-1)*4 + (3-1) = 10 → x=400 → 竖线 399.5
+    // playhead {bar:3,beat:2.5}: x=380 → 竖线 380（两线相距 19.5px）
+    renderView({
+      ...baseProps,
+      cursorPosition: { bar: 3, beat: 3 },
+      playheadPosition: { bar: 3, beat: 2.5 },
+    });
+    const frame = lastFrame();
+    const lines = verticalLineXsIn(frame);
+
+    expect(lines).toContain(399.5); // cursor
+    expect(lines).toContain(380); // playhead
+    expect(lines).not.toContain(400); // 反证：playhead 未错用取整 x
+
+    // 两个独立倒三角（x 不同）。
+    const tris = trianglesIn(frame);
+    expect(tris).toHaveLength(2);
+    expect(tris.map((t) => t.apex[0]).sort((a, b) => a - b)).toEqual([380, 400]);
+
+    // 标签独立：cursor 用原始 beat(3) → m3.3；playhead 用 floor(2.5)=2 → m3.2。
+    const labels = positionLabelsIn(frame);
+    expect(labels.map((l) => l.text).sort()).toEqual(["m3.2", "m3.3"]);
+    expect(labels.find((l) => l.text === "m3.3")!.x).toBe(406);
+    expect(labels.find((l) => l.text === "m3.2")!.x).toBe(386);
+
+    // 颜色独立：紫色（cursor）+ 橙色（playhead）均出现。
+    const strokes = propSets("strokeStyle");
+    expect(strokes).toContain("#a29bfe");
+    expect(strokes).toContain("#ff7a17");
+  });
+
+  it("S1-T08c: playheadPosition 越界（bar 超 viewRange / x 出画布）不绘制", () => {
+    // (a) bar=99 超出 viewRange(1-16)
+    renderView({ ...baseProps, playheadPosition: { bar: 99, beat: 1 } });
+    expect(trianglesIn(lastFrame())).toHaveLength(0);
+    expect(propSets("strokeStyle")).not.toContain("#ff7a17");
+
+    // (b) bar 在 viewRange 内但 x 出画布：{bar:1,beat:40} → ticks=39 → x=1560 > w=800
+    calls.length = 0;
+    renderView({ ...baseProps, playheadPosition: { bar: 1, beat: 40 } });
+    expect(trianglesIn(lastFrame())).toHaveLength(0);
+    expect(verticalLineXsIn(lastFrame())).not.toContain(39 * PPB);
+    expect(propSets("strokeStyle")).not.toContain("#ff7a17");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2.0.0 Stage 1（S1-T09，回归门）：playheadPosition === undefined 时零行为变化。
+//
+// 断言方式：将仅给 cursorPosition 的完整绘制调用序列（op + JSON(args)）与
+// 改动前（v1.29，尚无 playhead 分支）录制的 golden 数组逐元素比对。golden 由
+// 同一 createRecordingCtx 录制（src/components/PianoRoll/__tests__/fixtures/
+// pianoRollDrawCalls.cursorOnly.json，388 次调用）。
+// 本段不桩 getComputedStyle（颜色保持 "" 与录制时一致）。
+// ---------------------------------------------------------------------------
+
+describe("PianoRollView v2.0.0 playhead zero-regression (S1-T09)", () => {
+  type ViewProps = React.ComponentProps<typeof PianoRollView> & {
+    playheadPosition?: { bar: number; beat: number };
+  };
+
+  const baseProps: ViewProps = {
+    notes: [],
+    tempoMap: {} as any,
+    viewRange: { startBar: 1, endBar: 16 },
+  };
+
+  const { ctx, calls } = createRecordingCtx();
+  let root: Root | null = null;
+  let container: HTMLDivElement | null = null;
+
+  beforeAll(() => {
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    root = null;
+    container?.remove();
+    container = null;
+  });
+
+  it("S1-T09: 仅给 cursorPosition → 绘制调用序列与改动前逐字节一致 (critical)", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    act(() => {
+      root = createRoot(container!);
+      root.render(
+        React.createElement(PianoRollView, {
+          ...baseProps,
+          cursorPosition: { bar: 3, beat: 3 },
+        })
+      );
+    });
+
+    const sig = calls.map((c) => `${c.op}(${JSON.stringify(c.args)})`);
+    expect(sig).toHaveLength(cursorOnlyGolden.length);
+    expect(sig).toEqual(cursorOnlyGolden);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2.0.0 Stage 2（S2-T12 ~ S2-T17）：跟随目标泛化 + 手动平移 + Follow 抢占。
+//
+// harness 与既有段同构（createRecordingCtx + ResizeObserver stub + createRoot/act）。
+// 实态数值：w=800、h=600、pixelsPerBeat=40、viewRange {1,16} → totalBeats 64。
+//   maxScrollX = 64*40 - 800 = 1760；maxScrollY = (108-24+1)*18 - 600 = 930。
+//   RIGHT_EDGE = 800 - 48 = 752。
+// 平移量经 DOM 直接读取（比 canvas 更精确，避免同 x 多解）：
+//   scrollX ← 时间轴 bar1 标签的 inline `left`（= 0*ppb - scrollX）取负；
+//   scrollY ← 键盘内层 div 的 `translateY(-scrollY px)` 取负。
+// ---------------------------------------------------------------------------
+
+describe("PianoRollView v2.0.0 follow / pan / suspension (S2-T12..T17)", () => {
+  type ViewProps = React.ComponentProps<typeof PianoRollView> & {
+    autoScrollFollow?: boolean;
+    playheadPosition?: { bar: number; beat: number };
+    transportRunId?: number;
+  };
+
+  const baseProps: ViewProps = {
+    notes: [],
+    tempoMap: {} as any,
+    viewRange: { startBar: 1, endBar: 16 },
+  };
+
+  const CANVAS_W = 800;
+  const CANVAS_H = 600;
+  const PPB = 40;
+  const BEATS_PER_BAR = 4;
+  const FOLLOW_EDGE_MARGIN = 48;
+  const RIGHT_EDGE = CANVAS_W - FOLLOW_EDGE_MARGIN; // 752
+  const MAX_SCROLL_X = 64 * PPB - CANVAS_W; // 1760
+  const MAX_SCROLL_Y = (108 - 24 + 1) * 18 - CANVAS_H; // 930
+
+  const { ctx, calls } = createRecordingCtx();
+  let root: Root | null = null;
+  let container: HTMLDivElement | null = null;
+
+  beforeAll(() => {
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    root = null;
+    container?.remove();
+    container = null;
+  });
+
+  function renderView(props: ViewProps): HTMLDivElement {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    act(() => {
+      root = createRoot(container!);
+      root.render(React.createElement(PianoRollView, props));
+    });
+    return container;
+  }
+
+  function rerenderView(props: ViewProps): void {
+    act(() => {
+      root!.render(React.createElement(PianoRollView, props));
+    });
+  }
+
+  function frames(): DrawCall[][] {
+    const out: DrawCall[][] = [];
+    let cur: DrawCall[] | null = null;
+    for (const c of calls) {
+      if (c.op === "scale") {
+        cur = [];
+        out.push(cur);
+      }
+      if (cur) cur.push(c);
+    }
+    return out;
+  }
+
+  function lastFrame(): DrawCall[] {
+    const fs = frames();
+    return fs.length > 0 ? fs[fs.length - 1] : [];
+  }
+
+  function verticalLineXsIn(frame: DrawCall[]): number[] {
+    const xs: number[] = [];
+    for (let i = 0; i < frame.length; i++) {
+      const c = frame[i];
+      if (
+        c.op === "moveTo" &&
+        c.args[1] === 0 &&
+        frame[i + 1]?.op === "lineTo" &&
+        frame[i + 1].args[0] === c.args[0] &&
+        frame[i + 1].args[1] === CANVAS_H
+      ) {
+        xs.push(Number(c.args[0]));
+      }
+    }
+    return xs;
+  }
+
+  /** 时间轴「纯整数标签」的 inline left（bar N → (N-1)*4*ppb - scrollX）。 */
+  function timelineLeft(el: HTMLElement, label: string): number {
+    for (const s of Array.from(el.querySelectorAll("span"))) {
+      const he = s as HTMLElement;
+      if (he.textContent === label && he.style.left) {
+        return parseFloat(he.style.left);
+      }
+    }
+    throw new Error(`timeline label ${label} not found`);
+  }
+
+  const readScrollX = (el: HTMLElement): number => {
+    const v = -timelineLeft(el, "1");
+    return v === 0 ? 0 : v; // 归一化 -0
+  };
+  function readScrollY(el: HTMLElement): number {
+    for (const d of Array.from(el.querySelectorAll("div"))) {
+      const m = /^translateY\((-?\d+(?:\.\d+)?)px\)$/.exec(
+        (d as HTMLElement).style.transform
+      );
+      if (m) {
+        const v = -Number(m[1]);
+        return v === 0 ? 0 : v; // 归一化 -0
+      }
+    }
+    throw new Error("keyboard translateY not found");
+  }
+
+  function wheel(
+    el: Element,
+    opts: { deltaY: number; deltaX?: number; shiftKey?: boolean; ctrlKey?: boolean }
+  ) {
+    act(() => {
+      el.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaY: opts.deltaY,
+          // v2.0.0 S5 (D5-2)：支持 deltaX（触控板横向滚动）。缺省不传时
+          // WheelEvent 的 deltaX 为 0，等价于鼠标滚轮的既有行为。
+          deltaX: opts.deltaX ?? 0,
+          shiftKey: opts.shiftKey ?? false,
+          ctrlKey: opts.ctrlKey ?? false,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+  }
+
+  function pointer(
+    el: Element,
+    type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel",
+    opts: { button: number; clientX: number; clientY: number }
+  ) {
+    act(() => {
+      el.dispatchEvent(
+        new PointerEvent(type, {
+          button: opts.button,
+          clientX: opts.clientX,
+          clientY: opts.clientY,
+          pointerId: 1,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+  }
+
+  function mouse(
+    el: Element,
+    type: "mousedown" | "mousemove" | "mouseup",
+    opts: { button: number; clientX: number; clientY: number }
+  ) {
+    act(() => {
+      el.dispatchEvent(
+        new MouseEvent(type, {
+          button: opts.button,
+          clientX: opts.clientX,
+          clientY: opts.clientY,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
+  }
+
+  const canvasOf = (el: HTMLElement): Element =>
+    el.querySelector('[data-testid="piano-roll-canvas"]')!;
+
+  it("S2-T12: playheadPosition + autoScrollFollow → 越右缘(≥w-48)最小平移、连续位置逐次推进 (critical)", () => {
+    // 数值自检（harness 基线锁定）。
+    expect(RIGHT_EDGE).toBe(752);
+    expect(MAX_SCROLL_X).toBe(1760);
+    expect(MAX_SCROLL_Y).toBe(930);
+
+    // 播放头在视口内 → 不平移。
+    const el = renderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 1, beat: 1 },
+    });
+    expect(readScrollX(el)).toBe(0);
+
+    // {bar:6,beat:1} → ticks 20 → x 800 > 752 → newScrollX = 800-752 = 48（最小平移）。
+    calls.length = 0;
+    rerenderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 6, beat: 1 },
+    });
+    expect(readScrollX(el)).toBe(48);
+    // 首帧 x=800（滚动前）；末帧 x=752=RIGHT_EDGE（播放头恰落右缘），grid beat2 = 32.5。
+    const fs1 = frames();
+    expect(fs1).toHaveLength(2);
+    expect(verticalLineXsIn(fs1[0])).toContain(800);
+    expect(verticalLineXsIn(lastFrame())).toContain(RIGHT_EDGE);
+    expect(verticalLineXsIn(lastFrame())).toContain(32.5);
+
+    // 连续推进：每次仅按需平移（逐次最小平移，不跳到终点）。
+    rerenderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 7, beat: 1 }, // ticks 24 → 960 → 960-752 = 208
+    });
+    expect(readScrollX(el)).toBe(208);
+
+    rerenderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 8, beat: 1 }, // ticks 28 → 1120 → 1120-752 = 368
+    });
+    expect(readScrollX(el)).toBe(368);
+  });
+
+  it("S2-T13a: 同给 cursor 与 playhead → 跟随 playhead（playhead 优先） (critical)", () => {
+    // cursor {bar:1,beat:1} 在视口内（若跟随它则 scrollX 恒 0）；
+    // playhead {bar:6,beat:1} 越右缘 → 必须跟随 playhead 滚动 48。
+    const el = renderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      cursorPosition: { bar: 1, beat: 1 },
+      playheadPosition: { bar: 6, beat: 1 },
+    });
+    expect(readScrollX(el)).toBe(48);
+  });
+
+  it("S2-T13b: 只给 cursor（不给 playhead）→ 行为同 v1.28（回归） (critical)", () => {
+    // {bar:6,beat:1} → cursorX = 800 → 滚动 48；末帧 cursor 竖线 751.5、标签 x=758。
+    const el = renderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      cursorPosition: { bar: 6, beat: 1 },
+    });
+    expect(readScrollX(el)).toBe(48);
+    const fs = frames();
+    expect(fs).toHaveLength(2);
+    expect(verticalLineXsIn(fs[0])).toContain(799.5);
+    const lines = verticalLineXsIn(lastFrame());
+    expect(lines).toContain(751.5);
+    expect(lines).toContain(32.5);
+  });
+
+  it("S2-T13c: followPlayhead=false + 同给 cursor/playhead → 跟随 cursor（忽略 playhead，App 级场景组件镜像） (critical)", () => {
+    // App idle 时 transport 恒停于 m1.1（playhead x=0 → 天然不触发平移），而录入
+    // 光标继续右移。followPlayhead=false 必须回退到 cursor 并滚动 48；若仍跟
+    // playhead 则 scrollX 恒 0（= v1.28 功能被杀）。
+    const CURSOR_SCROLL = 20 * PPB - RIGHT_EDGE; // cursor{bar:6} → 800-752 = 48
+    const PLAYHEAD_SCROLL = 0; // playhead{bar:1} 在视口内 → 不平移
+    expect(CURSOR_SCROLL).toBe(48);
+    expect(CURSOR_SCROLL).not.toBe(PLAYHEAD_SCROLL);
+
+    const el = renderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      followPlayhead: false,
+      cursorPosition: { bar: 6, beat: 1 },
+      playheadPosition: { bar: 1, beat: 1 },
+    });
+    const sx = readScrollX(el);
+    expect(sx).toBe(CURSOR_SCROLL);
+    expect(sx).not.toBe(PLAYHEAD_SCROLL);
+  });
+
+  it("S2-T13d: 不传 followPlayhead（默认 true）+ 同给 cursor/playhead → 跟随 playhead（默认值固化） (critical)", () => {
+    // cursor 越右缘（若跟随它 → 48），playhead 停在视口内 m1.1（跟随它 → 0）。
+    // 默认 true 必须跟 playhead → 0（不滚动），证明 S2.1 未改坏默认语义。
+    const el = renderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      cursorPosition: { bar: 6, beat: 1 },
+      playheadPosition: { bar: 1, beat: 1 },
+    });
+    expect(readScrollX(el)).toBe(0);
+    expect(readScrollX(el)).not.toBe(20 * PPB - RIGHT_EDGE); // 反证：未跟 cursor
+  });
+
+  it("S2-T13e: followPlayhead=false + 只给 playhead（无 cursor）→ 不跟随（followTarget undefined，负控）", () => {
+    // 忽略 playhead 且无 cursor 可回退 → followTarget 为 undefined → 不自动平移。
+    const el = renderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      followPlayhead: false,
+      playheadPosition: { bar: 6, beat: 1 }, // 若仍跟 playhead → 48
+    });
+    expect(readScrollX(el)).toBe(0);
+  });
+
+  it("S2-T14: wheel→scrollY；Shift+wheel→scrollX；Ctrl+wheel→pixelsPerBeat（plain wheel 不改 ppb：负控） (critical)", () => {
+    const el = renderView(baseProps);
+    const canvas = canvasOf(el);
+    expect(readScrollX(el)).toBe(0);
+    expect(readScrollY(el)).toBe(0);
+    expect(timelineLeft(el, "2")).toBe(4 * PPB); // 160
+
+    // plain wheel → 纵向平移；ppb 与 scrollX 均不变（负控）。
+    wheel(canvas, { deltaY: 100 });
+    expect(readScrollY(el)).toBe(100);
+    expect(readScrollX(el)).toBe(0);
+    expect(timelineLeft(el, "2")).toBe(4 * PPB); // 160 → ppb 仍为 40
+
+    // Shift+wheel → 横向平移；scrollY 不变。
+    wheel(canvas, { deltaY: 120, shiftKey: true });
+    expect(readScrollX(el)).toBe(120);
+    expect(readScrollY(el)).toBe(100);
+    expect(timelineLeft(el, "2")).toBe(4 * PPB - 120); // 40
+
+    // Ctrl+wheel（deltaY<0）→ ppb 40→44；不平移（scrollX 保持 120）。
+    wheel(canvas, { deltaY: -1, ctrlKey: true });
+    expect(readScrollX(el)).toBe(120);
+    expect(readScrollY(el)).toBe(100);
+    expect(timelineLeft(el, "2")).toBeCloseTo(4 * 44 - 120, 6); // 56
+  });
+
+  it("S2-T15: 平移 clamp —— 极端 wheel 后 scrollX===maxScrollX / scrollY===maxScrollY，双向均不越界 (critical)", () => {
+    const el = renderView(baseProps);
+    const canvas = canvasOf(el);
+
+    // 正向越界 → 钳到上界。
+    wheel(canvas, { deltaY: 100000, shiftKey: true });
+    expect(readScrollX(el)).toBe(MAX_SCROLL_X); // 1760
+    wheel(canvas, { deltaY: 100000 });
+    expect(readScrollY(el)).toBe(MAX_SCROLL_Y); // 930
+
+    // 负向越界 → 钳到下界 0（不为负）。
+    wheel(canvas, { deltaY: -100000, shiftKey: true });
+    expect(readScrollX(el)).toBe(0);
+    wheel(canvas, { deltaY: -100000 });
+    expect(readScrollY(el)).toBe(0);
+
+    // 双向均不越界。
+    expect(readScrollX(el)).toBeGreaterThanOrEqual(0);
+    expect(readScrollX(el)).toBeLessThanOrEqual(MAX_SCROLL_X);
+    expect(readScrollY(el)).toBeGreaterThanOrEqual(0);
+    expect(readScrollY(el)).toBeLessThanOrEqual(MAX_SCROLL_Y);
+  });
+
+  it("S2-T16: 手动平移挂起跟随；transportRunId 值变化复位（同值不复位：负控） (critical)", () => {
+    const el = renderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 1, beat: 1 },
+      transportRunId: 1,
+    });
+    const canvas = canvasOf(el);
+    expect(readScrollX(el)).toBe(0);
+
+    // 手动平移（plain wheel 纵向）→ followSuspended=true。
+    wheel(canvas, { deltaY: 50 });
+
+    // 播放头越右缘：因已挂起 → 不自动平移。
+    rerenderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 6, beat: 1 },
+      transportRunId: 1,
+    });
+    expect(readScrollX(el)).toBe(0); // 挂起生效（若未挂起会是 48）
+
+    // 同值重渲染（transportRunId 仍 1）→ 不复位（"值变化"≠"值存在"）。
+    rerenderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 7, beat: 1 },
+      transportRunId: 1,
+    });
+    expect(readScrollX(el)).toBe(0); // 仍挂起
+
+    // runId 1→2（值变化）→ 复位 → 跟随当前 playhead {bar:7} → 960-752=208。
+    rerenderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 7, beat: 1 },
+      transportRunId: 2,
+    });
+    expect(readScrollX(el)).toBe(208);
+
+    // 再次手动平移 → 挂起；同值（仍 2）重渲染不复位。
+    wheel(canvas, { deltaY: 30 });
+    rerenderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 8, beat: 1 },
+      transportRunId: 2,
+    });
+    expect(readScrollX(el)).toBe(208); // 未复位
+
+    // runId 2→3 → 复位 → 跟随 {bar:8} → 1120-752=368。
+    rerenderView({
+      ...baseProps,
+      autoScrollFollow: true,
+      playheadPosition: { bar: 8, beat: 1 },
+      transportRunId: 3,
+    });
+    expect(readScrollX(el)).toBe(368);
+  });
+
+  it("S2-T17: 中键拖拽产出位移；左键拖拽音符不受影响（负控） (critical)", () => {
+    const onNoteMove = vi.fn();
+    const notes = [
+      {
+        id: "n1",
+        trackId: "t1",
+        phraseId: null,
+        bar: 1,
+        beat: 1,
+        durQn: 1,
+        pitchMidi: 60,
+        pitchSpelling: "C4",
+        velocity: 0.8,
+        voice: "rh" as const,
+        tags: [],
+      },
+    ];
+    const el = renderView({ ...baseProps, notes, onNoteMove });
+    const canvas = canvasOf(el);
+
+    // 负控（先做，scrollX 仍为 0）：左键 mouse 拖拽音符 → onNoteMove 被调用。
+    // note rect: x∈[0,40]、y∈[864,881]（(108-60)*18）。
+    mouse(canvas, "mousedown", { button: 0, clientX: 5, clientY: 870 });
+    mouse(canvas, "mousemove", { button: 0, clientX: 45, clientY: 870 });
+    mouse(canvas, "mouseup", { button: 0, clientX: 45, clientY: 870 });
+    expect(onNoteMove).toHaveBeenCalledTimes(1);
+    expect(readScrollX(el)).toBe(0); // 左键拖音符不平移
+
+    // 中键拖拽：向左拖 120px → scrollX = 起始 0 - (-120) = 120。
+    pointer(canvas, "pointerdown", { button: 1, clientX: 200, clientY: 300 });
+    pointer(canvas, "pointermove", { button: 1, clientX: 80, clientY: 300 });
+    pointer(canvas, "pointerup", { button: 1, clientX: 80, clientY: 300 });
+    expect(readScrollX(el)).toBe(120);
+
+    // 负控：左键 pointer 拖拽不平移。
+    pointer(canvas, "pointerdown", { button: 0, clientX: 400, clientY: 300 });
+    pointer(canvas, "pointermove", { button: 0, clientX: 250, clientY: 300 });
+    pointer(canvas, "pointerup", { button: 0, clientX: 250, clientY: 300 });
+    expect(readScrollX(el)).toBe(120);
+  });
+
+  // v2.0.0 S5：输入完善两项（D5-2 触控板横向滚动 / D5-3 pointercancel 清理）。
+  it("S5-D5-2: 触控板横向 deltaX → scrollX；不动 scrollY 与 pixelsPerBeat（负控） (critical)", () => {
+    const el = renderView(baseProps);
+    const canvas = canvasOf(el);
+    // ppb 探针：timelineLeft(label) = (N-1)*4*ppb - scrollX，故**相邻标签间距**
+    // 与 scrollX 无关，恒为 1 小节 = 4*ppb。用它验 ppb 不变才不会被滚动污染。
+    const barSpacing = () =>
+      timelineLeft(el, "2") - timelineLeft(el, "1");
+    expect(readScrollX(el)).toBe(0);
+    expect(readScrollY(el)).toBe(0);
+    expect(barSpacing()).toBe(4 * PPB); // 160 → ppb = 40
+
+    // 纯横向 deltaX（触控板横扫）→ 只平移 scrollX。
+    wheel(canvas, { deltaX: 90, deltaY: 0 });
+    expect(readScrollX(el)).toBe(90);
+    expect(readScrollY(el)).toBe(0);
+    expect(barSpacing()).toBe(4 * PPB); // ppb 未变（负控）
+
+    // 负控：纯纵向 wheel（deltaX 缺省 = 0）→ 只平移 scrollY，scrollX 保持不变
+    //（证明 deltaX 分支不会因缺省值误触发/污染 scrollX）。
+    wheel(canvas, { deltaY: 100 });
+    expect(readScrollY(el)).toBe(100);
+    expect(readScrollX(el)).toBe(90);
+    expect(barSpacing()).toBe(4 * PPB);
+  });
+
+  it("S5-D5-3: pointercancel 清理平移状态 → 取消后 pointermove 不再平移 (critical)", () => {
+    const el = renderView(baseProps);
+    const canvas = canvasOf(el);
+
+    pointer(canvas, "pointerdown", { button: 1, clientX: 300, clientY: 300 });
+    pointer(canvas, "pointermove", { button: 1, clientX: 240, clientY: 300 });
+    expect(readScrollX(el)).toBe(60); // 左拖 60px → scrollX 60
+
+    // 手势被浏览器中断（pointercancel）→ 平移状态必须被清理。
+    pointer(canvas, "pointercancel", { button: 1, clientX: 240, clientY: 300 });
+
+    // 反证：清理后再 move 不得继续平移（若未清理会变 120）。
+    pointer(canvas, "pointermove", { button: 1, clientX: 180, clientY: 300 });
+    expect(readScrollX(el)).toBe(60);
+  });
+});
+

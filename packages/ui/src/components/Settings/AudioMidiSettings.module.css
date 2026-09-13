@@ -181,6 +181,27 @@
   border-color: var(--accent-cyan);
 }
 
+/* v2.0.0 Stage 2 (D2-5): playback checkbox（复用 AgentSettings 同款视觉） */
+.checkboxControl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.checkboxInput {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.checkboxLabel {
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
 /* Latency Display */
 .latencyInfo {
   display: flex;

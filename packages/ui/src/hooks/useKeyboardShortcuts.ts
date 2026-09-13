@@ -7,6 +7,13 @@ export interface KeyboardShortcutHandlers {
   /** Ctrl+Shift+Z or Ctrl+Y — re-apply an undone state (no-op when the redo
    *  stack is empty). */
   onRedo: () => void;
+  /**
+   * v2.0.0 Stage 1 (D1-4, additive/optional): Space (no modifier) toggles
+   * transport play/pause. Optional so existing callers (which only pass
+   * onUndo/onRedo) keep working unchanged — undefined = zero behaviour
+   * change. Ignored when the event target is an editable field.
+   */
+  onPlayPause?: () => void;
 }
 
 /**
@@ -40,6 +47,11 @@ export function isEditableTarget(target: EventTarget | null): boolean {
  * - Never fires when the event target is an input/textarea/contentEditable
  *   region, so typing in a field keeps the browser's native text undo.
  *
+ * v2.0.0 Stage 1 (D1-4): Space (no modifiers) -> onPlayPause. Judged BEFORE
+ * the "no modifier => return" guard below, because Space has no modifier;
+ * the editable-target guard is still applied so typing a space in a field
+ * does not toggle playback.
+ *
  * Handlers are read through a ref so the single window listener always calls
  * the latest callbacks without re-binding on every render.
  */
@@ -49,6 +61,26 @@ export function useKeyboardShortcuts(handlers: KeyboardShortcutHandlers): void {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
+      // v2.0.0 Stage 1 (D1-4): Space = play/pause. Uses e.key === " " (the
+      // standard value) with "Spacebar" (legacy browsers) and e.code ===
+      // "Space" (layout-independent) as fallbacks. Any modifier disqualifies
+      // it (Ctrl+Space etc. stay reserved / untouched).
+      const isSpace =
+        e.key === " " || e.key === "Spacebar" || e.code === "Space";
+      if (
+        isSpace &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.shiftKey &&
+        !e.altKey
+      ) {
+        // Editable fields keep the native space (text input).
+        if (isEditableTarget(e.target)) return;
+        e.preventDefault();
+        handlersRef.current.onPlayPause?.();
+        return;
+      }
+
       // Ignore plain-letter shortcuts without a modifier.
       if (!(e.ctrlKey || e.metaKey)) return;
       // Native text undo/redo inside a field takes precedence.

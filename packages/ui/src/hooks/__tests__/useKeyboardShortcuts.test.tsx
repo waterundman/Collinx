@@ -226,3 +226,134 @@ describe("useKeyboardShortcuts", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// v2.0.0 Stage 1（S1-T10）：Space = 播放/暂停（onPlayPause）。
+//
+// - 无修饰键的 Space 在既有 `if (!(e.ctrlKey || e.metaKey)) return;` 之前处理，
+//   preventDefault 后调用 onPlayPause 并返回。
+// - 沿用 isEditableTarget 守卫：input/textarea/select/contentEditable 内 Space
+//   不触发（保留输入框内空格打字）。
+// - Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 行为完全不变。
+// 本段使用独立 harness（不改既有用例与其 setup 助手）。
+// ---------------------------------------------------------------------------
+
+describe("useKeyboardShortcuts v2.0.0 Space → onPlayPause (S1-T10)", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  function setupPlay() {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const onPlayPause = vi.fn();
+    let root!: Root;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    function Probe() {
+      useKeyboardShortcuts({ onUndo, onRedo, onPlayPause });
+      return <div data-testid="play-probe" />;
+    }
+
+    act(() => {
+      root = createRoot(container);
+      root.render(<Probe />);
+    });
+
+    return {
+      onUndo,
+      onRedo,
+      onPlayPause,
+      cleanup() {
+        act(() => {
+          root.unmount();
+          container.remove();
+        });
+      },
+    };
+  }
+
+  /** 派发并返回事件对象（以便断言 defaultPrevented）。 */
+  function fire(target: EventTarget, init: KeyboardEventInit): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+    return event;
+  }
+
+  it("S1-T10a: 无修饰键 Space（key=' '）→ onPlayPause 触发 + preventDefault (critical)", () => {
+    const s = setupPlay();
+    const e = fire(window, { key: " " });
+    expect(s.onPlayPause).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+    expect(s.onUndo).not.toHaveBeenCalled();
+    expect(s.onRedo).not.toHaveBeenCalled();
+    s.cleanup();
+  });
+
+  it("S1-T10b: input 内 Space 不触发（保留原生打字；不 preventDefault） (critical)", () => {
+    const s = setupPlay();
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    const e = fire(input, { key: " " });
+    expect(s.onPlayPause).not.toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(false);
+    input.remove();
+    s.cleanup();
+  });
+
+  it("S1-T10c: textarea/contentEditable 内 Space 均不触发", () => {
+    const s = setupPlay();
+    const textarea = document.createElement("textarea");
+    const editable = document.createElement("div");
+    editable.contentEditable = "true";
+    document.body.appendChild(textarea);
+    document.body.appendChild(editable);
+    fire(textarea, { key: " " });
+    fire(editable, { key: " " });
+    expect(s.onPlayPause).not.toHaveBeenCalled();
+    textarea.remove();
+    editable.remove();
+    s.cleanup();
+  });
+
+  it("S1-T10d: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 行为不受影响，且 Space 判定不误伤 (critical)", () => {
+    const s = setupPlay();
+
+    fire(window, { key: "z", ctrlKey: true });
+    expect(s.onUndo).toHaveBeenCalledTimes(1);
+    fire(window, { key: "z", ctrlKey: true, shiftKey: true });
+    expect(s.onRedo).toHaveBeenCalledTimes(1);
+    fire(window, { key: "y", ctrlKey: true });
+    expect(s.onRedo).toHaveBeenCalledTimes(2);
+    expect(s.onPlayPause).not.toHaveBeenCalled();
+
+    s.cleanup();
+  });
+
+  it("S1-T10e: 带修饰键的 Space（Ctrl/Shift/Meta/Alt+Space）不触发播放", () => {
+    const s = setupPlay();
+    fire(window, { key: " ", ctrlKey: true });
+    fire(window, { key: " ", shiftKey: true });
+    fire(window, { key: " ", metaKey: true });
+    fire(window, { key: " ", altKey: true });
+    expect(s.onPlayPause).not.toHaveBeenCalled();
+    s.cleanup();
+  });
+
+  it("S1-T10f: code='Space' / key='Spacebar' 兼容判定", () => {
+    const s = setupPlay();
+    // 旧浏览器 / 特殊键位：key 可能为 "Spacebar"，或 key 为空但 code="Space"。
+    fire(window, { key: "Spacebar" });
+    expect(s.onPlayPause).toHaveBeenCalledTimes(1);
+    fire(window, { key: "Unidentified", code: "Space" });
+    expect(s.onPlayPause).toHaveBeenCalledTimes(2);
+    s.cleanup();
+  });
+});

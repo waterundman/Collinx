@@ -15,6 +15,7 @@ import {
   notesToHarmonyEntries,
 } from "@collinx/core";
 import { PianoRollView } from "./components/PianoRoll/PianoRollView";
+import { TransportBar } from "./components/Transport/TransportBar";
 import { ScorePanel } from "./components/Score";
 import type { CollisionWarning } from "./components/Score";
 import { ArrangementView } from "./components/Arrangement/ArrangementView";
@@ -41,6 +42,7 @@ import { useProjectStore } from "./hooks/useProjectStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useMidiInput } from "./hooks/useMidiInput";
 import { useMidiOutput } from "./hooks/useMidiOutput";
+import { useTransport } from "./hooks/useTransport";
 import { useSettings } from "./hooks/useSettings";
 import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
 import type {
@@ -131,6 +133,8 @@ const AUDITION_DURATION_MS = 300;
  * 取 1）。抽为导出纯函数以对齐 computeNoteOffPlacement 先例，便于直测。
  */
 export function computeAuditionVelocity(normalizedVelocity01: number): number {
+  // 非有限防御：NaN / ±Infinity 穿过 Math.round 会成 NaN → 编成 0 → 试听静音。
+  if (!Number.isFinite(normalizedVelocity01)) return 1;
   return Math.max(1, Math.min(127, Math.round(normalizedVelocity01 * 127)));
 }
 
@@ -171,10 +175,10 @@ export function App() {
   // Stage 0 (.agentmusic): hidden file input for loading a .agentmusic project.
   const projectFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Stage 2: global Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) composite undo/redo.
-  // Input/textarea/contentEditable targets are excluded inside the hook, so
-  // text editing keeps the native browser undo.
-  useKeyboardShortcuts({ onUndo: actions.undo, onRedo: actions.redo });
+  // v2.0.0 Stage 1 (D1-5): global keyboard shortcuts are wired AFTER the
+  // transport hook is set up (see below) so onPlayPause closes over the
+  // latest transport state; the hook reads handlers through a ref each render,
+  // so no stale closure. (Previously this call only wired undo/redo.)
 
   const tabs: TabDef[] = useMemo(
     () => TAB_IDS.map((id) => ({ id, label: t(`app.tabs.${id}`) })),
@@ -440,13 +444,66 @@ export function App() {
   // v1.29.0 Stage 1 (D2-3): MIDI 输出试听——PianoRollView clean click 音符时
   // 经 useMidiOutput 立即发声（静默失败；无绑定端口则 no-op）。velocity 由
   // NoteEvent 归一化值换算为 MIDI 1-127，时长固定 AUDITION_DURATION_MS。
-  const { playNote } = useMidiOutput();
+  const { playNote, getOutputPort } = useMidiOutput();
   const handleNoteAudition = useCallback(
     (pitchMidi: number, velocity01: number) => {
       playNote(pitchMidi, computeAuditionVelocity(velocity01), AUDITION_DURATION_MS);
     },
     [playNote]
   );
+
+  // v2.0.0 Stage 1 (D1-5): 全局 transport —— 复用同一个 useMidiOutput 实例的
+  // getOutputPort（D0-7 注入契约），notes/tempoMap/channel 均取自当前渲染的
+  // 最新值（hook 内经 ref 读取）。播放状态机 + 播放头位置由 useTransport 提供。
+  const transport = useTransport({
+    notes,
+    tempoMap,
+    channel: settings.midi.midiChannel,
+    getOutputPort,
+  });
+
+  // v2.0.0 Stage 2 (D2-4): transport 运行代次。每次 **play / stop** 自增，作为
+  // PianoRollView 的 `transportRunId` prop —— 其值变化会复位组件内部的手动平移
+  // 挂起（followSuspended=false），实现 Ableton 语义「手动平移挂起跟随，直到
+  // transport 停止/重启」。pause 不自增（SPEC 只提 stop/restart）。
+  const [transportRunId, setTransportRunId] = useState(0);
+  const handleTransportPlay = useCallback(() => {
+    setTransportRunId((n) => n + 1);
+    // v2.0.0 Stage 3 (D3-3)：settings 决定 count-in 预备小节数；useTransport 自身
+    // 不读 settings，由 App 显式传入（=0 时直进 playing，无 count-in 阶段）。
+    transport.play({ countInBars: settings.midi.playback.countInBars });
+  }, [transport, settings]);
+  const handleTransportStop = useCallback(() => {
+    setTransportRunId((n) => n + 1);
+    transport.stop();
+  }, [transport]);
+
+  // v2.0.0 S2.1 裁决：D2-1 字面规则 `playheadPosition ?? cursorPosition` 在"App 恒传
+  // playheadPosition"的接线会退化为"永远跟停着的播放头"，令 v1.28 录入光标自动跟随
+  // 失效。故按 transport 是否运行切换跟随权威：运行中跟播放头；idle/paused 跟录入
+  // 光标（保住 v1.28）。用否定式而非 `=== 'playing'` 以便 S3 的 count-in 阶段自动纳入。
+  const transportRunning = transport.phase !== "idle" && transport.phase !== "paused";
+
+  // Stage 2 + v2.0.0 Stage 1: global shortcuts.
+  // - Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y): composite undo/redo (input/textarea/
+  //   contentEditable targets excluded inside the hook → native text undo kept).
+  // - Space: transport play/pause (same editable-target guard inside the hook).
+  // onPlayPause reads transport.isPlaying on each keypress through the hook's
+  // handler ref, so it always acts on the latest phase (no stale closure).
+  // v2.0.0 Stage 2: Space 起播也走 runId 自增（否则手动平移后按 Space 无法恢复跟随）。
+  useKeyboardShortcuts({
+    onUndo: actions.undo,
+    onRedo: actions.redo,
+    onPlayPause: () => {
+      if (transport.isPlaying) {
+        transport.pause();
+      } else {
+        setTransportRunId((n) => n + 1);
+        // v2.0.0 Stage 3 (D3-3)：Space 起播同样显式传入 settings 的 countInBars。
+        transport.play({ countInBars: settings.midi.playback.countInBars });
+      }
+    },
+  });
 
   const handleNoteMove = (noteId: string, newBar: number, newBeat: number, newPitch: number) => {
     actions.moveNote(noteId, newBar, newBeat, newPitch);
@@ -930,6 +987,18 @@ export function App() {
               />
             </div>
 
+            {/* v2.0.0 Stage 1 (D1-5): 全局 transport 控件，置于钢琴卷上方、同属
+                compose 标签页（可见、结构合理：控制其正下方 PianoRollView 的播放）。 */}
+            <TransportBar
+              isPlaying={transport.isPlaying}
+              position={transport.position}
+              positionSeconds={transport.positionSeconds}
+              onPlay={handleTransportPlay}
+              onPause={transport.pause}
+              onStop={handleTransportStop}
+              isCountingIn={transport.phase === "count-in"}
+            />
+
             <div className={styles.composePianoRoll}>
               <PianoRollView
                 notes={notes}
@@ -944,8 +1013,11 @@ export function App() {
                 onNoteAudition={handleNoteAudition}
                 activePitches={activePitches}
                 cursorPosition={inputCursor}
+                playheadPosition={transport.position}
                 quantizeGridHint={recording.quantizeGrid}
-                autoScrollFollow
+                autoScrollFollow={settings.midi.playback.followPlayhead}
+                transportRunId={transportRunId}
+                followPlayhead={transportRunning}
               />
             </div>
           </div>

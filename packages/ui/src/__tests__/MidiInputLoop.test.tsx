@@ -52,6 +52,11 @@ import { SettingsProvider } from "../contexts/SettingsContext";
 import { useProjectStore } from "../hooks/useProjectStore";
 import { useSettings } from "../hooks/useSettings";
 import { SETTINGS_STORAGE_KEY } from "../types/settings";
+import {
+  // v2.0.0 S5 (D5-1 / T24)：录制型 canvas ctx 的共享实现（本文件原有两份内联复制）。
+  createRecordingCtx,
+  type DrawCall,
+} from "../test-utils/canvas-ctx";
 import styles from "../components/PianoRoll/PianoRoll.module.css";
 
 // jsdom 缺失 Web API（PianoRollView 布局依赖，与被测语义无关）
@@ -887,48 +892,10 @@ describe("v1.26 MidiSettings recording wiring (S1-T05)", () => {
 // harness 成本低。app 初始 cursor(1,1) 第一帧即画 m1.1，落盘后断言 m1.2
 // 出现且 fillText 调用顺序在 m1.1 之后（位置前进）。
 describe("v1.27 App cursor wiring (S1-T01/T02)", () => {
-  type DrawCall = { op: string; args: unknown[] };
-
-  // 与 S0 PianoRollView.test.tsx 同款记录型 ctx（跨测试文件 import 会执行
-  // 其 describe 注册，故复制）
-  function createRecordingCtx() {
-    const calls: DrawCall[] = [];
-    const methods = [
-      "scale",
-      "clearRect",
-      "fillRect",
-      "beginPath",
-      "moveTo",
-      "lineTo",
-      "stroke",
-      "fill",
-      "fillText",
-      "closePath",
-      "quadraticCurveTo",
-    ];
-    const target: Record<string, unknown> = {};
-    for (const m of methods) {
-      target[m] = (...args: unknown[]) => {
-        calls.push({ op: m, args });
-      };
-    }
-    target.createLinearGradient = (...args: unknown[]) => {
-      calls.push({ op: "createLinearGradient", args });
-      return { addColorStop: () => {} };
-    };
-    const ctx = new Proxy(target, {
-      get(t, prop) {
-        if (typeof prop === "string" && prop in t) return t[prop];
-        return undefined;
-      },
-      set(t, prop, value) {
-        calls.push({ op: `set:${String(prop)}`, args: [value] });
-        Reflect.set(t, prop, value);
-        return true;
-      },
-    });
-    return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
-  }
+  // v2.0.0 S5 (D5-1 / T24)：`createRecordingCtx` / `DrawCall` 改为从
+  // `src/test-utils/canvas-ctx.ts` 共享导入（见文件头 import）。原先在此复制的
+  // 理由是"跨测试文件 import 会执行其 describe 注册"——抽到**非测试模块**
+  // （test-utils，内部无 describe）后该理由不再成立，故去重。
 
   function NotesProbe() {
     const { notes } = useProjectStore();
@@ -1154,48 +1121,8 @@ describe("v1.27 App cursor wiring (S1-T01/T02)", () => {
 // 同文件组件级直渲 PianoRollView 作对照：同一 canvas harness、同 viewRange /
 // cursorPosition，仅缺 autoScrollFollow 一项 → 唯一差异即该 flag，可隔离因果因子。
 describe("v1.28.0 App autoScrollFollow wiring (S1-T01/T02)", () => {
-  type DrawCall = { op: string; args: unknown[] };
-
-  // 与 S0 PianoRollView.test.tsx / 上段 v1.27 同款记录型 ctx（跨测试文件 import
-  // 会执行其 describe 注册，故复制）。
-  function createRecordingCtx() {
-    const calls: DrawCall[] = [];
-    const methods = [
-      "scale",
-      "clearRect",
-      "fillRect",
-      "beginPath",
-      "moveTo",
-      "lineTo",
-      "stroke",
-      "fill",
-      "fillText",
-      "closePath",
-      "quadraticCurveTo",
-    ];
-    const target: Record<string, unknown> = {};
-    for (const m of methods) {
-      target[m] = (...args: unknown[]) => {
-        calls.push({ op: m, args });
-      };
-    }
-    target.createLinearGradient = (...args: unknown[]) => {
-      calls.push({ op: "createLinearGradient", args });
-      return { addColorStop: () => {} };
-    };
-    const ctx = new Proxy(target, {
-      get(t, prop) {
-        if (typeof prop === "string" && prop in t) return t[prop];
-        return undefined;
-      },
-      set(t, prop, value) {
-        calls.push({ op: `set:${String(prop)}`, args: [value] });
-        Reflect.set(t, prop, value);
-        return true;
-      },
-    });
-    return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
-  }
+  // v2.0.0 S5 (D5-1 / T24)：同上去重——`createRecordingCtx` / `DrawCall` 由
+  // `src/test-utils/canvas-ctx.ts` 共享导入（原为与 S0/上段 v1.27 逐字节重复的内联副本）。
 
   function NotesProbe() {
     const { notes } = useProjectStore();
