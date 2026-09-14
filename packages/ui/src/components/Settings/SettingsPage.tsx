@@ -39,14 +39,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   // 处理重置设置
   const handleResetSettings = useCallback(() => {
-    const confirmed = window.confirm(t('settings.resetConfirm') || '确定要重置所有设置到默认值吗？此操作不可撤销。');
+    const confirmed = window.confirm(t('settings.resetConfirm', { defaultValue: '确定要重置所有设置到默认值吗？此操作不可撤销。' }));
     if (!confirmed) return;
     try {
       resetAll();
-      window.alert(t('settings.resetSuccess') || '设置已重置为默认值。');
+      window.alert(t('settings.resetSuccess', { defaultValue: '设置已重置为默认值。' }));
     } catch (err) {
       console.error('Failed to reset settings:', err);
-      window.alert(t('settings.resetFailed') || '重置设置失败，请重试。');
+      window.alert(t('settings.resetFailed', { defaultValue: '重置设置失败，请重试。' }));
     }
   }, [t, resetAll]);
 
@@ -68,15 +68,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         ];
         const hasValidKey = validKeys.some((key) => key in imported);
         if (!hasValidKey) {
-          window.alert(t('settings.importInvalid') || '导入的文件格式无效，请选择正确的设置文件。');
+          window.alert(t('settings.importInvalid', { defaultValue: '导入的文件格式无效，请选择正确的设置文件。' }));
           return;
         }
 
         updateSettings(imported);
-        window.alert(t('settings.importSuccess') || '设置导入成功。');
+        window.alert(t('settings.importSuccess', { defaultValue: '设置导入成功。' }));
       } catch (err) {
         console.error('Failed to import settings:', err);
-        window.alert(t('settings.importFailed') || '导入设置失败，请检查文件格式。');
+        window.alert(t('settings.importFailed', { defaultValue: '导入设置失败，请检查文件格式。' }));
       }
     };
     input.click();
@@ -97,10 +97,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      window.alert(t('settings.exportSuccess') || '设置导出成功。');
+      window.alert(t('settings.exportSuccess', { defaultValue: '设置导出成功。' }));
     } catch (err) {
       console.error('Failed to export settings:', err);
-      window.alert(t('settings.exportFailed') || '导出设置失败，请重试。');
+      window.alert(t('settings.exportFailed', { defaultValue: '导出设置失败，请重试。' }));
     }
   }, [t, settings]);
 

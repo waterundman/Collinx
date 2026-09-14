@@ -109,7 +109,7 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
 
   // 重置音频设置
   const handleReset = useCallback(() => {
-    if (window.confirm(t('settings.audio.resetConfirm') || '确定要重置所有音频设置为默认值吗？')) {
+    if (window.confirm(t('settings.audio.resetConfirm', { defaultValue: '确定要重置所有音频设置为默认值吗？' }))) {
       resetCategory('audio');
     }
   }, [resetCategory, t]);
@@ -124,7 +124,7 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
     <div className={`${styles.container} ${className ?? ''}`}>
       {/* 音频设备选择 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.audio.device') || '音频设备'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.audio.device', { defaultValue: '音频设备' })}</h3>
 
         {/* D2-3: 权限三态提示（denied/unavailable 时显示；DeviceSelector 既有空态照旧） */}
         {audioDevices.permission === 'denied' && (
@@ -159,16 +159,16 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
 
       {/* 采样率设置 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.audio.sampleRate') || '采样率'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.audio.sampleRate', { defaultValue: '采样率' })}</h3>
         
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
             <label className={styles.settingLabel} htmlFor="sampleRate">
-              {t('settings.audio.sampleRate') || '采样率'}
+              {t('settings.audio.sampleRate', { defaultValue: '采样率' })}
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.audio.sampleRateDesc') || '音频采样率，影响音质和CPU使用率'}
+            {t('settings.audio.sampleRateDesc', { defaultValue: '音频采样率，影响音质和CPU使用率' })}
           </p>
           <div className={styles.settingControl}>
             <select
@@ -194,16 +194,16 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
 
       {/* 缓冲区大小设置 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.audio.bufferSize') || '缓冲区大小'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.audio.bufferSize', { defaultValue: '缓冲区大小' })}</h3>
         
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
             <label className={styles.settingLabel} htmlFor="bufferSize">
-              {t('settings.audio.bufferSize') || '缓冲区大小'}
+              {t('settings.audio.bufferSize', { defaultValue: '缓冲区大小' })}
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.audio.bufferSizeDesc') || '缓冲区大小，较小的值降低延迟但可能增加CPU负载'}
+            {t('settings.audio.bufferSizeDesc', { defaultValue: '缓冲区大小，较小的值降低延迟但可能增加CPU负载' })}
           </p>
           <div className={styles.settingControl}>
             <select
@@ -224,19 +224,19 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
 
       {/* 延迟信息 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.audio.latency') || '延迟信息'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.audio.latency', { defaultValue: '延迟信息' })}</h3>
         
         <div className={styles.latencyInfo}>
           <div className={styles.latencyRow}>
             <span className={styles.latencyLabel}>
-              {t('settings.audio.estimatedLatency') || '预估延迟'}
+              {t('settings.audio.estimatedLatency', { defaultValue: '预估延迟' })}
             </span>
             <span className={styles.latencyValue}>{calculatedLatency} ms</span>
           </div>
           
           <div className={styles.latencyRow}>
             <span className={styles.latencyLabel}>
-              {t('settings.audio.latencyCompensation') || '延迟补偿'}
+              {t('settings.audio.latencyCompensation', { defaultValue: '延迟补偿' })}
             </span>
             <span className={styles.latencyValue}>{audio.latency} ms</span>
           </div>
@@ -244,8 +244,8 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
           <div className={`${styles.latencyRow} ${isLatencyGood ? styles.latencyGood : styles.latencyWarning}`}>
             <span className={styles.latencyLabel}>
               {isLatencyGood
-                ? (t('settings.audio.latencyGood') || '延迟表现良好')
-                : (t('settings.audio.latencyHigh') || '延迟较高，可能影响实时演奏')}
+                ? (t('settings.audio.latencyGood', { defaultValue: '延迟表现良好' }))
+                : (t('settings.audio.latencyHigh', { defaultValue: '延迟较高，可能影响实时演奏' }))}
             </span>
             <span>{isLatencyGood ? '✓' : '⚠'}</span>
           </div>
@@ -254,11 +254,11 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
             <label className={styles.settingLabel} htmlFor="latencyCompensation">
-              {t('settings.audio.latencyCompensation') || '延迟补偿 (ms)'}
+              {t('settings.audio.latencyCompensation', { defaultValue: '延迟补偿 (ms)' })}
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.audio.latencyCompensationDesc') || '手动调整延迟补偿值，用于同步音频和MIDI'}
+            {t('settings.audio.latencyCompensationDesc', { defaultValue: '手动调整延迟补偿值，用于同步音频和MIDI' })}
           </p>
           <div className={styles.settingControl}>
             <input
@@ -287,7 +287,7 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
       {/* 重置按钮 */}
       <div className={styles.section}>
         <button onClick={handleReset} className={styles.resetButton}>
-          {t('settings.audio.reset') || '重置音频设置'}
+          {t('settings.audio.reset', { defaultValue: '重置音频设置' })}
         </button>
       </div>
     </div>

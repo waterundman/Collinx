@@ -26,31 +26,31 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
   const getCategoryInfo = (category: SettingsCategory) => {
     const info: Record<SettingsCategory, { title: string; description: string }> = {
       general: {
-        title: t('settings.general'),
+        title: t('settings.general.title'),
         description: t('settings.generalDesc'),
       },
       audio: {
-        title: t('settings.audio'),
+        title: t('settings.audio.title'),
         description: t('settings.audioDesc'),
       },
       midi: {
-        title: t('settings.midi'),
+        title: t('settings.midi.title'),
         description: t('settings.midiDesc'),
       },
       mixer: {
-        title: t('settings.mixing'),
+        title: t('settings.mixing.title'),
         description: t('settings.mixingDesc'),
       },
       score: {
-        title: t('settings.notation'),
+        title: t('settings.notation.title'),
         description: t('settings.notationDesc'),
       },
       agent: {
-        title: t('settings.agent'),
+        title: t('settings.agent.title'),
         description: t('settings.agentDesc'),
       },
       taste: {
-        title: t('settings.taste'),
+        title: t('settings.taste.title'),
         description: t('settings.tasteDesc'),
       },
     };

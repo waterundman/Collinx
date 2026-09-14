@@ -18,6 +18,7 @@ import { MidiSettings } from '../MidiSettings';
 import { I18nProvider } from '../../../providers/I18nProvider';
 import en from '../../../i18n/locales/en.json';
 import zh from '../../../i18n/locales/zh-CN.json';
+import i18n from '../../../i18n';
 
 vi.mock('../../../services/device-enumeration', () => ({
   enumerateAudioDevices: vi.fn(),
@@ -169,28 +170,41 @@ describe('MidiSettings playback section (S2-T18)', () => {
 });
 
 describe('i18n settings.midi.playback nesting + symmetry (S2-T18)', () => {
-  const enRoot = en as unknown as Record<string, { playback?: Record<string, string> }>;
-  const zhRoot = zh as unknown as Record<string, { playback?: Record<string, string> }>;
+  // v2.0.0 后置修复（2026-09-14 遗留补全）：原断言读的是**顶层扁平键** `"settings.midi"`。
+  // 但 i18next 按 `keySeparator`（默认 `.`）逐层解析，路径会撞上**嵌套的 `settings.midi`**
+  // （是个字符串）→ 解析失败 → `t()` 返回**原始键名**。也就是说原断言保护的其实是
+  // "运行时解析不了的结构"，且它只读 JSON、从不调用 `t()`，因而**无法**发现 raw key。
+  // 现改为断言真正的嵌套路径 `settings.midi.playback`，并补 `t()` 级实证。
+  const enMidi = (en as unknown as { settings?: { midi?: { playback?: Record<string, string> } } })
+    .settings?.midi;
+  const zhMidi = (zh as unknown as { settings?: { midi?: { playback?: Record<string, string> } } })
+    .settings?.midi;
 
-  it('S2-T18e: playback 键嵌套于 `settings.midi` 对象内，无顶层 flat key', () => {
-    // 顶层键 "settings.midi" 是对象，playback 为其子对象（非顶层 dotted flat key）。
-    const enMidi = enRoot['settings.midi'];
-    const zhMidi = zhRoot['settings.midi'];
+  it('S2-T18e: playback 键嵌套于 settings.midi 内，且 t() 可解析（非 raw key）', () => {
     expect(enMidi?.playback).toBeDefined();
     expect(zhMidi?.playback).toBeDefined();
 
-    // 反证：不存在顶层键 "settings.midi.playback.*"（v1.23 陷阱）。
-    expect((en as Record<string, unknown>)['settings.midi.playback.followPlayhead']).toBeUndefined();
-    expect((zh as Record<string, unknown>)['settings.midi.playback.followPlayhead']).toBeUndefined();
+    // 反证（强化）：顶层不得存在任何 dotted flat key —— 它们会遮蔽嵌套路径、致解析失败。
+    for (const flat of ['settings.midi', 'settings.agent', 'settings.audio', 'settings.taste']) {
+      expect((en as Record<string, unknown>)[flat]).toBeUndefined();
+    }
 
-    // 文案已解析（非 raw key）：显式断言嵌套路径取值。
-    expect(enMidi!.playback!.followPlayhead).toBe('Follow Playhead');
-    expect(zhMidi!.playback!.followPlayhead).toBe('跟随播放头');
+    // 实证：经 i18next 解析得到**文案**，而非原始键名（原测试缺此断言）。
+    const prev = i18n.language;
+    i18n.changeLanguage('en');
+    const enVal = String(i18n.t('settings.midi.playback.followPlayhead'));
+    expect(enVal).toBe('Follow Playhead');
+    expect(enVal).not.toBe('settings.midi.playback.followPlayhead');
+    i18n.changeLanguage('zh-CN');
+    const zhVal = String(i18n.t('settings.midi.playback.followPlayhead'));
+    expect(zhVal).toBe('跟随播放头');
+    expect(zhVal).not.toBe('settings.midi.playback.followPlayhead');
+    i18n.changeLanguage(prev);
   });
 
   it('S2-T18f: playback 子键 en/zh 结构对称', () => {
-    const enKeys = Object.keys(enRoot['settings.midi']!.playback!).sort();
-    const zhKeys = Object.keys(zhRoot['settings.midi']!.playback!).sort();
+    const enKeys = Object.keys(enMidi!.playback!).sort();
+    const zhKeys = Object.keys(zhMidi!.playback!).sort();
     expect(enKeys).toEqual(zhKeys);
     expect(enKeys.length).toBeGreaterThan(0);
   });

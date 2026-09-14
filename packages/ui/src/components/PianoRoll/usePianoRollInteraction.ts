@@ -54,7 +54,11 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
     originalDur: number;
     hasMoved: boolean;
   } | null>(null);
-  const [playheadPosition, setPlayheadPosition] = useState(0);
+  // v2.0.0 后置清理（2026-09-14 遗留补全）：原此处有
+  // `const [playheadPosition, setPlayheadPosition] = useState(0);` 并随 hook 导出——
+  // 但 `setPlayheadPosition` **从未被调用**（grep 全仓仅命中声明本身），状态恒为 0，
+  // 且无任何消费方读取，属死代码；更易与 PianoRollView 的 `playheadPosition` prop
+  // 混淆（二者语义无关：后者是播放头位置，前者曾是残留占位）。故删除。
 
   const noteRectsRef = useRef<Map<string, { x: number; y: number; w: number; h: number }>>(new Map());
 
@@ -250,7 +254,6 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
     barBeatToPixel,
     hoveredNoteId,
     draggingState,
-    playheadPosition,
     updateNoteRects,
   };
 }

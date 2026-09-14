@@ -162,13 +162,13 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
                 midiMapping: importedMapping,
               },
             });
-            alert(t('settings.midi.importSuccess') || 'MIDI映射导入成功');
+            alert(t('settings.midi.importSuccess', { defaultValue: 'MIDI映射导入成功' }));
           } else {
-            alert(t('settings.midi.importError') || '无效的MIDI映射文件格式');
+            alert(t('settings.midi.importError', { defaultValue: '无效的MIDI映射文件格式' }));
           }
         }
       } catch (error) {
-        alert(t('settings.midi.importError') || '导入MIDI映射失败');
+        alert(t('settings.midi.importError', { defaultValue: '导入MIDI映射失败' }));
       }
     };
     reader.readAsText(file);
@@ -181,7 +181,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
 
   // 重置MIDI映射
   const handleResetMapping = useCallback(() => {
-    if (window.confirm(t('settings.midi.resetMappingConfirm') || '确定要重置所有MIDI映射吗？')) {
+    if (window.confirm(t('settings.midi.resetMappingConfirm', { defaultValue: '确定要重置所有MIDI映射吗？' }))) {
       updateSettings({
         midi: {
           ...midi,
@@ -193,7 +193,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
 
   // 重置MIDI设置
   const handleReset = useCallback(() => {
-    if (window.confirm(t('settings.midi.resetConfirm') || '确定要重置所有MIDI设置为默认值吗？')) {
+    if (window.confirm(t('settings.midi.resetConfirm', { defaultValue: '确定要重置所有MIDI设置为默认值吗？' }))) {
       resetCategory('midi');
     }
   }, [resetCategory, t]);
@@ -214,7 +214,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
 
       {/* MIDI设备选择 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.midi.device') || 'MIDI设备'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.midi.device', { defaultValue: 'MIDI设备' })}</h3>
 
         {/* D2-4: 权限三态提示（denied/unavailable 时显示；DeviceSelector 既有空态照旧） */}
         {midiDevices.permission === 'denied' && (
@@ -249,16 +249,16 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
 
       {/* MIDI通道设置 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.midi.channel') || 'MIDI通道'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.midi.channel', { defaultValue: 'MIDI通道' })}</h3>
         
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
             <label className={styles.settingLabel} htmlFor="midiChannel">
-              {t('settings.midi.channel') || 'MIDI通道'}
+              {t('settings.midi.channel', { defaultValue: 'MIDI通道' })}
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.midi.channelDesc') || '选择MIDI接收/发送的通道 (1-16)'}
+            {t('settings.midi.channelDesc', { defaultValue: '选择MIDI接收/发送的通道 (1-16)' })}
           </p>
           <div className={styles.settingControl}>
             <select
@@ -269,29 +269,29 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
             >
               {Array.from({ length: 16 }, (_, i) => i + 1).map((channel) => (
                 <option key={channel} value={channel}>
-                  {t('settings.midi.channelNumber', { channel }) || `通道 ${channel}`}
+                  {t('settings.midi.channelNumber', { channel, defaultValue: `通道 ${channel}` })}
                 </option>
               ))}
             </select>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.midi.currentChannel', { channel: midi.midiChannel }) || `当前通道: ${midi.midiChannel}`}
+            {t('settings.midi.currentChannel', { channel: midi.midiChannel, defaultValue: `当前通道: ${midi.midiChannel}` })}
           </p>
         </div>
       </div>
 
       {/* v1.26.0 (D2-3): 录入设置（量化网格 / 力度模式 / 固定力度） */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.midi.recording.title') || '录入设置'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.midi.recording.title', { defaultValue: '录入设置' })}</h3>
 
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
             <label className={styles.settingLabel} htmlFor="recordingGrid">
-              {t('settings.midi.recording.quantizeGrid') || '量化网格'}
+              {t('settings.midi.recording.quantizeGrid', { defaultValue: '量化网格' })}
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.midi.recording.quantizeGridDesc') || '将录入音符的落点对齐到所选网格'}
+            {t('settings.midi.recording.quantizeGridDesc', { defaultValue: '将录入音符的落点对齐到所选网格' })}
           </p>
           <div className={styles.settingControl}>
             <select
@@ -301,10 +301,10 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
               value={String(recording.quantizeGrid)}
               onChange={handleQuantizeGridChange}
             >
-              <option value="0">{t('settings.midi.recording.gridOff') || 'Off'}</option>
-              <option value="0.25">{t('settings.midi.recording.gridQuarter') || '1/4 beat'}</option>
-              <option value="0.5">{t('settings.midi.recording.gridHalf') || '1/2 beat'}</option>
-              <option value="1">{t('settings.midi.recording.gridWhole') || '1 beat'}</option>
+              <option value="0">{t('settings.midi.recording.gridOff', { defaultValue: 'Off' })}</option>
+              <option value="0.25">{t('settings.midi.recording.gridQuarter', { defaultValue: '1/4 beat' })}</option>
+              <option value="0.5">{t('settings.midi.recording.gridHalf', { defaultValue: '1/2 beat' })}</option>
+              <option value="1">{t('settings.midi.recording.gridWhole', { defaultValue: '1 beat' })}</option>
             </select>
           </div>
         </div>
@@ -312,11 +312,11 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
             <label className={styles.settingLabel} htmlFor="recordingVelocityMode">
-              {t('settings.midi.recording.velocityMode') || '力度模式'}
+              {t('settings.midi.recording.velocityMode', { defaultValue: '力度模式' })}
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.midi.recording.velocityModeDesc') || '记录实时力度或使用固定力度值'}
+            {t('settings.midi.recording.velocityModeDesc', { defaultValue: '记录实时力度或使用固定力度值' })}
           </p>
           <div className={styles.settingControl}>
             <select
@@ -326,8 +326,8 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
               value={recording.velocityMode}
               onChange={handleVelocityModeChange}
             >
-              <option value="live">{t('settings.midi.recording.velocityLive') || 'Live'}</option>
-              <option value="fixed">{t('settings.midi.recording.velocityFixed') || 'Fixed'}</option>
+              <option value="live">{t('settings.midi.recording.velocityLive', { defaultValue: 'Live' })}</option>
+              <option value="fixed">{t('settings.midi.recording.velocityFixed', { defaultValue: 'Fixed' })}</option>
             </select>
           </div>
         </div>
@@ -335,11 +335,11 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
             <label className={styles.settingLabel} htmlFor="recordingFixedVelocity">
-              {t('settings.midi.recording.fixedVelocity') || '固定力度'}
+              {t('settings.midi.recording.fixedVelocity', { defaultValue: '固定力度' })}
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.midi.recording.fixedVelocityDesc') || '固定模式使用的力度值 (1-127)'}
+            {t('settings.midi.recording.fixedVelocityDesc', { defaultValue: '固定模式使用的力度值 (1-127)' })}
           </p>
           <div className={styles.settingControl}>
             <input
@@ -414,11 +414,11 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
 
       {/* MIDI映射管理 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.midi.mapping') || 'MIDI映射'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.midi.mapping', { defaultValue: 'MIDI映射' })}</h3>
         
         <div className={styles.mappingSection}>
           <p className={styles.settingDescription}>
-            {t('settings.midi.mappingDesc') || '管理MIDI控制器到软件参数的映射关系'}
+            {t('settings.midi.mappingDesc', { defaultValue: '管理MIDI控制器到软件参数的映射关系' })}
           </p>
           
           <div className={styles.mappingActions}>
@@ -431,7 +431,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
-              {t('settings.midi.import') || '导入映射'}
+              {t('settings.midi.import', { defaultValue: '导入映射' })}
             </button>
             
             <button
@@ -444,7 +444,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              {t('settings.midi.export') || '导出映射'}
+              {t('settings.midi.export', { defaultValue: '导出映射' })}
             </button>
             
             <button
@@ -456,7 +456,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
                 <polyline points="1 4 1 10 7 10" />
                 <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
               </svg>
-              {t('settings.midi.resetMapping') || '重置映射'}
+              {t('settings.midi.resetMapping', { defaultValue: '重置映射' })}
             </button>
           </div>
 
@@ -471,7 +471,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
               ))
             ) : (
               <div className={styles.mappingEmpty}>
-                {t('settings.midi.noMappings') || '暂无MIDI映射配置'}
+                {t('settings.midi.noMappings', { defaultValue: '暂无MIDI映射配置' })}
               </div>
             )}
           </div>
@@ -481,7 +481,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
       {/* 重置按钮 */}
       <div className={styles.section}>
         <button onClick={handleReset} className={styles.resetButton}>
-          {t('settings.midi.reset') || '重置MIDI设置'}
+          {t('settings.midi.reset', { defaultValue: '重置MIDI设置' })}
         </button>
       </div>
     </div>

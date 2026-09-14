@@ -65,7 +65,7 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
 
   // 重置Agent设置
   const handleReset = useCallback(() => {
-    if (window.confirm(t('settings.agent.resetConfirm') || '确定要重置所有Agent设置为默认值吗？')) {
+    if (window.confirm(t('settings.agent.resetConfirm', { defaultValue: '确定要重置所有Agent设置为默认值吗？' }))) {
       resetCategory('agent');
     }
   }, [resetCategory, t]);
@@ -107,7 +107,7 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
             }
           } catch (error) {
             console.error('Failed to import agent settings:', error);
-            alert(t('settings.agent.importError') || '导入设置失败，请检查文件格式');
+            alert(t('settings.agent.importError', { defaultValue: '导入设置失败，请检查文件格式' }));
           }
         };
         reader.readAsText(file);
@@ -148,15 +148,15 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
     <div className={`${styles.container} ${className ?? ''}`}>
       {/* Agent行为设置 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.agent.behavior') || 'Agent行为'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.agent.behavior', { defaultValue: 'Agent行为' })}</h3>
         
         {/* 自动建议 */}
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
-            <label className={styles.settingLabel}>{t('settings.agent.autoSuggest') || '自动建议'}</label>
+            <label className={styles.settingLabel}>{t('settings.agent.autoSuggest', { defaultValue: '自动建议' })}</label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.agent.autoSuggestDesc') || 'Agent自动提供建议和帮助，无需用户主动询问'}
+            {t('settings.agent.autoSuggestDesc', { defaultValue: 'Agent自动提供建议和帮助，无需用户主动询问' })}
           </p>
           <div className={styles.settingControl}>
             <label className={styles.checkboxControl}>
@@ -166,7 +166,7 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
                 checked={agent.autoSuggest}
                 onChange={handleAutoSuggestChange}
               />
-              <span className={styles.checkboxLabel}>{t('settings.agent.enableAutoSuggest') || '启用自动建议'}</span>
+              <span className={styles.checkboxLabel}>{t('settings.agent.enableAutoSuggest', { defaultValue: '启用自动建议' })}</span>
             </label>
           </div>
         </div>
@@ -174,10 +174,10 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
         {/* 解释详细程度 */}
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
-            <label className={styles.settingLabel}>{t('settings.agent.explanationLevel') || '解释详细程度'}</label>
+            <label className={styles.settingLabel}>{t('settings.agent.explanationLevel', { defaultValue: '解释详细程度' })}</label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.agent.explanationLevelDesc') || 'Agent解释的详细程度，影响其响应的详细程度'}
+            {t('settings.agent.explanationLevelDesc', { defaultValue: 'Agent解释的详细程度，影响其响应的详细程度' })}
           </p>
           <div className={styles.settingControl}>
             <select
@@ -197,18 +197,18 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
 
       {/* Agent权限设置 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.agent.permissions') || 'Agent权限'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.agent.permissions', { defaultValue: 'Agent权限' })}</h3>
         
         {/* 确认模式 */}
         <div className={styles.settingRow}>
           <div className={styles.settingHeader}>
-            <label className={styles.settingLabel}>{t('settings.agent.confirmationMode') || '确认模式'}</label>
+            <label className={styles.settingLabel}>{t('settings.agent.confirmationMode', { defaultValue: '确认模式' })}</label>
             <span className={`${styles.permissionBadge} ${getConfirmationBadgeClass(agent.confirmationMode)}`}>
               {getConfirmationBadgeText(agent.confirmationMode)}
             </span>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.agent.confirmationModeDesc') || '何时需要用户确认Agent操作，平衡安全性和便利性'}
+            {t('settings.agent.confirmationModeDesc', { defaultValue: '何时需要用户确认Agent操作，平衡安全性和便利性' })}
           </p>
           <div className={styles.settingControl}>
             <select
@@ -243,7 +243,7 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
 
       {/* 操作按钮 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.agent.actions') || '操作'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.agent.actions', { defaultValue: '操作' })}</h3>
         
         <div className={styles.actionButtons}>
           <button onClick={handleExport} className={styles.actionButton}>
@@ -252,7 +252,7 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
               <polyline points="7,10 12,15 17,10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            {t('settings.agent.export') || '导出设置'}
+            {t('settings.agent.export', { defaultValue: '导出设置' })}
           </button>
           
           <button onClick={handleImport} className={styles.actionButton}>
@@ -261,7 +261,7 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
               <polyline points="17,8 12,3 7,8" />
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
-            {t('settings.agent.import') || '导入设置'}
+            {t('settings.agent.import', { defaultValue: '导入设置' })}
           </button>
         </div>
       </div>
@@ -269,7 +269,7 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
       {/* 重置按钮 */}
       <div className={styles.section}>
         <button onClick={handleReset} className={styles.resetButton}>
-          {t('settings.agent.reset') || '重置Agent设置'}
+          {t('settings.agent.reset', { defaultValue: '重置Agent设置' })}
         </button>
       </div>
     </div>

@@ -8,6 +8,7 @@ import {
   // 与 MidiInputLoop.test.tsx 的两份逐字节重复）。行为等价是硬约束——S1-T09 的
   // 388 条 golden 逐字节比对会捕获任何录制行为差异。
   createRecordingCtx,
+  createRecordedCanvas,
   type DrawCall,
 } from "../../../test-utils/canvas-ctx";
 // v2.0.0 Stage 1 (T09): 改动前（v1.29）仅给 cursorPosition 时的完整绘制调用序列
@@ -122,7 +123,7 @@ describe("PianoRollView v1.27.0 cursor / quantize-grid draw calls", () => {
   // ResizeObserver stub 不触发回调，保持默认值）。
   const CANVAS_H = 600;
 
-  const { ctx, calls } = createRecordingCtx();
+  const { ctx, calls, frames, lastFrame, verticalLineXsIn, trianglesIn, cursorLabelsIn, positionLabelsIn } = createRecordedCanvas();
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
@@ -309,7 +310,7 @@ describe("PianoRollView v1.28.0 cursor icon / auto-scroll-follow draw calls", ()
   /** 数值自检：确认 harness 实态与推导一致（失败即说明 harness 基线已变）。 */
   const RIGHT_EDGE = CANVAS_W - FOLLOW_EDGE_MARGIN; // 752
 
-  const { ctx, calls } = createRecordingCtx();
+  const { ctx, calls, frames, lastFrame, verticalLineXsIn, trianglesIn, cursorLabelsIn, positionLabelsIn } = createRecordedCanvas();
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
@@ -359,80 +360,10 @@ describe("PianoRollView v1.28.0 cursor icon / auto-scroll-follow draw calls", ()
     });
   }
 
-  /** 每帧以 drawCanvas 开头的 ctx.scale(dpr, dpr) 为界切分（一帧一次）。 */
-  function frames(): DrawCall[][] {
-    const out: DrawCall[][] = [];
-    let cur: DrawCall[] | null = null;
-    for (const c of calls) {
-      if (c.op === "scale") {
-        cur = [];
-        out.push(cur);
-      }
-      if (cur) cur.push(c);
-    }
-    return out;
-  }
 
-  function lastFrame(): DrawCall[] {
-    const fs = frames();
-    return fs.length > 0 ? fs[fs.length - 1] : [];
-  }
 
-  /** 竖线绘制（moveTo(x, 0) + lineTo(x, h)）：网格线与 cursor 竖线共用此模式。 */
-  function verticalLineXsIn(frame: DrawCall[]): number[] {
-    const xs: number[] = [];
-    for (let i = 0; i < frame.length; i++) {
-      const c = frame[i];
-      if (
-        c.op === "moveTo" &&
-        c.args[1] === 0 &&
-        frame[i + 1]?.op === "lineTo" &&
-        frame[i + 1].args[0] === c.args[0] &&
-        frame[i + 1].args[1] === CANVAS_H
-      ) {
-        xs.push(Number(c.args[0]));
-      }
-    }
-    return xs;
-  }
 
-  /** 倒三角序列：moveTo(apex, 8) → lineTo(left, 0) → lineTo(right, 0) → closePath → fill。 */
-  function trianglesIn(frame: DrawCall[]) {
-    const out: { apex: number[]; left: number[]; right: number[] }[] = [];
-    for (let i = 0; i < frame.length; i++) {
-      const m = frame[i];
-      const l1 = frame[i + 1];
-      const l2 = frame[i + 2];
-      if (
-        m?.op === "moveTo" &&
-        m.args[1] === 8 &&
-        l1?.op === "lineTo" &&
-        l1.args[1] === 0 &&
-        l2?.op === "lineTo" &&
-        l2.args[1] === 0 &&
-        frame[i + 3]?.op === "closePath" &&
-        frame[i + 4]?.op === "fill"
-      ) {
-        out.push({
-          apex: m.args as number[],
-          left: l1.args as number[],
-          right: l2.args as number[],
-        });
-      }
-    }
-    return out;
-  }
 
-  /** cursor 位置标签（m{bar}.{beat}）及其 x/y。 */
-  function cursorLabelsIn(frame: DrawCall[]) {
-    return frame
-      .filter((c) => c.op === "fillText" && /^m\d+\.\d+$/.test(String(c.args[0])))
-      .map((c) => ({
-        text: String(c.args[0]),
-        x: Number(c.args[1]),
-        y: Number(c.args[2]),
-      }));
-  }
 
   it("S0-T01: cursor 可见时绘制顶部倒三角（顶点 (x,8) / 上角 (x∓4,0)）+ 标签右移至 x+6", () => {
     // ticks = (3-1)*4 + (3-1) = 10 → cursorX = ticks*PPB - scrollX(0) = 400。
@@ -634,7 +565,7 @@ describe("PianoRollView v2.0.0 playhead draw calls (S1-T08)", () => {
     "--accent-sunset": "#ff7a17",
   };
 
-  const { ctx, calls } = createRecordingCtx();
+  const { ctx, calls, frames, lastFrame, verticalLineXsIn, trianglesIn, cursorLabelsIn, positionLabelsIn } = createRecordedCanvas();
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
@@ -683,80 +614,10 @@ describe("PianoRollView v2.0.0 playhead draw calls (S1-T08)", () => {
     });
   }
 
-  /** 以每帧开头的 ctx.scale(dpr, dpr) 为界切分（一帧一次）。 */
-  function frames(): DrawCall[][] {
-    const out: DrawCall[][] = [];
-    let cur: DrawCall[] | null = null;
-    for (const c of calls) {
-      if (c.op === "scale") {
-        cur = [];
-        out.push(cur);
-      }
-      if (cur) cur.push(c);
-    }
-    return out;
-  }
 
-  function lastFrame(): DrawCall[] {
-    const fs = frames();
-    return fs.length > 0 ? fs[fs.length - 1] : [];
-  }
 
-  /** 竖线绘制（moveTo(x,0) + lineTo(x,h)）：网格线 / cursor / playhead 共用模板。 */
-  function verticalLineXsIn(frame: DrawCall[]): number[] {
-    const xs: number[] = [];
-    for (let i = 0; i < frame.length; i++) {
-      const c = frame[i];
-      if (
-        c.op === "moveTo" &&
-        c.args[1] === 0 &&
-        frame[i + 1]?.op === "lineTo" &&
-        frame[i + 1].args[0] === c.args[0] &&
-        frame[i + 1].args[1] === CANVAS_H
-      ) {
-        xs.push(Number(c.args[0]));
-      }
-    }
-    return xs;
-  }
 
-  /** 倒三角序列：moveTo(apex,8) → lineTo(∓,0) → lineTo(∓,0) → closePath → fill。 */
-  function trianglesIn(frame: DrawCall[]) {
-    const out: { apex: number[]; left: number[]; right: number[] }[] = [];
-    for (let i = 0; i < frame.length; i++) {
-      const m = frame[i];
-      const l1 = frame[i + 1];
-      const l2 = frame[i + 2];
-      if (
-        m?.op === "moveTo" &&
-        m.args[1] === 8 &&
-        l1?.op === "lineTo" &&
-        l1.args[1] === 0 &&
-        l2?.op === "lineTo" &&
-        l2.args[1] === 0 &&
-        frame[i + 3]?.op === "closePath" &&
-        frame[i + 4]?.op === "fill"
-      ) {
-        out.push({
-          apex: m.args as number[],
-          left: l1.args as number[],
-          right: l2.args as number[],
-        });
-      }
-    }
-    return out;
-  }
 
-  /** m{bar}.{beat} 位置标签（cursor 与 playhead 共用格式）及 x/y。 */
-  function positionLabelsIn(frame: DrawCall[]) {
-    return frame
-      .filter((c) => c.op === "fillText" && /^m\d+\.\d+$/.test(String(c.args[0])))
-      .map((c) => ({
-        text: String(c.args[0]),
-        x: Number(c.args[1]),
-        y: Number(c.args[2]),
-      }));
-  }
 
   const propSets = (name: string): unknown[] =>
     calls.filter((c) => c.op === `set:${name}`).map((c) => c.args[0]);
@@ -859,7 +720,7 @@ describe("PianoRollView v2.0.0 playhead zero-regression (S1-T09)", () => {
     viewRange: { startBar: 1, endBar: 16 },
   };
 
-  const { ctx, calls } = createRecordingCtx();
+  const { ctx, calls, frames, lastFrame, verticalLineXsIn, trianglesIn, cursorLabelsIn, positionLabelsIn } = createRecordedCanvas();
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
@@ -946,7 +807,7 @@ describe("PianoRollView v2.0.0 follow / pan / suspension (S2-T12..T17)", () => {
   const MAX_SCROLL_X = 64 * PPB - CANVAS_W; // 1760
   const MAX_SCROLL_Y = (108 - 24 + 1) * 18 - CANVAS_H; // 930
 
-  const { ctx, calls } = createRecordingCtx();
+  const { ctx, calls, frames, lastFrame, verticalLineXsIn, trianglesIn, cursorLabelsIn, positionLabelsIn } = createRecordedCanvas();
   let root: Root | null = null;
   let container: HTMLDivElement | null = null;
 
@@ -996,40 +857,8 @@ describe("PianoRollView v2.0.0 follow / pan / suspension (S2-T12..T17)", () => {
     });
   }
 
-  function frames(): DrawCall[][] {
-    const out: DrawCall[][] = [];
-    let cur: DrawCall[] | null = null;
-    for (const c of calls) {
-      if (c.op === "scale") {
-        cur = [];
-        out.push(cur);
-      }
-      if (cur) cur.push(c);
-    }
-    return out;
-  }
 
-  function lastFrame(): DrawCall[] {
-    const fs = frames();
-    return fs.length > 0 ? fs[fs.length - 1] : [];
-  }
 
-  function verticalLineXsIn(frame: DrawCall[]): number[] {
-    const xs: number[] = [];
-    for (let i = 0; i < frame.length; i++) {
-      const c = frame[i];
-      if (
-        c.op === "moveTo" &&
-        c.args[1] === 0 &&
-        frame[i + 1]?.op === "lineTo" &&
-        frame[i + 1].args[0] === c.args[0] &&
-        frame[i + 1].args[1] === CANVAS_H
-      ) {
-        xs.push(Number(c.args[0]));
-      }
-    }
-    return xs;
-  }
 
   /** 时间轴「纯整数标签」的 inline left（bar N → (N-1)*4*ppb - scrollX）。 */
   function timelineLeft(el: HTMLElement, label: string): number {

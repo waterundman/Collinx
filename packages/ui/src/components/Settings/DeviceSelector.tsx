@@ -84,9 +84,9 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
   const getDeviceStatus = useCallback((device: DeviceInfo): string => {
     // v1.24.0: isAvailable 仅在显式 false 时视为不可用（音频枚举无该字段，
     // undefined 表示未知/可用，不能误标为不可用）
-    if (device.isAvailable === false) return t('settings.device.unavailable') || '不可用';
-    if (device.isDefault) return t('settings.device.default') || '默认';
-    return t('settings.device.connected') || '已连接';
+    if (device.isAvailable === false) return t('settings.device.unavailable', { defaultValue: '不可用' });
+    if (device.isDefault) return t('settings.device.default', { defaultValue: '默认' });
+    return t('settings.device.connected', { defaultValue: '已连接' });
   }, [t]);
 
   // 获取设备状态样式
@@ -101,11 +101,11 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
 
   const label = deviceType === 'audio'
     ? (direction === 'input'
-      ? t('settings.audio.inputDevice') || '输入设备'
-      : t('settings.audio.outputDevice') || '输出设备')
+      ? t('settings.audio.inputDevice', { defaultValue: '输入设备' })
+      : t('settings.audio.outputDevice', { defaultValue: '输出设备' }))
     : (direction === 'input'
-      ? t('settings.midi.inputDevice') || 'MIDI输入设备'
-      : t('settings.midi.outputDevice') || 'MIDI输出设备');
+      ? t('settings.midi.inputDevice', { defaultValue: 'MIDI输入设备' })
+      : t('settings.midi.outputDevice', { defaultValue: 'MIDI输出设备' }));
 
   return (
     <div className={`${styles.deviceSelector} ${className ?? ''}`}>
@@ -116,7 +116,7 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
           <span>
             {selectedDevice
               ? getDeviceStatus(selectedDevice)
-              : t('settings.device.notSelected') || '未选择'}
+              : t('settings.device.notSelected', { defaultValue: '未选择' })}
           </span>
         </div>
       </div>
@@ -169,8 +169,8 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
           </svg>
           {isRefreshing
-            ? t('settings.device.refreshing') || '刷新中...'
-            : t('settings.device.refresh') || '刷新设备'}
+            ? t('settings.device.refreshing', { defaultValue: '刷新中...' })
+            : t('settings.device.refresh', { defaultValue: '刷新设备' })}
         </button>
       )}
     </div>

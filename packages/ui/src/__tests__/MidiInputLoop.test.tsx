@@ -55,6 +55,7 @@ import { SETTINGS_STORAGE_KEY } from "../types/settings";
 import {
   // v2.0.0 S5 (D5-1 / T24)：录制型 canvas ctx 的共享实现（本文件原有两份内联复制）。
   createRecordingCtx,
+  createRecordedCanvas,
   type DrawCall,
 } from "../test-utils/canvas-ctx";
 import styles from "../components/PianoRoll/PianoRoll.module.css";
@@ -953,7 +954,7 @@ describe("v1.27 App cursor wiring (S1-T01/T02)", () => {
   //（ResizeObserver stub 不触发回调）。App 侧 viewRange={startBar:1, endBar:8}。
   const CANVAS_H = 600;
 
-  const { ctx, calls } = createRecordingCtx();
+  const { ctx, calls, frames, lastFrame, verticalLineXsIn, trianglesIn, cursorLabelsIn, positionLabelsIn } = createRecordedCanvas();
 
   beforeAll(() => {
     Object.defineProperty(window, "ResizeObserver", {
@@ -1188,7 +1189,7 @@ describe("v1.28.0 App autoScrollFollow wiring (S1-T01/T02)", () => {
   /** 未越缘音数：cursorX = 18*40 = 720 ≤ 752。 */
   const PRE_EDGE = 18;
 
-  const { ctx, calls } = createRecordingCtx();
+  const { ctx, calls, frames, lastFrame, verticalLineXsIn, trianglesIn, cursorLabelsIn, positionLabelsIn } = createRecordedCanvas();
 
   beforeAll(() => {
     Object.defineProperty(window, "ResizeObserver", {
@@ -1215,53 +1216,9 @@ describe("v1.28.0 App autoScrollFollow wiring (S1-T01/T02)", () => {
     document.body.innerHTML = "";
   });
 
-  /** 每帧以 drawCanvas 起手的 ctx.scale(dpr,dpr) 为界切分（同 S0 frames()）。 */
-  function frames(): DrawCall[][] {
-    const out: DrawCall[][] = [];
-    let cur: DrawCall[] | null = null;
-    for (const c of calls) {
-      if (c.op === "scale") {
-        cur = [];
-        out.push(cur);
-      }
-      if (cur) cur.push(c);
-    }
-    return out;
-  }
 
-  function lastFrame(): DrawCall[] {
-    const fs = frames();
-    return fs.length > 0 ? fs[fs.length - 1] : [];
-  }
 
-  /** 竖线绘制（moveTo(x, 0) + lineTo(x, CANVAS_H)）：网格线与 cursor 竖线共用。 */
-  function verticalLineXsIn(frame: DrawCall[]): number[] {
-    const xs: number[] = [];
-    for (let i = 0; i < frame.length; i++) {
-      const c = frame[i];
-      if (
-        c.op === "moveTo" &&
-        c.args[1] === 0 &&
-        frame[i + 1]?.op === "lineTo" &&
-        frame[i + 1].args[0] === c.args[0] &&
-        frame[i + 1].args[1] === CANVAS_H
-      ) {
-        xs.push(Number(c.args[0]));
-      }
-    }
-    return xs;
-  }
 
-  /** cursor 位置标签（m{bar}.{beat}）及其 x/y。 */
-  function cursorLabelsIn(frame: DrawCall[]) {
-    return frame
-      .filter((c) => c.op === "fillText" && /^m\d+\.\d+$/.test(String(c.args[0])))
-      .map((c) => ({
-        text: String(c.args[0]),
-        x: Number(c.args[1]),
-        y: Number(c.args[2]),
-      }));
-  }
 
   it("S1-T01: App 接线后同步进序列 → cursor 越右缘(752) 触发跟随，末帧竖线落回视口内 (critical)", async () => {
     const port = makeMockPort("default");

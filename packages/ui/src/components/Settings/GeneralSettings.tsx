@@ -32,7 +32,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ className }) =
     <div className={`${styles.container} ${className ?? ''}`}>
       {/* 外观设置 */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('settings.appearance') || '外观设置'}</h3>
+        <h3 className={styles.sectionTitle}>{t('settings.appearance', { defaultValue: '外观设置' })}</h3>
         <LanguageSelector />
         <ThemeSelector />
       </div>
@@ -60,7 +60,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ className }) =
             alignSelf: 'flex-start',
           }}
         >
-          {t('settings.reset') || '重置通用设置'}
+          {t('settings.reset', { defaultValue: '重置通用设置' })}
         </button>
       </div>
     </div>

@@ -12,10 +12,14 @@
  * 的 `S1-T09` 以 v1.29 录制的 388 条 golden（`fixtures/pianoRollDrawCalls.cursorOnly.json`）
  * 做逐字节比对，任何录制行为差异都会使其变红。
  *
- * ⚠️ 已知遗留（不在 T24 范围，登记供后续清理）：`frames()` / `verticalLineXsIn()` /
- * `trianglesIn()` / `cursorLabelsIn()` / `positionLabelsIn()` 这几个**断言辅助函数**
- * 同样是复制的（两文件中共声明 8 次），本次未一并抽取——它们的调用面更广、各 describe
- * 的取用子集不同，合并需逐个比对，故留待单独一次重构。
+ * v2.0.0 后置补全（2026-09-14）：断言辅助函数 `frames()` / `lastFrame()` /
+ * `verticalLineXsIn()` / `trianglesIn()` / `cursorLabelsIn()` / `positionLabelsIn()`
+ * 此前在各 describe 内**重复声明 15 次**（每个名字体逐字节相同），现并入
+ * `createRecordedCanvas()` 工厂返回——工厂闭包持有 `calls`，故各 helper 保持**零参**
+ * 签名，调用点无需改动。
+ *
+ * `verticalLineXsIn` 体引用 describe 局部的 `CANVAS_H`；当前 6 个 site 全部为 600，
+ * 故工厂以 `canvasH` 形参承载（默认 600）。未来若某 site 用不同画布高，显式传入即可。
  */
 
 /** 单条录制记录：方法调用（op = 方法名）或属性赋值（op = `set:<prop>`）。 */
@@ -71,4 +75,118 @@ export function createRecordingCtx(): {
     },
   });
   return { ctx: ctx as unknown as CanvasRenderingContext2D, calls };
+}
+
+
+/** 时间轴/网格断言辅助函数所需画布高度（各 site 现均为 600）。 */
+export const DEFAULT_RECORDING_CANVAS_H = 600;
+
+/**
+ * 录制型 canvas ctx + 一组绑定其 `calls` 的断言辅助函数（工厂）。
+ *
+ * 与直接调用 `createRecordingCtx()` 相比，本工厂额外返回 6 个 helper；它们闭包持有
+ * 本次录制的 `calls`，因此**逐个 describe 只应创建一个实例**（不要把多个实例的
+ * helper 混用）。helper 语义见各函数上的注释。
+ */
+export function createRecordedCanvas(canvasH: number = DEFAULT_RECORDING_CANVAS_H): {
+  ctx: CanvasRenderingContext2D;
+  calls: DrawCall[];
+  frames: () => DrawCall[][];
+  lastFrame: () => DrawCall[];
+  verticalLineXsIn: (frame: DrawCall[]) => number[];
+  trianglesIn: (frame: DrawCall[]) => { apex: number[]; left: number[]; right: number[] }[];
+  cursorLabelsIn: (frame: DrawCall[]) => { text: string; x: number; y: number }[];
+  positionLabelsIn: (frame: DrawCall[]) => { text: string; x: number; y: number }[];
+} {
+  const { ctx, calls } = createRecordingCtx();
+
+  /** 按 `scale` 调用切帧（每次 drawCanvas 以 scale 起始）。 */
+  function frames(): DrawCall[][] {
+    const out: DrawCall[][] = [];
+    let cur: DrawCall[] | null = null;
+    for (const c of calls) {
+      if (c.op === "scale") {
+        cur = [];
+        out.push(cur);
+      }
+      if (cur) cur.push(c);
+    }
+    return out;
+  }
+
+  function lastFrame(): DrawCall[] {
+    const fs = frames();
+    return fs.length > 0 ? fs[fs.length - 1] : [];
+  }
+
+  /** 竖线绘制（moveTo(x, 0) + lineTo(x, h)）：网格线与 cursor 竖线共用此模式。 */
+  function verticalLineXsIn(frame: DrawCall[]): number[] {
+    const xs: number[] = [];
+    for (let i = 0; i < frame.length; i++) {
+      const c = frame[i];
+      if (
+        c.op === "moveTo" &&
+        c.args[1] === 0 &&
+        frame[i + 1]?.op === "lineTo" &&
+        frame[i + 1].args[0] === c.args[0] &&
+        frame[i + 1].args[1] === canvasH
+      ) {
+        xs.push(Number(c.args[0]));
+      }
+    }
+    return xs;
+  }
+
+  /** 倒三角序列：moveTo(apex, 8) -> lineTo(left, 0) -> lineTo(right, 0) -> closePath -> fill。 */
+  function trianglesIn(frame: DrawCall[]) {
+    const out: { apex: number[]; left: number[]; right: number[] }[] = [];
+    for (let i = 0; i < frame.length; i++) {
+      const m = frame[i];
+      const l1 = frame[i + 1];
+      const l2 = frame[i + 2];
+      if (
+        m?.op === "moveTo" &&
+        m.args[1] === 8 &&
+        l1?.op === "lineTo" &&
+        l1.args[1] === 0 &&
+        l2?.op === "lineTo" &&
+        l2.args[1] === 0 &&
+        frame[i + 3]?.op === "closePath" &&
+        frame[i + 4]?.op === "fill"
+      ) {
+        out.push({
+          apex: m.args as number[],
+          left: l1.args as number[],
+          right: l2.args as number[],
+        });
+      }
+    }
+    return out;
+  }
+
+  /** cursor 位置标签（m{bar}.{beat}）及其 x/y。 */
+  function cursorLabelsIn(frame: DrawCall[]) {
+    return frame
+      .filter((c) => c.op === "fillText" && /^m\d+\.\d+$/.test(String(c.args[0])))
+      .map((c) => ({
+        text: String(c.args[0]),
+        x: Number(c.args[1]),
+        y: Number(c.args[2]),
+      }));
+  }
+
+  /** 位置标签（m{bar}.{beat}）及其 x/y。原实现与 cursorLabelsIn 体完全相同。 */
+  function positionLabelsIn(frame: DrawCall[]) {
+    return frame
+      .filter((c) => c.op === "fillText" && /^m\d+\.\d+$/.test(String(c.args[0])))
+      .map((c) => ({
+        text: String(c.args[0]),
+        x: Number(c.args[1]),
+        y: Number(c.args[2]),
+      }));
+  }
+
+  return {
+    ctx, calls, frames, lastFrame, verticalLineXsIn, trianglesIn, cursorLabelsIn, positionLabelsIn,
+  };
 }

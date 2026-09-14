@@ -71,7 +71,7 @@ export const AutoSaveSettings: React.FC<AutoSaveSettingsProps> = ({ className })
 
   return (
     <div className={`${styles.section} ${className ?? ''}`}>
-      <h3 className={styles.sectionTitle}>{t('settings.general') || '自动保存'}</h3>
+      <h3 className={styles.sectionTitle}>{t('settings.general.autoSave', { defaultValue: '自动保存' })}</h3>
 
       {/* 自动保存开关 */}
       <div className={styles.settingRow}>
