@@ -38,6 +38,20 @@ interface PianoRollViewProps {
    * undefined = 零行为变化（绘制调用序列与 v1.29 逐字节一致）。
    */
   playheadPosition?: { bar: number; beat: number };
+  /**
+   * v2.1.0 S3 (D13-5)：时间轴点击定位回调。点击 x → 反演为 bar/beat（按视图
+   * 的 4 拍/小节网格）→ 回调。undefined 零行为变化（时间轴无 onClick）。
+   */
+  onSeek?: (pos: { bar: number; beat: number }) => void;
+  /**
+   * v2.1.0 S3 (D13-6)：loop 区间可视化（时间轴高亮）。enabled=false 或
+   * undefined/null 零行为变化（不渲染高亮元素）。
+   */
+  loopRegion?: {
+    enabled: boolean;
+    start: { bar: number; beat: number };
+    end: { bar: number; beat: number };
+  } | null;
   /** v1.27.0: 量化网格细分提示（与 settings.midi.recording.quantizeGrid 同型）。undefined/0 零行为变化 */
   quantizeGridHint?: 0 | 0.25 | 0.5 | 1;
   /** v1.28.0: cursor 越视口自动滚动跟随（if-needed 最小平移语义，DAW 惯例）。
@@ -121,6 +135,8 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   activePitches,
   cursorPosition,
   playheadPosition,
+  onSeek,
+  loopRegion,
   quantizeGridHint,
   autoScrollFollow,
   transportRunId,
@@ -785,7 +801,47 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
         </div>
       </div>
 
-      <div className={styles.timeline}>
+      <div
+        className={styles.timeline}
+        data-testid="piano-roll-timeline"
+        onClick={
+          onSeek
+            ? (e) => {
+                // v2.1.0 S3 (D13-5)：点击 x → 反演 bar/beat。tick 的定位式为
+                // `left = beat * ppb - scrollX`（beat 为自 bar 1 起的绝对拍），
+                // 反演即 `beat = (localX + scrollX) / ppb`（绝对定位子元素不受
+                // 容器 padding-left 影响）。负半区（视图外）忽略。
+                const rect = e.currentTarget.getBoundingClientRect();
+                const beats = (e.clientX - rect.left + scrollX) / pixelsPerBeat;
+                if (beats < 0) return;
+                const bar = Math.floor(beats / BEATS_PER_BAR) + 1;
+                const beatInBar = (beats % BEATS_PER_BAR) + 1;
+                onSeek({ bar, beat: beatInBar });
+              }
+            : undefined
+        }
+      >
+        {loopRegion?.enabled ? (
+          <div
+            className={styles.timelineLoopRegion}
+            data-testid="piano-roll-loop-region"
+            style={{
+              left: `${
+                ((loopRegion.start.bar - 1) * BEATS_PER_BAR +
+                  (loopRegion.start.beat - 1)) *
+                  pixelsPerBeat -
+                scrollX
+              }px`,
+              width: `${
+                ((loopRegion.end.bar - 1) * BEATS_PER_BAR +
+                  (loopRegion.end.beat - 1) -
+                  ((loopRegion.start.bar - 1) * BEATS_PER_BAR +
+                    (loopRegion.start.beat - 1))) *
+                pixelsPerBeat
+              }px`,
+            }}
+          />
+        ) : null}
         {Array.from(
           { length: (viewRange.endBar - viewRange.startBar + 1) * BEATS_PER_BAR + 1 },
           (_, beat) => {

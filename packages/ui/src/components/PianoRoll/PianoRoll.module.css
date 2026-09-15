@@ -151,6 +151,16 @@
   padding-left: 56px;
 }
 
+.timelineLoopRegion {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: color-mix(in srgb, var(--accent-purple, #8b7cf6) 28%, transparent);
+  border-left: 2px solid var(--accent-purple, #8b7cf6);
+  border-right: 2px solid var(--accent-purple, #8b7cf6);
+  pointer-events: none;
+}
+
 .timelineMark {
   position: absolute;
   top: 4px;

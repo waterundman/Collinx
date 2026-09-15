@@ -441,7 +441,10 @@
         "countInBarsDesc": "Number of count-in bars before playback starts (0 = none)",
         "countInOff": "Off",
         "countInOne": "1 bar",
-        "countInTwo": "2 bars"
+        "countInTwo": "2 bars",
+        "metronome": "Metronome",
+        "metronomeDesc": "Click on every beat during playback (GM channel 10)",
+        "metronomeEnable": "Enable metronome"
       },
       "channelDesc": "Select the MIDI send/receive channel (1-16)",
       "export": "Export Mapping",
@@ -1559,7 +1562,10 @@
     "pause": "Pause",
     "stop": "Stop",
     "position": "Position",
-    "countIn": "Count-in…"
+    "countIn": "Count-in…",
+    "bpm": "Tempo",
+    "meter": "Time Signature",
+    "loop": "Loop"
   },
   "app": {
     "tabs": {

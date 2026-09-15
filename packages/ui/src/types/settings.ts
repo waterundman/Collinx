@@ -42,6 +42,8 @@ export interface MidiSettings {
     followPlayhead: boolean;
     /** count-in 预备小节数（S3 消费；0 = 无 count-in） */
     countInBars: 0 | 1 | 2;
+    /** v2.1.0 S2 (D12-4)：播放期节拍器（S2 消费；false = 仅 count-in 响） */
+    metronome: boolean;
   };
 }
 
@@ -131,6 +133,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     playback: {
       followPlayhead: true,
       countInBars: 1,
+      // v2.1.0 S2 (D12-4): 默认 false —— 与 v2.0.0 行为逐字一致（仅 count-in 响）
+      metronome: false,
     },
   },
   mixer: {

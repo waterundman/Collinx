@@ -157,6 +157,8 @@ export function App() {
     pendingDiffs,
     appliedDiffs,
     mixer,
+    tempoChanges,
+    meterChanges,
     tasteStore,
     genomeVersion,
     toolCalls,
@@ -334,7 +336,28 @@ export function App() {
     [actions]
   );
 
-  const tempoMap = useMemo(() => TempoMap.default(), []);
+  // v2.1.0 (D11-1): 速度/拍号成为一等可编辑数据 —— TempoMap 从工程 store 派生
+  //（graph.meta.tempo_map/meter_map 的投影，S0）。store 为默认值时与
+  // TempoMap.default() 逐字段等价（T30 回归门）。
+  const tempoMap = useMemo(
+    () => new TempoMap(tempoChanges, meterChanges),
+    [tempoChanges, meterChanges]
+  );
+
+  // ── v2.1.0 S3 (D13-1/D13-7)：TransportBar 的 tempo/meter 接线 ──
+  // bar 1 的当前值（编辑落在 bar 1；多变拍编辑 UI 留后续版本）
+  const bpmAtBar1 = tempoChanges.find((tc) => tc.bar === 1)?.bpm ?? 120;
+  const meterAtBar1 =
+    meterChanges.find((mc) => mc.bar === 1) ?? { numerator: 4, denominator: 4 };
+  const handleBpmChange = useCallback(
+    (bpm: number) => actions.setTempo(1, bpm),
+    [actions]
+  );
+  const handleMeterChange = useCallback(
+    (numerator: number, denominator: number) =>
+      actions.setMeter(1, numerator, denominator),
+    [actions]
+  );
 
   const genome = useMemo(() => tasteStore.getCurrentGenome(), [genomeVersion, tasteStore]);
 
@@ -460,7 +483,24 @@ export function App() {
     tempoMap,
     channel: settings.midi.midiChannel,
     getOutputPort,
+    // v2.1.0 S2 (D12-4)：播放期节拍器（settings.midi.playback.metronome）
+    metronome: settings.midi.playback.metronome,
   });
+
+  // ── v2.1.0 S3 (D13-1)：loop 开关接线（保留既有区间，仅翻转 enabled；
+  // 首次启用默认 bar1→bar2） ──
+  const handleLoopToggle = useCallback(() => {
+    const cur = transport.loop;
+    if (cur) {
+      transport.setLoop({ ...cur, enabled: !cur.enabled });
+    } else {
+      transport.setLoop({
+        enabled: true,
+        start: { bar: 1, beat: 1 },
+        end: { bar: 2, beat: 1 },
+      });
+    }
+  }, [transport.setLoop, transport.loop]);
 
   // v2.0.0 Stage 2 (D2-4): transport 运行代次。每次 **play / stop** 自增，作为
   // PianoRollView 的 `transportRunId` prop —— 其值变化会复位组件内部的手动平移
@@ -997,6 +1037,12 @@ export function App() {
               onPause={transport.pause}
               onStop={handleTransportStop}
               isCountingIn={transport.phase === "count-in"}
+              bpm={bpmAtBar1}
+              onBpmChange={handleBpmChange}
+              meter={meterAtBar1}
+              onMeterChange={handleMeterChange}
+              loop={transport.loop}
+              onLoopToggle={handleLoopToggle}
             />
 
             <div className={styles.composePianoRoll}>
@@ -1018,6 +1064,8 @@ export function App() {
                 autoScrollFollow={settings.midi.playback.followPlayhead}
                 transportRunId={transportRunId}
                 followPlayhead={transportRunning}
+                onSeek={transport.seek}
+                loopRegion={transport.loop}
               />
             </div>
           </div>

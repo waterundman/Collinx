@@ -160,8 +160,8 @@ export function buildPlaybackEvents(
  *   事件；stop()/pause() 中断时由 useTransport.allSoundOff 统一补 noteOff
  *   防卡音（click 的 noteOn 进入在鸣 Map，见 useTransport 抗卡音设计）。
  */
-const CLICK_STRONG_VELOCITY = 120;
-const CLICK_WEAK_VELOCITY = 90;
+export const CLICK_STRONG_VELOCITY = 120;
+export const CLICK_WEAK_VELOCITY = 90;
 
 export function buildClickEvents(
   tempoMap: TempoMap,

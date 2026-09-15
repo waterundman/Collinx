@@ -181,14 +181,14 @@ describe("v2.0.0 Stage 2: App follow/runId wiring (S2-T18)", () => {
 
     act(() => {
       settingsCtx!.updateSettings({
-        midi: { playback: { followPlayhead: false, countInBars: 1 } },
+        midi: { playback: { followPlayhead: false, countInBars: 1, metronome: false } },
       });
     });
     expect(latestPianoRollProps().autoScrollFollow).toBe(false);
 
     act(() => {
       settingsCtx!.updateSettings({
-        midi: { playback: { followPlayhead: true, countInBars: 1 } },
+        midi: { playback: { followPlayhead: true, countInBars: 1, metronome: false } },
       });
     });
     expect(latestPianoRollProps().autoScrollFollow).toBe(true);
@@ -199,7 +199,7 @@ describe("v2.0.0 Stage 2: App follow/runId wiring (S2-T18)", () => {
     // 钉死 countInBars=0：隔离 S3 count-in 默认行为，本组断言假设「起播即 playing」，
     // 与基线 480 绿（S3 前）的 immediate-playing 语义一致。
     act(() => {
-      settingsCtx!.updateSettings({ midi: { playback: { followPlayhead: true, countInBars: 0 } } });
+      settingsCtx!.updateSettings({ midi: { playback: { followPlayhead: true, countInBars: 0, metronome: false } } });
     });
     const runId = () => latestPianoRollProps().transportRunId;
 
@@ -224,7 +224,7 @@ describe("v2.0.0 Stage 2: App follow/runId wiring (S2-T18)", () => {
     const { container } = renderApp();
     // 钉死 countInBars=0：隔离 S3 count-in 默认行为，与 S2 基线 immediate-playing 语义一致。
     act(() => {
-      settingsCtx!.updateSettings({ midi: { playback: { followPlayhead: true, countInBars: 0 } } });
+      settingsCtx!.updateSettings({ midi: { playback: { followPlayhead: true, countInBars: 0, metronome: false } } });
     });
     const follow = () => latestPianoRollProps().followPlayhead;
 

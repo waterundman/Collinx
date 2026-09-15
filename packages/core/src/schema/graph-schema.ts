@@ -36,6 +36,11 @@ export type EdgeType = z.infer<typeof EdgeType>;
 export const TempoChange = z.object({
   bar: z.number().int().min(1),
   bpm: z.number().positive(),
+  // Stage 0 (v2.1.0): tempo ramp shape, optional (instant by default). Kept
+  // optional so the schema stays backward-compatible and the field survives
+  // graph JSON round-trips (it is part of the canonical tempo_map in the
+  // store, which is the single source of truth now).
+  curve: z.enum(["instant", "linear", "ease_in", "ease_out"]).optional(),
 });
 
 export const MeterChange = z.object({

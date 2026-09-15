@@ -27,6 +27,33 @@ import { createDemoMixer, createTasteStore } from "../data/demoData";
 import { createBrowserTasteFsAdapter } from "../services/tasteFsAdapter";
 
 // ---------------------------------------------------------------------------
+// Stage 0 (v2.1.0): tempo / meter map types
+// ---------------------------------------------------------------------------
+//
+// These mirror the shapes used by core's TempoMap (packages/core/src/model/
+// tempo-map.ts). They are declared locally rather than re-exported from
+// @collinx/core because core already exposes `TempoChange` / `MeterChange` as
+// *zod runtime values* in schema/graph-schema.ts; an `export *` re-export of
+// the interface with the same name collides (TS2308) instead of merging. The
+// store only needs the structural type, so a local mirror keeps core untouched
+// and avoids the ambiguity. The shapes stay field-compatible with the core
+// TempoMap so S1 can hand these straight into `new TempoMap(...)`.
+
+export type TempoCurve = "instant" | "linear" | "ease_in" | "ease_out";
+
+export interface TempoChange {
+  bar: number;
+  bpm: number;
+  curve?: TempoCurve;
+}
+
+export interface MeterChange {
+  bar: number;
+  numerator: number;
+  denominator: number;
+}
+
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
@@ -89,6 +116,12 @@ export interface ProjectStoreState {
   undoStack: ProjectStoreSnapshot[];
   /** Stage 2: redo stack (most recent last). Pop re-applies an undone edit. */
   redoStack: ProjectStoreSnapshot[];
+  /** Stage 0 (v2.1.0): tempo map as a first-class editable list. The playback
+   *  engine (S2) reads these to build the TempoMap; defaults to bar1/120. */
+  tempoChanges: TempoChange[];
+  /** Stage 0 (v2.1.0): meter (time signature) map as a first-class editable
+   *  list. Defaults to bar1/4-4. */
+  meterChanges: MeterChange[];
 }
 
 export type ProjectStoreAction =
@@ -147,7 +180,22 @@ export type ProjectStoreAction =
    * Guarded by the bridge: only dispatched when the file actually carries
    * diff history, so v1.16 files keep their old (leave-current) behavior.
    */
-  | { type: "RESTORE_DIFF_HISTORY"; appliedDiffs: DiffEnvelope[] };
+  | { type: "RESTORE_DIFF_HISTORY"; appliedDiffs: DiffEnvelope[] }
+  /**
+   * Stage 0 (v2.1.0): set the tempo (bpm) at a given bar. Same `bar` already
+   * present is overwritten (not appended); a new `bar` is appended, then the
+   * list is re-sorted by `bar` ascending. `bar` must be a positive integer;
+   * non-positive / fractional bars are ignored (no-op) so a malformed UI
+   * input can never corrupt the tempo map. Pushed to the undo stack so the
+   * edit is reversible. `curve` carries the ramp shape (instant by default).
+   */
+  | { type: "SET_TEMPO"; bar: number; bpm: number; curve?: TempoChange["curve"] }
+  /**
+   * Stage 0 (v2.1.0): set the meter (time signature) at a given bar. Same
+   * overwrite / append / sort-asc semantics as SET_TEMPO. `bar` must be a
+   * positive integer (non-positive / fractional ignored). Pushed to undo.
+   */
+  | { type: "SET_METER"; bar: number; numerator: number; denominator: number };
 
 // ---------------------------------------------------------------------------
 // Stage 0: Orchestrator panel -> real Orchestrator tool bridge
@@ -539,6 +587,10 @@ export interface ProjectStoreActions {
   rejectDiff: (diffId: string) => void;
   rollbackDiff: (rollbackToken: string) => void;
   addNote: (note: NoteEvent) => void;
+  /** v2.1.0 S3 (D13-1)：设置 bar 处速度（bpm）——TransportBar 的 BPM 控件消费 */
+  setTempo: (bar: number, bpm: number) => void;
+  /** v2.1.0 S3 (D13-1)：设置 bar 处拍号——TransportBar 的拍号选择器消费 */
+  setMeter: (bar: number, numerator: number, denominator: number) => void;
   moveNote: (id: string, bar: number, beat: number, pitch: number) => void;
   resizeNote: (id: string, durQn: number) => void;
   deleteNote: (id: string) => void;
@@ -853,6 +905,24 @@ export interface CreateInitialStateParams {
   tasteStore?: TasteStore;
 }
 
+/**
+ * Stage 0 (v2.1.0): tempo/meter are a DERIVED PROJECTION of graph.meta —
+ * graph.meta is the single source of truth (the .agentmusic file and every
+ * getMeta() consumer read the same data). EVERY code path that installs a new
+ * graph into the state must re-derive the projection through this helper so
+ * the two can never drift apart.
+ */
+function deriveTempoProjection(graph: ProjectGraph): {
+  tempoChanges: TempoChange[];
+  meterChanges: MeterChange[];
+} {
+  const meta = graph.getMeta();
+  return {
+    tempoChanges: meta.tempo_map,
+    meterChanges: meta.meter_map,
+  };
+}
+
 export function createInitialState(
   params: CreateInitialStateParams = {}
 ): ProjectStoreState {
@@ -880,6 +950,9 @@ export function createInitialState(
     toolCalls: [],
     undoStack: [],
     redoStack: [],
+    // Stage 0 (v2.1.0): tempo/meter are a DERIVED PROJECTION of graph.meta
+    // (the single source of truth) — see deriveTempoProjection.
+    ...deriveTempoProjection(graph),
   };
 }
 
@@ -915,8 +988,9 @@ export function snapshotProjectStore(
  * tasteStore instance and toolCalls are carried over from `state` unchanged
  * (the genome *values* are restored onto the TasteStore by the provider's
  * action creators, which own the mutable instance; tool calls are not user
- * edits). Notes are re-derived from the restored graph so graph and notes can
- * never drift apart.
+ * edits). Notes AND tempo/meter are re-derived from the restored graph so the
+ * graph and its projections can never drift apart — graph.meta is the single
+ * source of truth, including across undo/redo.
  */
 function restoreProjectSnapshot(
   state: ProjectStoreState,
@@ -934,6 +1008,8 @@ function restoreProjectSnapshot(
     mixerDiffLog: snap.mixerDiffLog.map((d) => structuredClone(d)),
     mixerRollbackSnapshots: structuredClone(snap.mixerRollbackSnapshots),
     genomeVersion: snap.genomeVersion,
+    // Derived projection of graph.meta (single source of truth).
+    ...deriveTempoProjection(graph),
   };
 }
 
@@ -957,10 +1033,16 @@ function withUndo(
     genomeOverride !== undefined
       ? { ...snapshotProjectStore(state), genome: genomeOverride }
       : snapshotProjectStore(state);
+  // Stage 0 (v2.1.0): tempo/meter are a derived projection of graph.meta.
+  // Re-derive from whichever graph the patch produced (or the live graph if
+  // the patch left it untouched) so the projection can never drift from the
+  // authoritative graph.
+  const graph = patch.graph ?? state.graph;
   return {
     ...next,
     undoStack: [...state.undoStack, undoSnapshot].slice(-MAX_UNDO),
     redoStack: [],
+    ...deriveTempoProjection(graph),
   };
 }
 
@@ -1177,6 +1259,11 @@ export function createProjectReducer(
           ...state,
           graph,
           notes: deriveNotes(graph),
+          // S0-D2: the rollback restored graph.meta from the pre-diff
+          // snapshot, so the tempo/meter projection MUST be re-derived from
+          // the restored graph here — this path returns directly (no
+          // withUndo) and would otherwise drift from graph.meta.
+          ...deriveTempoProjection(graph),
           appliedDiffs: state.appliedDiffs.filter(
             (d) => d.rollbackToken !== action.rollbackToken
           ),
@@ -1425,6 +1512,58 @@ export function createProjectReducer(
           appliedDiffs: action.appliedDiffs.map((d) => structuredClone(d)),
           rollbackTokens: action.appliedDiffs.map((d) => d.rollbackToken),
         });
+      }
+
+      // Stage 0 (v2.1.0): first-class tempo editing. The new tempo_map is
+      // computed from the AUTHORITATIVE graph.meta (same-bar overwrite, new-bar
+      // append, sorted asc; a non-positive / fractional bar is a no-op), then
+      // written back through graph.withMeta so graph.meta stays the single
+      // source of truth — the .agentmusic file and every getMeta() consumer
+      // read the same data. The store's tempoChanges projection is re-derived
+      // from the graph inside withUndo, and the edit is undoable.
+      case "SET_TEMPO": {
+        const bar = action.bar;
+        if (!Number.isInteger(bar) || bar < 1) return state;
+        const base = state.graph.getMeta().tempo_map;
+        const next: TempoChange[] = base.map((t) =>
+          t.bar === bar
+            ? { bar, bpm: action.bpm, curve: action.curve }
+            : t
+        );
+        if (!base.some((t) => t.bar === bar)) {
+          next.push({ bar, bpm: action.bpm, curve: action.curve });
+        }
+        next.sort((a, b) => a.bar - b.bar);
+        const graph = state.graph.withMeta({ tempo_map: next });
+        return withUndo(state, { graph });
+      }
+
+      // Stage 0 (v2.1.0): first-class meter editing. Same graph-native
+      // overwrite / append / sort-asc semantics as SET_TEMPO; `bar` must be a
+      // positive integer (non-positive / fractional ignored). Undoable.
+      case "SET_METER": {
+        const bar = action.bar;
+        if (!Number.isInteger(bar) || bar < 1) return state;
+        const base = state.graph.getMeta().meter_map;
+        const next: MeterChange[] = base.map((m) =>
+          m.bar === bar
+            ? {
+                bar,
+                numerator: action.numerator,
+                denominator: action.denominator,
+              }
+            : m
+        );
+        if (!base.some((m) => m.bar === bar)) {
+          next.push({
+            bar,
+            numerator: action.numerator,
+            denominator: action.denominator,
+          });
+        }
+        next.sort((a, b) => a.bar - b.bar);
+        const graph = state.graph.withMeta({ meter_map: next });
+        return withUndo(state, { graph });
       }
 
       default:

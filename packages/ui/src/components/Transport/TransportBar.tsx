@@ -30,6 +30,16 @@ export interface TransportBarProps {
    *   并显示暂停按钮（用户可中断 count-in → 由 onPause 处理，回到 idle）。
    */
   isCountingIn?: boolean;
+  /**
+   * v2.1.0 S3 (D13-1)：速度/拍号/loop 控件。**全部可选** —— 任一缺省即不渲染
+   * 对应控件，既有 T11a-e / count-in 行为零变化（D13-2）。
+   */
+  bpm?: number;
+  onBpmChange?: (bpm: number) => void;
+  meter?: { numerator: number; denominator: number };
+  onMeterChange?: (numerator: number, denominator: number) => void;
+  loop?: { enabled: boolean; start: { bar: number; beat: number }; end: { bar: number; beat: number } } | null;
+  onLoopToggle?: () => void;
 }
 
 /**
@@ -54,6 +64,12 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   onPause,
   onStop,
   isCountingIn = false,
+  bpm,
+  onBpmChange,
+  meter,
+  onMeterChange,
+  loop,
+  onLoopToggle,
 }) => {
   const { t } = useI18n();
 
@@ -64,6 +80,10 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   // count-in 态文案（D3-4）：显示"预备…"并可断言锚点；defaultValue 与 zh locale
   // 的 transport.countIn 保持一致（保留 {defaultValue} 形式，禁用 t(k) || '默认' 死兜底）。
   const countInLabel = t("transport.countIn", { defaultValue: "预备…" });
+  // v2.1.0 S3 (D13-3)：新控件文案（defaultValue 与 zh locale 一致）
+  const bpmLabel = t("transport.bpm", { defaultValue: "速度" });
+  const meterLabel = t("transport.meter", { defaultValue: "拍号" });
+  const loopLabel = t("transport.loop", { defaultValue: "循环" });
 
   // 小节/拍：beat 允许小数（连续播放头）→ 显示取整；bar/beat 均从 1 开始。
   const barBeat = `m${position.bar}.${Math.floor(position.beat)}`;
@@ -130,6 +150,74 @@ export const TransportBar: React.FC<TransportBarProps> = ({
             {countInLabel}
           </span>
         </div>
+      ) : null}
+
+      {/*
+       * v2.1.0 S3 (D13-1)：速度/拍号/loop 控件。仅在对应 props 提供时渲染
+       * （D13-2：缺省零变化）。BPM 越界 clamp 到 [20, 300]；拍号选项覆盖
+       * SPEC 列表（4/4、3/4、2/4、6/8、5/4、7/8）。
+       */}
+      {bpm !== undefined && onBpmChange ? (
+        <div className={styles.position} data-testid="transport-tempo">
+          <label className={styles.barBeat} htmlFor="transport-bpm">
+            {bpmLabel}
+          </label>
+          <input
+            id="transport-bpm"
+            data-testid="transport-bpm"
+            type="number"
+            min={20}
+            max={300}
+            value={bpm}
+            className={styles.time}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && v > 0) {
+                onBpmChange(Math.min(300, Math.max(20, Math.round(v))));
+              }
+            }}
+          />
+        </div>
+      ) : null}
+
+      {meter && onMeterChange ? (
+        <div className={styles.position} data-testid="transport-meter-wrap">
+          <label className={styles.barBeat} htmlFor="transport-meter">
+            {meterLabel}
+          </label>
+          <select
+            id="transport-meter"
+            data-testid="transport-meter"
+            className={styles.time}
+            value={`${meter.numerator}/${meter.denominator}`}
+            onChange={(e) => {
+              const [n, d] = e.target.value.split("/").map(Number);
+              if (Number.isFinite(n) && Number.isFinite(d)) onMeterChange(n, d);
+            }}
+          >
+            {["4/4", "3/4", "2/4", "6/8", "5/4", "7/8"].map((label) => (
+              <option key={label} value={label}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {/* v2.1.0 S3 (D13-1)：loop 按钮——只要有 onLoopToggle 就渲染（否则首次启用
+          没有入口）；aria-pressed 反映当前 loop 是否启用（无 loop = 未启用） */}
+      {onLoopToggle ? (
+        <button
+          type="button"
+          className={styles.button}
+          data-testid="transport-loop"
+          aria-label={loopLabel}
+          title={loopLabel}
+          aria-pressed={!!loop?.enabled}
+          onClick={onLoopToggle}
+        >
+          <span aria-hidden="true">{loop?.enabled ? "⟳" : "⟲"}</span>
+        </button>
       ) : null}
     </div>
   );

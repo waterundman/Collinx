@@ -780,3 +780,155 @@ describe("useTransport v2.0.0 S4 (D1/D3/D2)", () => {
     h.unmount();
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// v2.1.0 S2：loop 折返（D12-1/2）+ 播放期节拍器（D12-4）
+//   T32 折返重放 / T33 无 loop 负控 / T36 节拍器开关 / T37 不双触发 + stop 补 noteOff
+// ---------------------------------------------------------------------------
+
+describe('useTransport v2.1.0 S2 (loop + metronome)', () => {
+  const CLICK_ON = 0x99;  // 0x90|9：click noteOn（GM ch10）
+  const CLICK_OFF = 0x89; // 0x80|9：click noteOff
+  const NOTE_ON = 0x90;   // 0x90|0：音符通道 noteOn（设置通道 1）
+
+  it('T32: loop 折返——播放到 loopEnd 回 loopStart，区间内事件重放（同一会话）', () => {
+    const port = makeFakePort();
+    const h = renderTransportHarness({
+      notes: [mkNote({ trackId: 't', bar: 1, beat: 1, durQn: 1, pitchMidi: 60 })],
+      tempoMap, channel: 1, getOutputPort: () => port, now: () => clock,
+    });
+    act(() => {
+      h.getResult().setLoop({
+        enabled: true, start: { bar: 1, beat: 1 }, end: { bar: 2, beat: 1 },
+      });
+    });
+    clock = 1000;
+    act(() => { h.getResult().play({ countInBars: 0 }); });
+    expect(h.getResult().phase).toBe('playing');
+
+    advance(2500); // 越过 loopEnd（2.0s @120bpm 4/4）→ 折返一次
+
+    // 折返不重启会话：phase 仍 playing
+    expect(h.getResult().phase).toBe('playing');
+    // 区间内音符在两轮循环各投递一次 noteOn
+    const noteOns = port.send.mock.calls.filter(
+      (c) => (c[0] as Uint8Array)[0] === NOTE_ON
+    );
+    expect(noteOns.length).toBeGreaterThanOrEqual(2);
+    // 播放头已回到 loop 内（bar 1）
+    expect(h.getResult().position.bar).toBe(1);
+    h.unmount();
+  });
+
+  it('T33: loopEnabled=false 时无折返（负控：越过 loopEnd 继续前进）', () => {
+    const port = makeFakePort();
+    const h = renderTransportHarness({
+      notes: [mkNote({ trackId: 't', bar: 1, beat: 1, durQn: 1, pitchMidi: 60 })],
+      tempoMap, channel: 1, getOutputPort: () => port, now: () => clock,
+    });
+    clock = 1000;
+    act(() => { h.getResult().play({ countInBars: 0 }); });
+    advance(2500);
+    expect(h.getResult().phase).toBe('playing');
+    // 无 loop：播放头前进到 bar 2（2.5s @120bpm 4/4 → bar 2）
+    expect(h.getResult().position.bar).toBe(2);
+    // 音符只投递一次
+    const noteOns = port.send.mock.calls.filter(
+      (c) => (c[0] as Uint8Array)[0] === NOTE_ON
+    );
+    expect(noteOns.length).toBe(1);
+    h.unmount();
+  });
+
+  it('T36: metronome=true 播放期每拍 click（34 强/33 弱，GM ch10）；=false 无', () => {
+    const portOn = makeFakePort();
+    const h = renderTransportHarness({
+      notes: [], tempoMap, channel: 1, getOutputPort: () => portOn,
+      now: () => clock, metronome: true,
+    });
+    const t0 = clock;
+    act(() => { h.getResult().play({ countInBars: 0 }); });
+    advance(2000); // 2s = 4 拍 @120bpm
+    // 只统计起播刻 +2s 以内的 click（lookahead 窗口边缘的排程不含在内，保证确定性）
+    const clicks = portOn.send.mock.calls.filter(
+      (c) => (c[0] as Uint8Array)[0] === 0x99 && (c[1] as number) < t0 + 2000
+    );
+    expect(clicks.length).toBe(4);
+    const pitches = clicks.map((c) => (c[0] as Uint8Array)[1]);
+    expect(pitches).toEqual([34, 33, 33, 33]);
+    expect(clicks.every((c) => (c[0] as Uint8Array)[0] === 0x99)).toBe(true);
+    h.unmount();
+
+    // 负控：metronome=false → 无 click
+    const portOff = makeFakePort();
+    const h2 = renderTransportHarness({
+      notes: [], tempoMap, channel: 1, getOutputPort: () => portOff,
+      now: () => clock, metronome: false,
+    });
+    clock = 6000;
+    act(() => { h2.getResult().play({ countInBars: 0 }); });
+    advance(2000);
+    const clicksOff = portOff.send.mock.calls.filter(
+      (c) => (c[0] as Uint8Array)[0] === 0x99
+    );
+    expect(clicksOff.length).toBe(0);
+    h2.unmount();
+  });
+
+  it('T37: count-in 与播放期 click 不双触发；stop() 补发在鸣 click 的 noteOff', () => {
+    const port = makeFakePort();
+    const h = renderTransportHarness({
+      notes: [], tempoMap, channel: 1, getOutputPort: () => port,
+      now: () => clock, metronome: true,
+    });
+    clock = 1000;
+    act(() => { h.getResult().play({ countInBars: 1 }); });
+    advance(3000); // count-in 2s + 播放 1s
+    const clickStamps = port.send.mock.calls
+      .filter((c) => (c[0] as Uint8Array)[0] === CLICK_ON)
+      .map((c) => c[1] as number);
+    // 无同拍双触发：click 时间戳严格递增（count-in 段与播放段无缝衔接）
+    for (let i = 1; i < clickStamps.length; i++) {
+      expect(clickStamps[i]!).toBeGreaterThan(clickStamps[i - 1]!);
+    }
+    // stop() → 在鸣 click 全部补 noteOff（0x89，复合键路径）
+    act(() => { h.getResult().stop(); });
+    const offs = port.send.mock.calls.filter(
+      (c) => (c[0] as Uint8Array)[0] === CLICK_OFF
+    );
+    expect(offs.length).toBeGreaterThan(0);
+    h.unmount();
+  });
+});
+
+  it("T31: 7/8（beatsPerBar=3.5）count-in——3 click 整数拍、强拍命中、不越界 bar<0（S4-F1 闭合）", () => {
+    const port = makeFakePort();
+    const tm78 = new TempoMap([], [{ bar: 1, numerator: 7, denominator: 8 }]);
+    const h = renderTransportHarness({
+      notes: [], tempoMap: tm78, channel: 1, getOutputPort: () => port,
+      now: () => clock, metronome: false,
+    });
+    clock = 1000;
+    act(() => { h.getResult().seek({ bar: 2, beat: 1 }); });
+    act(() => { h.getResult().play({ countInBars: 1 }); });
+    expect(h.getResult().phase).toBe("count-in");
+    advance(2000); // 推进过 count-in 窗口（1.75s），让调度器投递全部 click
+    // from={2,1} → count-in 覆盖 7/8 的 bar 1（beatsPerBar=3.5）：floor(3.5)=3 click
+    // 且 walk 进 bar 1 时 floor(3.5)=3 → 落整数拍 {1,3},{1,2},{1,1}（修复前走
+    // 3.5/2.5/1.5/0.5 → beat===1 永不命中 → 无强拍；且第 4 步越界 bar 0）
+    const clicks = port.send.mock.calls.filter(
+      (c) => (c[0] as Uint8Array)[0] === 0x99
+    );
+    expect(clicks.length).toBe(3);
+    const pitches = clicks.map((c) => (c[0] as Uint8Array)[1]);
+    expect(pitches).toContain(34); // 强拍命中（S4-F1 核心断言）
+    // 时间单调（无塌缩）
+    const stamps = clicks.map((c) => c[1] as number);
+    for (let i = 1; i < stamps.length; i++) {
+      expect(stamps[i]!).toBeGreaterThan(stamps[i - 1]!);
+    }
+    // 不越界：所有 click 时刻 ≥ 会话锚点（bar<-1 的 click 会给出 < startPerfNow 的时间戳）
+    expect(Math.min(...stamps)).toBeGreaterThanOrEqual(1000);
+    h.unmount();
+  });

@@ -10,6 +10,7 @@ import {
   serializeGraph,
   type NoteEvent,
   type MixerState,
+  TempoMap,
 } from "@collinx/core";
 import {
   deserializeProjectState,
@@ -514,5 +515,39 @@ describe("persistence (Stage 0 rollbackSnapshots)", () => {
       s2.value.appliedDiffs.some((d) => d.diffId === diff.diffId)
     ).toBe(false);
     s2.cleanup();
+  });
+});
+
+
+describe("tempo/meter .agentmusic round-trip (T29, S1)", () => {
+  it("T29: graph.meta.tempo_map/meter_map 往返逐字段等价（含 curve 与变拍）", () => {
+    const graph = ProjectGraph.create("TempoRoundTrip").withMeta({
+      tempo_map: [
+        { bar: 1, bpm: 90 },
+        { bar: 3, bpm: 140, curve: "linear" },
+      ],
+      meter_map: [{ bar: 1, numerator: 7, denominator: 8 }],
+    });
+
+    const persisted = serializeProjectState({
+      graph,
+      mixer: makeMixer(),
+      pendingDiffs: [],
+      appliedDiffs: [],
+    });
+    const restored = deserializeProjectState(JSON.stringify(persisted))!;
+    const restoredGraph = deserializeGraph(restored.graphJson);
+
+    expect(restoredGraph.getMeta().tempo_map).toEqual(graph.getMeta().tempo_map);
+    expect(restoredGraph.getMeta().meter_map).toEqual(graph.getMeta().meter_map);
+
+    const before = new TempoMap(graph.getMeta().tempo_map, graph.getMeta().meter_map);
+    const after = new TempoMap(
+      restoredGraph.getMeta().tempo_map,
+      restoredGraph.getMeta().meter_map
+    );
+    expect(after.bpmAt(1, 1)).toBe(before.bpmAt(1, 1)); // 90
+    expect(after.bpmAt(3, 1)).toBe(before.bpmAt(3, 1)); // 140
+    expect(after.meterAt(1)).toEqual(before.meterAt(1)); // 7/8
   });
 });

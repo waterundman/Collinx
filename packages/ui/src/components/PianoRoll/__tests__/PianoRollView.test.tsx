@@ -1257,5 +1257,35 @@ describe("PianoRollView v2.0.0 follow / pan / suspension (S2-T12..T17)", () => {
     pointer(canvas, "pointermove", { button: 1, clientX: 180, clientY: 300 });
     expect(readScrollX(el)).toBe(60);
   });
-});
+  // v2.1.0 S3 (D13-5 / T34)：时间轴点击定位
+  it("S3-T34: 时间轴点击 x → onSeek（按 4 拍/小节网格反演 bar/beat；负半区忽略）", () => {
+    const onSeek = vi.fn();
+    const el = renderView({ ...baseProps, onSeek });
+    const timeline = el.querySelector('[data-testid="piano-roll-timeline"]') as HTMLElement;
+    expect(timeline).not.toBeNull();
+    // jsdom 的 getBoundingClientRect 恒 0 → rect.left = 0；ppb=40、scrollX=0
+    act(() => {
+      timeline.dispatchEvent(new MouseEvent("click", { clientX: 100, clientY: 10, bubbles: true }));
+    });
+    // beats = 100/40 = 2.5 → bar 1, beat 3.5
+    expect(onSeek).toHaveBeenCalledWith({ bar: 1, beat: 3.5 });
+    // beats = 160/40 = 4 → bar 2, beat 1
+    act(() => {
+      timeline.dispatchEvent(new MouseEvent("click", { clientX: 160, clientY: 10, bubbles: true }));
+    });
+    expect(onSeek).toHaveBeenCalledWith({ bar: 2, beat: 1 });
+    // 负半区（视图外）忽略
+    act(() => {
+      timeline.dispatchEvent(new MouseEvent("click", { clientX: -50, clientY: 10, bubbles: true }));
+    });
+    expect(onSeek).toHaveBeenCalledTimes(2);
+  });
 
+  // v2.1.0 S3 (D13-6)：loop 区间高亮（enabled=false / 未传 → 不渲染）
+  it("S3-D13-6: loopRegion.enabled 时时间轴渲染 loop 高亮元素", () => {
+    const el = renderView({ ...baseProps, loopRegion: { enabled: true, start: { bar: 1, beat: 1 }, end: { bar: 2, beat: 1 } } });
+    expect(el.querySelector('[data-testid="piano-roll-loop-region"]')).not.toBeNull();
+    const el2 = renderView({ ...baseProps });
+    expect(el2.querySelector('[data-testid="piano-roll-loop-region"]')).toBeNull();
+  });
+});

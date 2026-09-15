@@ -104,6 +104,16 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
     });
   }, [midi, playback, updateSettings]);
 
+  // v2.1.0 S2 (D12-4): 播放期节拍器开关
+  const handleMetronomeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    updateSettings({
+      midi: {
+        ...midi,
+        playback: { ...playback, metronome: e.target.checked },
+      },
+    });
+  }, [midi, playback, updateSettings]);
+
   const handleCountInBarsChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const countInBars = parseInt(e.target.value, 10);
     updateSettings({
@@ -382,6 +392,33 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
               />
               <span className={styles.checkboxLabel}>
                 {t('settings.midi.playback.followPlayheadEnable', { defaultValue: '启用跟随' })}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* v2.1.0 S2 (D12-4)：播放期节拍器开关 */}
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel} htmlFor="playbackMetronome">
+              {t('settings.midi.playback.metronome', { defaultValue: '节拍器' })}
+            </label>
+          </div>
+          <p className={styles.settingDescription}>
+            {t('settings.midi.playback.metronomeDesc', { defaultValue: '播放期间每拍发出节拍器声（GM 通道 10）' })}
+          </p>
+          <div className={styles.settingControl}>
+            <label className={styles.checkboxControl}>
+              <input
+                id="playbackMetronome"
+                data-testid="playback-metronome"
+                type="checkbox"
+                className={styles.checkboxInput}
+                checked={playback.metronome}
+                onChange={handleMetronomeChange}
+              />
+              <span className={styles.checkboxLabel}>
+                {t('settings.midi.playback.metronomeEnable', { defaultValue: '启用节拍器' })}
               </span>
             </label>
           </div>

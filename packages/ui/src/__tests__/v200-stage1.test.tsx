@@ -87,7 +87,7 @@ function renderApp() {
 
   // S1 本组：钉死 countInBars=0，隔离 S3 count-in 默认行为（起播即 playing）。
   act(() => {
-    settingsCtx!.updateSettings({ midi: { playback: { followPlayhead: true, countInBars: 0 } } });
+    settingsCtx!.updateSettings({ midi: { playback: { followPlayhead: true, countInBars: 0, metronome: false } } });
   });
 
   mounted = {
@@ -260,5 +260,56 @@ describe("v2.0.0 Stage 1: App transport wiring (S1.5-T1)", () => {
 
     // positionSeconds 同步推进（TransportBar time 锚点）。
     expect(q(container, "transport-time")?.textContent).toBe("0:02.5");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2.1.0 S3 (T38)：App 级接线护栏——TransportBar 的 tempo/meter/loop 控件
+// 经真实 App 链路（控件 → store → 派生 TempoMap → PianoRollView props）。
+// ---------------------------------------------------------------------------
+describe("v2.1.0 S3 (T38) App-level tempo/meter/loop wiring", () => {
+  beforeAll(() => {
+    stubBrowserApis();
+  });
+
+  it("T38: BPM 输入/拍号选择/loop 按钮 → store → 派生 TempoMap → 视图 props", () => {
+    const { container, cleanup } = renderApp();
+    // ① BPM 输入 90 → App 派生的 TempoMap.bpmAt(1,1) 变 90
+    const bpmInput = q(container, "transport-bpm") as HTMLInputElement;
+    expect(bpmInput).not.toBeNull();
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value"
+    )!.set!;
+    act(() => {
+      setter.call(bpmInput, "90");
+      bpmInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const tm1 = latestPianoRollProps().tempoMap as {
+      bpmAt: (bar: number, beat: number) => number;
+      meterAt: (bar: number) => { numerator: number; denominator: number };
+    };
+    expect(tm1.bpmAt(1, 1)).toBe(90);
+
+    // ② 拍号选择 3/4 → meterAt(1) 变 {3,4}
+    const meterSelect = q(container, "transport-meter") as HTMLSelectElement;
+    act(() => {
+      meterSelect.value = "3/4";
+      meterSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const tm2 = latestPianoRollProps().tempoMap as typeof tm1;
+    expect(tm2.meterAt(1)).toEqual({ numerator: 3, denominator: 4 });
+
+    // ③ loop 按钮 → PianoRollView 收到 enabled 的 loopRegion（默认 bar1→bar2）
+    click(q(container, "transport-loop"));
+    const lr = latestPianoRollProps().loopRegion as {
+      enabled: boolean;
+      start: { bar: number; beat: number };
+      end: { bar: number; beat: number };
+    };
+    expect(lr.enabled).toBe(true);
+    expect(lr.start).toEqual({ bar: 1, beat: 1 });
+    expect(lr.end).toEqual({ bar: 2, beat: 1 });
+    cleanup();
   });
 });

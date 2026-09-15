@@ -556,6 +556,13 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       addNote: (note: NoteEvent): void => {
         dispatch({ type: "ADD_NOTE", note } satisfies ProjectStoreAction);
       },
+      // v2.1.0 S3 (D13-1)：tempo/meter 编辑入口（TransportBar 消费）
+      setTempo: (bar: number, bpm: number): void => {
+        dispatch({ type: "SET_TEMPO", bar, bpm } satisfies ProjectStoreAction);
+      },
+      setMeter: (bar: number, numerator: number, denominator: number): void => {
+        dispatch({ type: "SET_METER", bar, numerator, denominator } satisfies ProjectStoreAction);
+      },
       moveNote: (id: string, bar: number, beat: number, pitch: number): void => {
         dispatch({ type: "MOVE_NOTE", id, bar, beat, pitch } satisfies ProjectStoreAction);
       },
@@ -1133,6 +1140,9 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       toolCalls: state.toolCalls,
       undoStack: state.undoStack,
       redoStack: state.redoStack,
+      // Stage 0 (v2.1.0): expose the new tempo/meter first-class state.
+      tempoChanges: state.tempoChanges,
+      meterChanges: state.meterChanges,
       persistence: {
         enabled: Boolean(effectivePersistenceKey),
         lastSavedAt: lastPersistedAt,

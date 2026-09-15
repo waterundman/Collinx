@@ -441,7 +441,10 @@
         "countInBarsDesc": "起播前的预备小节数（0 = 不预备）",
         "countInOff": "关闭",
         "countInOne": "1 小节",
-        "countInTwo": "2 小节"
+        "countInTwo": "2 小节",
+        "metronome": "节拍器",
+        "metronomeDesc": "播放期间每拍发出节拍器声（GM 通道 10）",
+        "metronomeEnable": "启用节拍器"
       },
       "channelDesc": "选择MIDI接收/发送的通道 (1-16)",
       "export": "导出映射",
@@ -1559,7 +1562,10 @@
     "pause": "暂停",
     "stop": "停止",
     "position": "位置",
-    "countIn": "预备…"
+    "countIn": "预备…",
+    "bpm": "速度",
+    "meter": "拍号",
+    "loop": "循环"
   },
   "app": {
     "tabs": {

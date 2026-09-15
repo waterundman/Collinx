@@ -248,6 +248,32 @@ export class ProjectGraph {
     return this.meta;
   }
 
+  /**
+   * Stage 0 (v2.1.0): immutable meta patch. Returns a NEW ProjectGraph whose
+   * meta is the current meta shallow-merged with `patch` (title / tempo_map /
+   * meter_map / key_map are all optional), with the FULL node/edge set carried
+   * over via a toJSON -> fromJSON round-trip (fromJSON re-populates nodes and
+   * edges through ProjectGraphSchema.parse, which also structurally re-parses
+   * the merged meta).
+   *
+   * revision_id: PRESERVED from the source graph. This matches the existing
+   * mutation convention — addNode / moveNode and the other in-place mutators
+   * never bump revisionId (only the constructor mints one and fromJSON
+   * restores it), so a meta patch is not a revision bump either.
+   *
+   * Validation: `validate()` remains demand-driven and is NOT re-run here,
+   * consistent with the constructor / fromJSON / snapshot(). The zod parse in
+   * fromJSON does re-check the merged meta structurally (bar >= 1, bpm > 0,
+   * optional curve enum, ...), while the duplicate-bar warning still only
+   * surfaces via an explicit validate() call. The store's SET_TEMPO /
+   * SET_METER reducer guarantees a unique bar per entry (same-bar overwrite),
+   * so a malformed duplicate can never reach this method from the UI path.
+   */
+  withMeta(patch: Partial<Omit<ProjectMeta, "id">>): ProjectGraph {
+    const data = this.toJSON();
+    return ProjectGraph.fromJSON({ ...data, meta: { ...data.meta, ...patch } });
+  }
+
   // ─── Snapshot ──────────────────────────────────────────────
 
   snapshot(): ProjectGraph {

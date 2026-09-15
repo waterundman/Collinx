@@ -177,7 +177,7 @@ describe("v2.0.0 Stage 3: App count-in wiring (S3-TcountIn)", () => {
 
     act(() => {
       settingsCtx!.updateSettings({
-        midi: { playback: { followPlayhead: true, countInBars: 0 } },
+        midi: { playback: { followPlayhead: true, countInBars: 0, metronome: false } },
       });
     });
     expect(settingsCtx!.settings.midi.playback.countInBars).toBe(0);

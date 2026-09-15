@@ -46,6 +46,9 @@ import { encodeNoteOn, encodeNoteOff } from "../services/midi-output";
 import {
   buildPlaybackEvents,
   buildClickEvents,
+  CLICK_CHANNEL,
+  CLICK_STRONG_VELOCITY,
+  CLICK_WEAK_VELOCITY,
   type ScheduledEvent,
 } from "../services/midi-schedule";
 
@@ -83,6 +86,8 @@ export interface UseTransportOptions {
   schedulerTickMs?: number;
   /** 前瞻窗口（ms），默认 LOOKAHEAD_MS */
   lookaheadMs?: number;
+  /** v2.1.0 S2 (D12-4)：播放期节拍器（settings.midi.playback.metronome） */
+  metronome?: boolean;
 }
 
 export interface UseTransportResult {
@@ -101,7 +106,19 @@ export interface UseTransportResult {
   pause: () => void;
   stop: () => void;
   seek: (pos: { bar: number; beat: number }) => void;
+  /** v2.1.0 S2 (D12-1)：loop 区间与开关；null = 未设置（不循环） */
+  loop: TransportLoop | null;
+  /** v2.1.0 S2 (D12-1)：设置/清除 loop。会话活跃时**即时生效**（重算折返参数） */
+  setLoop: (loop: TransportLoop | null) => void;
 }
+
+/** v2.1.0 S2 (D12-1)：loop 区间（bar/beat；含 start、不含 end——DAW 惯例） */
+export interface TransportLoop {
+  enabled: boolean;
+  start: { bar: number; beat: number };
+  end: { bar: number; beat: number };
+}
+
 
 /** 一次播放会话的可变状态（经 ref 持有，不触发渲染） */
 interface PlaybackSession {
@@ -115,6 +132,10 @@ interface PlaybackSession {
   startSeconds: number;
   /** count-in 持续秒数（0 表示无 count-in，直进 playing） */
   countInDuration: number;
+  /** v2.1.0 S2 (D12-2)：loop 折返参数（谱面秒）；null = 本会话不循环 */
+  loop: { enabled: boolean; startSeconds: number; endSeconds: number } | null;
+  /** loop 起点之后的首个事件索引（折返时 index 回卷至此重放区间内事件） */
+  loopStartIndex: number;
 }
 
 const defaultNow = (): number => performance.now();
@@ -128,6 +149,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     now,
     schedulerTickMs,
     lookaheadMs,
+    metronome,
   } = options;
 
   // ── 最新入参经 ref 读取：使 play/pause/seek 等回调引用稳定（不随渲染重建） ──
@@ -145,6 +167,13 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
   tickRef.current = schedulerTickMs ?? SCHEDULER_TICK_MS;
   const lookaheadRef = useRef(lookaheadMs ?? LOOKAHEAD_MS);
   lookaheadRef.current = lookaheadMs ?? LOOKAHEAD_MS;
+  /** v2.1.0 S2 (D12-4)：播放期节拍器开关（ref 供会话构建读取） */
+  const metronomeRef = useRef(metronome ?? false);
+  metronomeRef.current = metronome ?? false;
+
+  // ── v2.1.0 S2 (D12-1)：loop 状态（对 UI 暴露 + ref 供会话构建/折返读取） ──
+  const [loop, setLoopState] = useState<TransportLoop | null>(null);
+  const loopRef = useRef<TransportLoop | null>(null);
 
   const [phase, setPhase] = useState<TransportPhase>("idle");
   const [position, setPosition] = useState<{ bar: number; beat: number }>({
@@ -214,6 +243,15 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       session.index < session.events.length &&
       session.events[session.index]!.atSeconds <= windowEndSeconds
     ) {
+      // v2.1.0 S2 (D12-2)：loop 右缘之后的事件不投递 —— positionTick 折返后
+      // index 回卷至 loopStartIndex 重放区间内事件（同一时间轴，不重启会话）。
+      if (
+        session.loop?.enabled &&
+        session.events[session.index]!.atSeconds >=
+          session.loop.endSeconds - 1e-9
+      ) {
+        break;
+      }
       const ev = session.events[session.index]!;
       session.index += 1;
       if (!port) {
@@ -245,7 +283,18 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     const session = sessionRef.current;
     if (!session) return;
     const elapsed = (nowRef.current() - session.startPerfNow) / 1000;
-    const seconds = session.startSeconds + elapsed;
+    let seconds = session.startSeconds + elapsed;
+    // ── v2.1.0 S2 (D12-2)：loop 折返（同一时间轴，不重启会话） ──
+    // 到达 loopEnd 时把会话锚点**回退**一个循环长度（等价于把播放头拉回
+    // loopStart），并把调度索引回卷至 loopStartIndex —— 区间内事件在下一轮
+    // 循环重放。折返后 seconds 落回 loopStart 附近，条件自然不再成立，故每次
+    // 跨越只折返一次。锚点回退后 (atSeconds - startSeconds) 增大量与流逝时间
+    // 增大量相互抵消，事件 timestamp 仍落在 now() 域的正确位置。
+    if (session.loop?.enabled && seconds >= session.loop.endSeconds - 1e-9) {
+      session.startSeconds -= session.loop.endSeconds - session.loop.startSeconds;
+      session.index = session.loopStartIndex;
+      seconds = session.startSeconds + (nowRef.current() - session.startPerfNow) / 1000;
+    }
     // count-in → playing 自动转场（D3-2 核心不变量）：当流逝时间到达 from 起点
     // （elapsed >= countInDuration）时，phase 切 'playing'。此刻 seconds =
     // startSeconds + countInDuration = timeAt(from)，经 barBeatAt 反查得到
@@ -307,44 +356,43 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       const events: ScheduledEvent[] = [];
 
       if (countInBeats > 0) {
-        // count-in 起点位置（可能 < bar 1；TempoMap.timeAt 对 bar<1 折叠为 0）。
-        // 逐小节反向推导 clickFrom（1-based，beat >= 1）：从 from 出发，向前（时间上
-        // 向后）走 countInBeats 拍；每步递减 beat，当 beat 降到 1 再减则退到上一小节、
-        // 把 beat 置为该小节 tempoMap.meterAt(bar) 算出的拍数。变拍下每小节拍数取各自
-        // 实际 meter，而非旧实现以 from.bar 单 meter 恒推 beatsPerBar（会错位）。
-        // 4/4 下每小节恒 4 拍 → 与旧实现逐字等价（T20/T21/T22 不受影响）。
-        // from.beat 为小数（连续播放头可能给出小数 beat）时的处理选择：以 Math.floor
-        // 取当前所在整数拍并 clamp 到 >=1，即 count-in 起点落在整数拍、click 也全部落在
-        // 整数拍；小数余量被舍去（不向前借半拍），契合"count-in 为整拍预备"语义。
+        // ── v2.1.0 S2 (S2-D1 修复)：count-in click 逐拍**反向**走并直接携带时刻 ──
+        // 旧实现 = buildClickEvents(clickFrom)+shift：timeAt 对 bar<1 折叠为 0
+        // （tempo-map.ts:109），从 bar 1 起播时 clickFrom 落在 bar 0 → 4 个 click
+        // 的 timeAt 全为 0 → shift 后**全部塌缩到同一时刻**（用户听到 1 声而非
+        // 4 声预备拍）。T20 只断言首 click 的音高/时刻故未发现；S2 的 T37 以
+        // 「click 时间戳严格递增」断言暴露（S2-D1，v2.0.0 S3 以来的真缺陷）。
         //
-        // ⚠️ 已知限制（S5/D5-5 登记，源自 S4 验证 S4-F1，**当前生产不可达**）：
-        // 本项目 beat 的单位是**四分音符**（见 core 的 TempoMap.positionInBars =
-        // bar + (beat-1)/4），故复合拍号会给出**小数** beatsPerBar（如 7/8 → 7*(4/8)
-        // = 3.5）。此时上述反向走会把 clickFromBeat 落在 3.5/2.5/1.5/0.5 这类小数拍上，
-        // 而 buildClickEvents 以 `beat === 1` 判强拍 ⇒ **该 count-in 跨度重音失效**；
-        // 且连续退小节可能越界到 bar 0（meterAt(0) 静默回退 4/4）。
-        // **不可达依据**：App 恒用 TempoMap.default()（120bpm/4/4，见 App.tsx），
-        // 故 beatsPerBar 恒为整数 4。**若未来开放拍号编辑，须改为"按整数拍反向走"
-        // 或在 buildClickEvents 内以拍内位置判定强拍。**
-        let clickFromBar = from.bar;
-        let clickFromBeat = Math.max(1, Math.floor(from.beat));
-        for (let i = 0; i < countInBeats; i++) {
-          clickFromBeat -= 1;
-          if (clickFromBeat < 1) {
-            clickFromBar -= 1;
-            const m = tm.meterAt(clickFromBar);
-            clickFromBeat = m.numerator * (4 / m.denominator);
+        // 新实现：与 S4 的 clickFrom 反向推演同一走法（逐小节 meterAt 取拍数），
+        // 但每退一拍直接 `t -= 60 / bpmAt(该拍)` —— bar<1 时 bpmAt 回落 120
+        // （findActive 无命中 → 120），时刻单调正确，不再塌缩。
+        // 强拍判定沿用 `beat === 1`（与 buildClickEvents 一致）；复合拍号
+        // （7/8 → beatsPerBar=3.5）下强拍仍会失效 —— S4-F1 仍开放，由 S4
+        // 以"拍内位置判定强拍"闭合（S0 数据层 + S1 拍号编辑已使其可达）。
+        const fromSeconds = tm.timeAt(from.bar, from.beat);
+        let bar = from.bar;
+        let beat = Math.max(1, Math.floor(from.beat));
+        let t = fromSeconds;
+        // S4-F1 闭合（v2.1.0 S4）：只点**整数拍**——floor(countInBeats)。7/8 的
+        // beatsPerBar=3.5 → 3 次；否则第 4 次会越界到 bar -1。
+        const clickCount = Math.floor(countInBeats);
+        for (let k = 0; k < clickCount; k++) {
+          beat -= 1;
+          if (beat < 1) {
+            bar -= 1;
+            const m = tm.meterAt(bar);
+            // S4-F1：floor —— 7/8 → 3（跳过 0.5 的半拍位），保证整数拍与强拍命中
+            beat = Math.floor(m.numerator * (4 / m.denominator));
           }
-        }
-        const clickFrom = { bar: clickFromBar, beat: clickFromBeat };
-        const clickEvents = buildClickEvents(tm, clickFrom, countInBeats, meter);
-        // 重新锚定到 sessionStartSeconds：clickFrom 的 timeAt 可能因 bar<1 折叠，
-        // 故用偏移把 click 事件搬到会话时间轴（count-in 起点），使其 atSeconds
-        // 落在 [sessionStartSeconds, sessionStartSeconds + countInDuration)。
-        const clickFromSeconds = tm.timeAt(clickFrom.bar, clickFrom.beat);
-        const shift = sessionStartSeconds - clickFromSeconds;
-        for (const ev of clickEvents) {
-          events.push({ ...ev, atSeconds: ev.atSeconds + shift });
+          t -= 60 / tm.bpmAt(bar, beat);
+          const isDownbeat = beat === 1;
+          events.push({
+            atSeconds: t,
+            kind: "on",
+            pitchMidi: isDownbeat ? 34 : 33,
+            velocity: isDownbeat ? CLICK_STRONG_VELOCITY : CLICK_WEAK_VELOCITY,
+            channel: CLICK_CHANNEL,
+          });
         }
       }
 
@@ -357,7 +405,47 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
         events.push(ev);
       }
 
+      // ── v2.1.0 S2 (D12-4)：播放期节拍器（metronome=true 时） ──
+      // 复用 buildClickEvents 前向走（逐拍 timeAt，正确处理变拍）。视界 =
+      // max(最后一个音符的结束, from) + 8 小节尾部（无音符时也至少有 8 小节
+      // click）。与 count-in click（[sessionStart, from) 段）天然不重叠 →
+      // 不双触发同一拍（T37）。
+      if (metronomeRef.current) {
+        const fromSeconds = tm.timeAt(from.bar, from.beat);
+        const lastNoteEnd = notesRef.current.reduce((max, n) => {
+          const end =
+            tm.timeAt(n.bar, n.beat) + (n.durQn * 60) / tm.bpmAt(n.bar, n.beat);
+          return Math.max(max, end);
+        }, fromSeconds);
+        const meter = tm.meterAt(from.bar);
+        const beatsPerBar = meter.numerator * (4 / meter.denominator);
+        const beatSec = 60 / tm.bpmAt(from.bar, from.beat);
+        const horizonSeconds =
+          Math.max(lastNoteEnd, fromSeconds) + 8 * beatsPerBar * beatSec;
+        const horizonBeats = Math.ceil(
+          (horizonSeconds - fromSeconds) / beatSec
+        );
+        for (const ev of buildClickEvents(tm, from, horizonBeats, meter)) {
+          events.push(ev);
+        }
+      }
+
       events.sort((a, b) => a.atSeconds - b.atSeconds);
+
+      // ── v2.1.0 S2 (D12-2)：会话捕获 loop（起播时设置的快照语义；
+      // setLoop 在会话活跃时会即时改写 session.loop，见 setLoop） ──
+      const loopCfg = loopRef.current;
+      const loopEnabled = !!loopCfg?.enabled;
+      const loopStartSeconds = loopEnabled
+        ? tm.timeAt(loopCfg!.start.bar, loopCfg!.start.beat)
+        : 0;
+      const loopEndSeconds = loopEnabled
+        ? tm.timeAt(loopCfg!.end.bar, loopCfg!.end.beat)
+        : 0;
+      const found = loopEnabled
+        ? events.findIndex((ev) => ev.atSeconds >= loopStartSeconds - 1e-9)
+        : 0;
+      const loopStartIndex = found < 0 ? events.length : found;
 
       sessionRef.current = {
         events,
@@ -365,6 +453,14 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
         startPerfNow: nowRef.current(),
         startSeconds: sessionStartSeconds,
         countInDuration,
+        loop: loopEnabled
+          ? {
+              enabled: true,
+              startSeconds: loopStartSeconds,
+              endSeconds: loopEndSeconds,
+            }
+          : null,
+        loopStartIndex,
       };
 
       // count-in 表示法（D3-2 设计选择，供 T20/T21 断言）：
@@ -463,6 +559,35 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     [allSoundOff, clearTimers, beginPlayback]
   );
 
+  // ── v2.1.0 S2 (D12-1)：设置/清除 loop ──
+  // 会话活跃时**即时生效**（重算折返秒与 loopStartIndex）；否则下次起播生效。
+  // end ≤ start 视为无效（关闭 loop，防御）。清 loop 后已越出区间的播放头
+  // 保持当前位置继续播放（不回卷）。
+  const setLoop = useCallback((next: TransportLoop | null): void => {
+    const tm = tempoMapRef.current;
+    const valid =
+      !!next &&
+      next.enabled &&
+      tm.timeAt(next.end.bar, next.end.beat) >
+        tm.timeAt(next.start.bar, next.start.beat);
+    const normalized = valid ? next : null;
+    loopRef.current = normalized;
+    setLoopState(normalized);
+    const session = sessionRef.current;
+    if (!session) return; // 无活跃会话：下次起播时经 beginPlayback 捕获
+    if (!normalized) {
+      session.loop = null;
+      return;
+    }
+    const startSeconds = tm.timeAt(normalized.start.bar, normalized.start.beat);
+    const endSeconds = tm.timeAt(normalized.end.bar, normalized.end.beat);
+    session.loop = { enabled: true, startSeconds, endSeconds };
+    const found = session.events.findIndex(
+      (ev) => ev.atSeconds >= startSeconds - 1e-9
+    );
+    session.loopStartIndex = found < 0 ? session.events.length : found;
+  }, []);
+
   // 通道变更：对旧通道在鸣音补发 noteOff 防卡音；播放中从当前位置按新通道重排程
   const prevChannelRef = useRef(channel);
   useEffect(() => {
@@ -497,5 +622,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     pause,
     stop,
     seek,
+    loop,
+    setLoop,
   };
 }
