@@ -556,6 +556,10 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       addNote: (note: NoteEvent): void => {
         dispatch({ type: "ADD_NOTE", note } satisfies ProjectStoreAction);
       },
+      // v2.2.0 S1 (D22-4)：批量新增（录制 take 落盘；一条 undo 记录）
+      addNotes: (notes: NoteEvent[]): void => {
+        dispatch({ type: "ADD_NOTES", notes } satisfies ProjectStoreAction);
+      },
       // v2.1.0 S3 (D13-1)：tempo/meter 编辑入口（TransportBar 消费）
       setTempo: (bar: number, bpm: number): void => {
         dispatch({ type: "SET_TEMPO", bar, bpm } satisfies ProjectStoreAction);

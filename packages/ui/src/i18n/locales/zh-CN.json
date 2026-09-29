@@ -1565,7 +1565,8 @@
     "countIn": "预备…",
     "bpm": "速度",
     "meter": "拍号",
-    "loop": "循环"
+    "loop": "循环",
+    "record": "录制"
   },
   "app": {
     "tabs": {

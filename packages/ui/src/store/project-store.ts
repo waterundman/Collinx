@@ -131,6 +131,7 @@ export type ProjectStoreAction =
   | { type: "ADD_PENDING_DIFFS"; diffs: DiffEnvelope[] }
   | { type: "RECORD_DECISION_EVIDENCE"; diff: DiffEnvelope }
   | { type: "ADD_NOTE"; note: NoteEvent }
+  | { type: "ADD_NOTES"; notes: NoteEvent[] }
   | { type: "MOVE_NOTE"; id: string; bar: number; beat: number; pitch: number }
   | { type: "RESIZE_NOTE"; id: string; durQn: number }
   | { type: "DELETE_NOTE"; id: string }
@@ -587,6 +588,8 @@ export interface ProjectStoreActions {
   rejectDiff: (diffId: string) => void;
   rollbackDiff: (rollbackToken: string) => void;
   addNote: (note: NoteEvent) => void;
+  /** v2.2.0 S1 (D22-4)：批量新增（录制 take 落盘；一条 undo 记录） */
+  addNotes: (notes: NoteEvent[]) => void;
   /** v2.1.0 S3 (D13-1)：设置 bar 处速度（bpm）——TransportBar 的 BPM 控件消费 */
   setTempo: (bar: number, bpm: number) => void;
   /** v2.1.0 S3 (D13-1)：设置 bar 处拍号——TransportBar 的拍号选择器消费 */
@@ -1276,6 +1279,17 @@ export function createProjectReducer(
       case "ADD_NOTE": {
         const graph = state.graph.snapshot();
         graph.addNode("NoteSpan", { ...action.note });
+        return withUndo(state, { graph, notes: deriveNotes(graph) });
+      }
+
+      // v2.2.0 S1 (D22-4)：批量新增（实时录制 take 落盘）——一次 withUndo =
+      // 一条 undo 记录，undo 一次撤整个 take。
+      case "ADD_NOTES": {
+        if (action.notes.length === 0) return state;
+        const graph = state.graph.snapshot();
+        for (const note of action.notes) {
+          graph.addNode("NoteSpan", { ...note });
+        }
         return withUndo(state, { graph, notes: deriveNotes(graph) });
       }
 

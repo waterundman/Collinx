@@ -40,6 +40,10 @@ export interface TransportBarProps {
   onMeterChange?: (numerator: number, denominator: number) => void;
   loop?: { enabled: boolean; start: { bar: number; beat: number }; end: { bar: number; beat: number } } | null;
   onLoopToggle?: () => void;
+  /** v2.2.0 S2 (D23-1)：录制中（红点态）。可选 → 缺省零变化 */
+  isRecording?: boolean;
+  /** v2.2.0 S2 (D23-1)：录制开关（未在播时由调用方先起播） */
+  onToggleRecord?: () => void;
 }
 
 /**
@@ -70,6 +74,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   onMeterChange,
   loop,
   onLoopToggle,
+  isRecording = false,
+  onToggleRecord,
 }) => {
   const { t } = useI18n();
 
@@ -84,6 +90,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   const bpmLabel = t("transport.bpm", { defaultValue: "速度" });
   const meterLabel = t("transport.meter", { defaultValue: "拍号" });
   const loopLabel = t("transport.loop", { defaultValue: "循环" });
+  const recordLabel = t("transport.record", { defaultValue: "录制" });
 
   // 小节/拍：beat 允许小数（连续播放头）→ 显示取整；bar/beat 均从 1 开始。
   const barBeat = `m${position.bar}.${Math.floor(position.beat)}`;
@@ -150,6 +157,22 @@ export const TransportBar: React.FC<TransportBarProps> = ({
             {countInLabel}
           </span>
         </div>
+      ) : null}
+
+      {/* v2.2.0 S2 (D23-1)：录制按钮——只要有 onToggleRecord 就渲染（首次启用
+          需要入口）；录制中红点实心 + aria-pressed */}
+      {onToggleRecord ? (
+        <button
+          type="button"
+          className={styles.button}
+          data-testid="transport-record"
+          aria-label={recordLabel}
+          title={recordLabel}
+          aria-pressed={isRecording}
+          onClick={onToggleRecord}
+        >
+          <span aria-hidden="true">{isRecording ? "●" : "○"}</span>
+        </button>
       ) : null}
 
       {/*

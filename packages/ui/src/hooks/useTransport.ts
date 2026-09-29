@@ -88,6 +88,8 @@ export interface UseTransportOptions {
   lookaheadMs?: number;
   /** v2.1.0 S2 (D12-4)：播放期节拍器（settings.midi.playback.metronome） */
   metronome?: boolean;
+  /** v2.2.0 S0 (D21)：录制 take 自动提交回调（stop/pause 防丢） */
+  onRecordingCommit?: (take: RecordedTake) => void;
 }
 
 export interface UseTransportResult {
@@ -110,6 +112,34 @@ export interface UseTransportResult {
   loop: TransportLoop | null;
   /** v2.1.0 S2 (D12-1)：设置/清除 loop。会话活跃时**即时生效**（重算折返参数） */
   setLoop: (loop: TransportLoop | null) => void;
+  // ── v2.2.0 S0 (D21)：实时录制 ──
+  /** 录制中（armed 且缓冲开启） */
+  isRecording: boolean;
+  /** 精确当前谱面秒（读会话锚点，亚毫秒；无会话 = timeAt(positionRef)） */
+  getPositionSecondsNow: () => number;
+  /** 开始缓冲（不影响播放状态；播放由调用方决定是否同时 play） */
+  startRecording: () => void;
+  /** 结束缓冲并返回本 take（未闭合 noteOff 以当前时刻闭合） */
+  stopRecording: () => RecordedTake | null;
+  /** 硬件 noteOn 捕获（录制中才生效；App 的 onNoteOn 处理器调用） */
+  captureRecordedNoteOn: (pitchMidi: number, velocity: number) => void;
+  /** 硬件 noteOff 捕获（配对最近未闭合同 pitch） */
+  captureRecordedNoteOff: (pitchMidi: number) => void;
+}
+
+/** v2.2.0 S0 (D21-3)：一次录制的 take 缓冲 */
+export interface RecordedTakeNote {
+  pitchMidi: number;
+  velocity: number;
+  /** 谱面秒（.getPositionSecondsNow 域） */
+  onSeconds: number;
+  /** null = 尚未闭合（按住未松） */
+  offSeconds: number | null;
+}
+export interface RecordedTake {
+  notes: RecordedTakeNote[];
+  /** 提交时刻（谱面秒）：缺失 off 的闭合基准 */
+  endSeconds: number;
 }
 
 /** v2.1.0 S2 (D12-1)：loop 区间（bar/beat；含 start、不含 end——DAW 惯例） */
@@ -150,6 +180,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     schedulerTickMs,
     lookaheadMs,
     metronome,
+    onRecordingCommit,
   } = options;
 
   // ── 最新入参经 ref 读取：使 play/pause/seek 等回调引用稳定（不随渲染重建） ──
@@ -174,6 +205,86 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
   // ── v2.1.0 S2 (D12-1)：loop 状态（对 UI 暴露 + ref 供会话构建/折返读取） ──
   const [loop, setLoopState] = useState<TransportLoop | null>(null);
   const loopRef = useRef<TransportLoop | null>(null);
+
+  // ── v2.2.0 S0 (D21)：实时录制状态机 ──
+  const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
+  const recordingBufferRef = useRef<RecordedTakeNote[]>([]);
+  const recordingCommitRef = useRef<((take: RecordedTake) => void) | null>(null);
+  recordingCommitRef.current = onRecordingCommit ?? null;
+
+  /** 精确当前谱面秒（D21-1）：读会话锚点（loop 折返改写 startSeconds 后自动正确） */
+  const getPositionSecondsNow = useCallback((): number => {
+    const session = sessionRef.current;
+    if (session) {
+      return (
+        session.startSeconds + (nowRef.current() - session.startPerfNow) / 1000
+      );
+    }
+    return tempoMapRef.current.timeAt(
+      positionRef.current.bar,
+      positionRef.current.beat
+    );
+  }, []);
+
+  /** 结束缓冲并产出 take（未闭合 noteOff 以当前时刻闭合）；提交回调后返回 */
+  const commitRecording = useCallback((): RecordedTake | null => {
+    if (!isRecordingRef.current) return null;
+    const endSeconds = getPositionSecondsNow();
+    const notes = recordingBufferRef.current.map((n) => ({
+      ...n,
+      offSeconds: n.offSeconds ?? endSeconds,
+    }));
+    recordingBufferRef.current = [];
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    const take: RecordedTake = { notes, endSeconds };
+    recordingCommitRef.current?.(take);
+    return take;
+  }, [getPositionSecondsNow]);
+
+  const startRecording = useCallback((): void => {
+    recordingBufferRef.current = [];
+    isRecordingRef.current = true;
+    setIsRecording(true);
+  }, []);
+
+  const stopRecording = useCallback((): RecordedTake | null => {
+    return commitRecording();
+  }, [commitRecording]);
+
+  /** 硬件 noteOn 捕获（录制中才缓冲） */
+  const captureRecordedNoteOn = useCallback(
+    (pitchMidi: number, velocity: number): void => {
+      if (!isRecordingRef.current) return;
+      recordingBufferRef.current.push({
+        pitchMidi,
+        velocity,
+        onSeconds: getPositionSecondsNow(),
+        offSeconds: null,
+      });
+    },
+    [getPositionSecondsNow]
+  );
+
+  /** 硬件 noteOff 捕获：配对最近未闭合同 pitch */
+  const captureRecordedNoteOff = useCallback(
+    (pitchMidi: number): void => {
+      if (!isRecordingRef.current) return;
+      for (
+        let i = recordingBufferRef.current.length - 1;
+        i >= 0;
+        i--
+      ) {
+        const n = recordingBufferRef.current[i]!;
+        if (n.pitchMidi === pitchMidi && n.offSeconds === null) {
+          n.offSeconds = getPositionSecondsNow();
+          return;
+        }
+      }
+    },
+    [getPositionSecondsNow]
+  );
 
   const [phase, setPhase] = useState<TransportPhase>("idle");
   const [position, setPosition] = useState<{ bar: number; beat: number }>({
@@ -491,6 +602,8 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
   );
 
   const stop = useCallback((): void => {
+    // v2.2.0 S0 (D21)：录制中先提交 take（需在清会话前读精确时刻，防丢）
+    commitRecording();
     clearTimers();
     sessionRef.current = null;
     allSoundOff();
@@ -526,6 +639,8 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       return;
     }
     if (phaseRef.current !== "playing") return;
+    // v2.2.0 S0 (D21)：录制中 pause → 先提交 take（需在清会话前读精确时刻）
+    commitRecording();
     // 先按当前时刻定格播放头位置（position 保持不变）
     const session = sessionRef.current;
     if (session) {
@@ -624,5 +739,12 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     seek,
     loop,
     setLoop,
+    // ── v2.2.0 S0 (D21)：实时录制 ──
+    isRecording,
+    getPositionSecondsNow,
+    startRecording,
+    stopRecording,
+    captureRecordedNoteOn,
+    captureRecordedNoteOff,
   };
 }

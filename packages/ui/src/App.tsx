@@ -42,9 +42,10 @@ import { useProjectStore } from "./hooks/useProjectStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useMidiInput } from "./hooks/useMidiInput";
 import { useMidiOutput } from "./hooks/useMidiOutput";
-import { useTransport } from "./hooks/useTransport";
+import { useTransport, type RecordedTake } from "./hooks/useTransport";
 import { useSettings } from "./hooks/useSettings";
 import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
+import { convertTakeToNotes } from "./services/recorded-take";
 import type {
   ArrangerConfigInput,
   ArrangerRunResult,
@@ -371,6 +372,13 @@ export function App() {
   const [activePitches, setActivePitches] = useState<Set<number>>(() => new Set());
   const [inputCursor, setInputCursor] = useState({ bar: 1, beat: 1 });
   const inputCursorRef = useRef(inputCursor);
+  // v2.2.0 S2 (D23-2)：transport ref——录制捕获在 MIDI 事件回调（上方定义）
+  // 里调用，而 transport 在下方定义 → 经 ref 解耦声明顺序
+  const transportRef = useRef<{
+    captureRecordedNoteOn: (pitchMidi: number, velocity: number) => void;
+    captureRecordedNoteOff: (pitchMidi: number) => void;
+    isRecording: () => boolean;
+  } | null>(null);
   inputCursorRef.current = inputCursor;
 
   // noteon 的 velocity + tOn（接收时刻 timeStamp）需在 noteoff 落盘时使用，
@@ -395,6 +403,8 @@ export function App() {
         typeof timeStamp === "number" && Number.isFinite(timeStamp)
           ? timeStamp
           : performance.now();
+      // v2.2.0 S2 (D23-2)：实时录制捕获（录制中才缓冲；velocity 0-127）
+      transportRef.current?.captureRecordedNoteOn(note, velocity);
       activeVelocitiesRef.current.set(note, { velocity, tOn });
       setActivePitches((prev) => {
         if (prev.has(note)) return prev;
@@ -408,6 +418,14 @@ export function App() {
 
   const handleMidiNoteOff = useCallback(
     (note: number, timeStamp: number) => {
+      // v2.2.0 S2 (D23-2)：实时录制闭合
+      transportRef.current?.captureRecordedNoteOff(note);
+      // 录制中：音符由录制 take 批量落盘（量化/undo 粒度），跳过步进录入
+      // 路径——否则同一音会双份创建（步进 + 录制各一份）。
+      if (transportRef.current?.isRecording()) {
+        activeVelocitiesRef.current.delete(note);
+        return;
+      }
       // 移除高亮（函数式更新）
       setActivePitches((prev) => {
         if (!prev.has(note)) return prev;
@@ -478,6 +496,20 @@ export function App() {
   // v2.0.0 Stage 1 (D1-5): 全局 transport —— 复用同一个 useMidiOutput 实例的
   // getOutputPort（D0-7 注入契约），notes/tempoMap/channel 均取自当前渲染的
   // 最新值（hook 内经 ref 读取）。播放状态机 + 播放头位置由 useTransport 提供。
+  // ── v2.2.0 S0/S1 (D22)：录制 take 提交 → 换算 → 批量落盘（一条 undo） ──
+  // 回调存于 transport 内部 ref（每渲染刷新）→ 闭包读取最新 tempoMap/recording
+  const handleRecordingCommit = useCallback(
+    (take: RecordedTake) => {
+      const notes = convertTakeToNotes(take, tempoMap, {
+        quantizeGrid: recording.quantizeGrid,
+        velocityMode: recording.velocityMode,
+        fixedVelocity: recording.fixedVelocity,
+      });
+      if (notes.length > 0) actionsRef.current.addNotes(notes);
+    },
+    [tempoMap, recording]
+  );
+
   const transport = useTransport({
     notes,
     tempoMap,
@@ -485,7 +517,18 @@ export function App() {
     getOutputPort,
     // v2.1.0 S2 (D12-4)：播放期节拍器（settings.midi.playback.metronome）
     metronome: settings.midi.playback.metronome,
+    // v2.2.0 S0 (D21)：录制 take 自动提交（stop/pause 防丢）→ 换算 → 批量落盘
+    onRecordingCommit: handleRecordingCommit,
   });
+
+  // v2.2.0 S2 (D23-2)：录制捕获 ref 回填（handleMidiNoteOn/Off 在上方经此调用）
+  transportRef.current = {
+    captureRecordedNoteOn: transport.captureRecordedNoteOn,
+    captureRecordedNoteOff: transport.captureRecordedNoteOff,
+    isRecording: () => transport.isRecording,
+  };
+
+
 
   // ── v2.1.0 S3 (D13-1)：loop 开关接线（保留既有区间，仅翻转 enabled；
   // 首次启用默认 bar1→bar2） ──
@@ -544,6 +587,19 @@ export function App() {
       }
     },
   });
+// ── v2.2.0 S2 (D23-2)：录制开关 ──
+  // 未在播 → 先 startRecording 再走既有 play（含 count-in 设置与 runId 推进）；
+  // 录制中 → stopRecording 提交 take（播放不中断，用户可继续听）。
+  const handleToggleRecord = useCallback(() => {
+    if (transport.isRecording) {
+      transport.stopRecording();
+      return;
+    }
+    transport.startRecording();
+    if (transport.phase === "idle") {
+      handleTransportPlay();
+    }
+  }, [transport.isRecording, transport.phase, transport.startRecording, transport.stopRecording, handleTransportPlay]);
 
   const handleNoteMove = (noteId: string, newBar: number, newBeat: number, newPitch: number) => {
     actions.moveNote(noteId, newBar, newBeat, newPitch);
@@ -1043,6 +1099,8 @@ export function App() {
               onMeterChange={handleMeterChange}
               loop={transport.loop}
               onLoopToggle={handleLoopToggle}
+              isRecording={transport.isRecording}
+              onToggleRecord={handleToggleRecord}
             />
 
             <div className={styles.composePianoRoll}>

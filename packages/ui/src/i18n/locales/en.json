@@ -1565,7 +1565,8 @@
     "countIn": "Count-in…",
     "bpm": "Tempo",
     "meter": "Time Signature",
-    "loop": "Loop"
+    "loop": "Loop",
+    "record": "Record"
   },
   "app": {
     "tabs": {
