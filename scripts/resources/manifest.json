@@ -1,0 +1,63 @@
+{
+  "$comment": "Collinx 资源收集名录（可脚本下载部分）。运行：node scripts/resources/fetch.mjs <id...|all>。下载落盘 resources/<id>/（已 gitignore，不入库）。verified 逐条标注：ok=已探测可达；unverified=来源可靠但未实测，失败会跳过并提示回填。",
+  "resources": [
+    {
+      "id": "fluidr3-gm",
+      "category": "soundfont-sf2",
+      "name": "FluidR3_GM（GM 音色库事实标准，~140MB）",
+      "type": "direct",
+      "url": "https://musical-artifacts.com/artifacts/738/FluidR3_GM.sf2",
+      "out": "FluidR3_GM.sf2",
+      "license": "FluidR3 license（免费，可再分发）",
+      "verified": "unverified",
+      "notes": "MusicalArtifacts 对脚本请求 403（实测）→ 脚本失败时用浏览器打开 url 手动下载"
+    },
+    {
+      "id": "generaluser-gs",
+      "category": "soundfont-sf2",
+      "name": "GeneralUser GS（轻量 GM 音色库，~30MB）",
+      "type": "direct",
+      "url": "https://musical-artifacts.com/artifacts/904/GeneralUser_GS_v1.471.sf2",
+      "out": "GeneralUser_GS.sf2",
+      "license": "GeneralUser GS license（免费）",
+      "verified": "unverified",
+      "notes": "MusicalArtifacts 工件编号可能变化；失败请到 musical-artifacts.com 搜 GeneralUser GS 取新直链回填本清单"
+    },
+    {
+      "id": "surge-xt",
+      "category": "vst3-plugin",
+      "name": "Surge XT（开源合成器，VST3）",
+      "type": "github-release",
+      "repo": "surge-synthesizer/surge-xt",
+      "assetPattern": "(?i)surge-xt-win64-.*\\.zip",
+      "out": "surge-xt-win64.zip",
+      "license": "GPL-3.0（开源）",
+      "verified": "unverified",
+      "notes": "GitHub 匿名 API 限流时失败；失败请到 github.com/surge-synthesizer/surge-xt/releases 手动下载"
+    },
+    {
+      "id": "dexed",
+      "category": "vst3-plugin",
+      "name": "Dexed（DX7 复刻合成器，VST3）",
+      "type": "github-release",
+      "repo": "asb2m10/dexed",
+      "assetPattern": "(?i)dexed.*win64.*\\.(zip|exe)",
+      "out": "dexed-win64.zip",
+      "license": "GPL-3.0（开源）",
+      "verified": "unverified",
+      "notes": "release 资产命名可能含平台后缀差异；失败请到 releases 页核对"
+    },
+    {
+      "id": "odin2",
+      "category": "vst3-plugin",
+      "name": "Odin 2（合成器，VST3）",
+      "type": "github-release",
+      "repo": "TheWaveWarden/odin2",
+      "assetPattern": "(?i)odin2.*windows.*\\.(zip|exe)",
+      "out": "odin2-windows.zip",
+      "license": "GPL-3.0（开源）",
+      "verified": "unverified",
+      "notes": "Windows 版为安装器；失败请到 releases 页核对"
+    }
+  ]
+}
