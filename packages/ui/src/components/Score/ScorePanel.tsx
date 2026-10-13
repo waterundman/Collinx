@@ -7,6 +7,8 @@ import type {
 } from "@collinx/core";
 import { useI18n } from "../../i18n";
 import { ScoreRenderer } from "./ScoreRenderer";
+import type { ScoreRendererLayout } from "./ScoreRenderer";
+import type { BarAnchor } from "./bar-anchors";
 import styles from "./ScorePanel.module.css";
 
 export interface CollisionWarning {
@@ -31,6 +33,18 @@ export interface ScorePanelProps {
   onExportMIDI?: () => void;
   onExportPDF?: () => void;
   compact?: boolean;
+  /**
+   * 谱面播放头位置（只读跟随），透传给内部 ScoreRenderer。缺省零行为变化。
+   */
+  playheadPosition?: { bar: number; beat: number } | null;
+  /**
+   * 渲染成功后上报小节锚点，透传给内部 ScoreRenderer。缺省零行为变化。
+   */
+  onBarAnchorsChange?: (anchors: BarAnchor[]) => void;
+  /**
+   * 谱面点击定位（Stage 2）：透传给内部 ScoreRenderer。缺省零行为变化。
+   */
+  onSeek?: (pos: { bar: number; beat: number }) => void;
 }
 
 const CLEF_SYMBOLS: Record<string, string> = {
@@ -55,6 +69,9 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   onExportMIDI,
   onExportPDF,
   compact = false,
+  playheadPosition,
+  onBarAnchorsChange,
+  onSeek,
 }) => {
   const { t } = useI18n();
   const [viewMode, setViewMode] = useState<"data" | "rendered">("data");
@@ -82,6 +99,22 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
       return { ...staff, staveIndex: idx, noteCount: staffNotes.length };
     });
   }, [staffConfig, notes]);
+
+  // ScoreRenderer 的 layout 必须 memo 化：内联对象字面量每次渲染换身份，而它是
+  // ScoreRenderer 渲染 effect 的 dep → 每次父渲染都触发重排版；若父组件用 state
+  // 接收锚点（playheadPosition 的常见接线），会形成永不收敛的循环（S0 验证者实测
+  // 300ms 内 15 次回调）。deps 用 layout.staffConfig 与 houseStyle?.notationSize。
+  const rendererLayout = useMemo<ScoreRendererLayout>(
+    () => ({
+      staffConfig: (layout.staffConfig ?? []).map((s) => ({
+        clef: s.clef as "treble" | "bass",
+        name: s.name,
+        bars: s.bars,
+      })),
+      notationSize: houseStyle?.notationSize,
+    }),
+    [layout.staffConfig, houseStyle?.notationSize],
+  );
 
   return (
     <div className={styles.scorePanel} data-testid="score-panel">
@@ -276,16 +309,12 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
             {viewMode === "rendered" ? (
               <ScoreRenderer
                 notes={notes}
-                layout={{
-                  staffConfig: staffConfig.map((s) => ({
-                    clef: s.clef as "treble" | "bass",
-                    name: s.name,
-                    bars: s.bars,
-                  })),
-                  notationSize: houseStyle?.notationSize,
-                }}
+                layout={rendererLayout}
                 tempoMap={tempoMap}
                 scale={1}
+                playheadPosition={playheadPosition}
+                onBarAnchorsChange={onBarAnchorsChange}
+                onSeek={onSeek}
               />
             ) : (
               <div className={styles.previewPlaceholder}>

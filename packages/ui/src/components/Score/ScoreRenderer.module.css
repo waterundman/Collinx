@@ -14,6 +14,18 @@
   min-height: 100%;
 }
 
+/*
+ * v2.3.0 S4b (D34-5)：本层高度由 ScoreRenderer 以**解析式**内联设定
+ * （totalHeight × scale = 画布可视高），故此处**不得**再写 `min-height: 100%`——
+ * 那会让本层高度变成 max(画布可视高, 容器高)，覆盖层随之越出谱面。
+ * min-width 仍保留：画布宽度可能窄于容器，覆盖层需要铺满横向。
+ */
+.rendererStack {
+  position: relative;
+  display: inline-block;
+  min-width: 100%;
+}
+
 .rendererCanvas svg {
   display: block;
 }

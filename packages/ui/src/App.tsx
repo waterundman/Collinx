@@ -274,6 +274,12 @@ export function App() {
   const [harmonyError, setHarmonyError] = useState<string | null>(null);
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
 
+  // v2.3.0 S4a (D34-6) —— 引用稳定前提（勿改为渲染体内重建）：
+  // defaultLayout 必须经 useMemo 持有同一身份。原因：ScorePanel 的 rendererLayout
+  // memo deps 含 layout.staffConfig；若每次渲染重建 layout/staffConfig，则 memo 失效
+  // → ScoreRenderer 渲染 effect（dep 含 layout）反复触发 → 配合父组件用 state 接收
+  // onBarAnchorsChange 会形成永不收敛的渲染循环（S0 期实测 300ms 内 15 次回调）。
+  // defaultHouseStyle 是 ./data/demoData 的模块级导出，身份天然稳定；禁止内联。
   const defaultLayout = useMemo(() => createDefaultLayout(), []);
   const analyzer = useMemo(() => new ExportAnalyzer(), []);
   const generator = useMemo(() => new ReportGenerator(), []);
@@ -1079,6 +1085,9 @@ export function App() {
                 layout={defaultLayout}
                 notes={notes}
                 houseStyle={defaultHouseStyle}
+                tempoMap={tempoMap}
+                playheadPosition={transport.position}
+                onSeek={transport.seek}
                 compact
               />
             </div>
@@ -1229,6 +1238,9 @@ export function App() {
             layout={defaultLayout}
             notes={notes}
             houseStyle={defaultHouseStyle}
+            tempoMap={tempoMap}
+            playheadPosition={transport.position}
+            onSeek={transport.seek}
             collisions={scoreCollisions.length > 0 ? scoreCollisions : undefined}
             onAutoLayout={handleAutoLayout}
             onExtractParts={handleExtractParts}

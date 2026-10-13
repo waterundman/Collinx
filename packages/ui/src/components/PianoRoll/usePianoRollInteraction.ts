@@ -1,11 +1,23 @@
-import { useCallback, useRef, useState } from "react";
-import { NoteEvent } from "@collinx/core";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { NoteEvent, TempoMap } from "@collinx/core";
+import { createBarTimeline } from "./bar-timeline";
 
 const NOTE_HEIGHT = 18;
 export const MIN_PITCH = 24;
 export const MAX_PITCH = 108;
-const BEATS_PER_BAR = 4;
 const RESIZE_EDGE_THRESHOLD = 6;
+
+/**
+ * v2.3.0 Stage 3b（S3 收口）：`tempoMap` 未传时的 **4/4 缺省**。
+ *
+ * 依据 core `TempoMap` 构造函数——`new TempoMap([], [])` 会补一条默认
+ * `{ bar:1, numerator:4, denominator:4 }` 拍号（packages/core/src/model/tempo-map.ts:61-63），
+ * 故它**就是 core 自身定义的「4/4 语义」**，比在 UI 层再手写一份常量表更干净
+ * （不引入第二个 4/4 定义，避免漂移）；且后续走 `meterAt` 与真实路径完全同构。
+ * 冻结为模块级单例，避免每次渲染重建前缀表。缺省路径逐值等价于改动前的
+ * 「硬编码 `BEATS_PER_BAR = 4`」（见 T54c 零回归负控）。
+ */
+const DEFAULT_TEMPO_MAP = new TempoMap([], []);
 
 export interface UsePianoRollInteractionParams {
   notes: NoteEvent[];
@@ -23,6 +35,13 @@ export interface UsePianoRollInteractionParams {
    * velocity 归一化 0-1，即 NoteEvent 原字段）。undefined 零行为变化。
    */
   onNoteAudition?: (pitchMidi: number, velocity: number) => void;
+  /**
+   * v2.3.0 Stage 3b（S3 收口）：拍号时间线来源。**可选**——未传时退化为 4/4
+   * 语义（`new TempoMap([], [])`，见 DEFAULT_TEMPO_MAP），与改动前硬编码
+   * `BEATS_PER_BAR = 4` 逐值等价。每小节四分音符拍数 = numerator × 4 / denominator
+   * （依据 core tempo-map.ts:120/:183；3/4→3、6/8→3、7/8→3.5），见 `bar-timeline.ts`。
+   */
+  tempoMap?: TempoMap;
   selectedNoteIds: string[];
 }
 
@@ -40,7 +59,20 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
     onNoteSelect,
     onNoteAudition,
     selectedNoteIds,
+    tempoMap,
   } = params;
+
+  // v2.3.0 Stage 3b（S3 收口）：与 PianoRollView 同源的时间线——一次 O(N) 建前缀表，
+  // 供音符落点（pixelToBarBeat）、音符矩形 x（barBeatToPixel）、拖拽 move 换算共用。
+  // 未传 tempoMap → 用 4/4 缺省表（DEFAULT_TEMPO_MAP），逐值等价于旧硬编码。
+  const timeline = useMemo(
+    () =>
+      createBarTimeline(tempoMap ?? DEFAULT_TEMPO_MAP, {
+        startBar: viewRange.startBar,
+        endBar: viewRange.endBar,
+      }),
+    [tempoMap, viewRange.startBar, viewRange.endBar]
+  );
 
   const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
   const [draggingState, setDraggingState] = useState<{
@@ -68,28 +100,53 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
       const gridY = y + scrollY;
 
       const totalBeats = gridX / pixelsPerBeat;
-      const bar = viewRange.startBar + Math.floor(totalBeats / BEATS_PER_BAR);
-      const beat = (totalBeats % BEATS_PER_BAR) + 1;
+      // v2.3.0 Stage 3b：totalBeats 是「自 viewRange.startBar 起、以**四分音符**
+      // 为单位」的偏移；加 barStartQn(startBar) 得自 bar 1 起的绝对四分音符坐标，
+      // 再由 timeline 按**真实拍号**反演 bar/beat（barBeatFromQn 为 qnOf 的逆）。
+      // 依据 core tempo-map.ts:120/:183——每小节四分音符拍数 = numerator × 4 /
+      // denominator（3/4→3、6/8→3、7/8→3.5），**不是 numerator**（上音/时长单位
+      // 换算在本项目已踩坑三次：v2.1.0 S4-F1 / v2.2.0 T44 / v2.3.0 S1）。
+      const { bar, beat } = timeline.barBeatFromQn(
+        totalBeats + timeline.barStartQn(viewRange.startBar)
+      );
 
       const pitch = MAX_PITCH - Math.floor(gridY / NOTE_HEIGHT);
 
       return {
         bar: Math.max(1, bar),
-        beat: Math.max(1, Math.min(BEATS_PER_BAR + 0.999, beat)),
+        // v2.3.0 Stage 3b（主 session 裁定，2026-10-12）：
+        // 拍内钳制上界 = 该小节**真实拍数 + 0.999**——这是旧式 `BEATS_PER_BAR + 0.999`
+        // 的忠实泛化，**不是** `beatsPerBarAt(bar)`。
+        //
+        // 为什么不能用 `beatsPerBarAt(bar)`（曾一度这么写，实测为回归）：
+        //   · `barBeatFromQn` 与旧 `(totalBeats % 4) + 1` 同域，返回 beat ∈ [1, 拍数+1)
+        //     ——即**整拍单位的 1-based 小节内坐标**，末拍（如 4/4 的 beat ∈ (4,5)）
+        //     是合法位置，代表「第 4 个四分音符之内的亚拍落点」（beat 4.5 = 第 4 拍的反拍）。
+        //   · 取上界 `beatsPerBarAt` 会把整条第 4 拍（占小节 25%）压扁到 4。
+        //     端到端后果：`handleDoubleClick → pixelToBarBeat → onNoteAdd`
+        //     （App.tsx:394 不量化）落点被钳到 4，而音符按 `timeline.qnOf(note.bar,
+        //     note.beat)` 渲染（PianoRollView.tsx:417）→ 音符相对点击位置**左移最多
+        //     1 个四分音符**，用户可见。
+        //   · `+ 0.999` 保留末拍亚拍分辨率，仅夹掉小节线前最后 0.001 拍（与旧式逐位相同；
+        //     4/4 即 `Math.min(4.999, beat)`）。7/8 → 上界 3.5+0.999=4.499，同理。
+        // 见 T54c（全合法域逐值等价，含 beat_raw ∈ (4,5)）与 T54e-③（末拍分辨率不被压扁）。
+        beat: Math.max(1, Math.min(timeline.beatsPerBarAt(bar) + 0.999, beat)),
         pitch: Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch)),
       };
     },
-    [scrollX, scrollY, pixelsPerBeat, viewRange.startBar]
+    [scrollX, scrollY, pixelsPerBeat, viewRange.startBar, timeline]
   );
 
   const barBeatToPixel = useCallback(
     (bar: number, beat: number, pitch: number): { x: number; y: number } => {
-      const totalBeats = (bar - viewRange.startBar) * BEATS_PER_BAR + (beat - 1);
-      const x = totalBeats * pixelsPerBeat - scrollX;
+      // v2.3.0 Stage 3b：qnOf 为自 bar 1 起的绝对四分音符坐标，减去视图首小节
+      // 起点 qnBase 得相对坐标，再换算为像素（与 pixelToBarBeat 严格互逆）。
+      const qn = timeline.qnOf(bar, beat) - timeline.barStartQn(viewRange.startBar);
+      const x = qn * pixelsPerBeat - scrollX;
       const y = (MAX_PITCH - pitch) * NOTE_HEIGHT - scrollY;
       return { x, y };
     },
-    [viewRange.startBar, pixelsPerBeat, scrollX, scrollY]
+    [viewRange.startBar, pixelsPerBeat, scrollX, scrollY, timeline]
   );
 
   const hitTest = useCallback(
@@ -160,13 +217,17 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
 
         if (draggingState.mode === "move") {
           const deltaBeats = deltaX / pixelsPerBeat;
+          // v2.3.0 Stage 3b：originalBeats = qnOf(绝对四分音符) − qnBase，即
+          // 「自 viewRange.startBar 起」的四分音符偏移（取代旧 `(bar-startBar)*4+
+          // (beat-1)`）；拖拽量 deltaBeats 仍以四分音符计。新 bar/beat 由
+          // barBeatFromQn 反演（真实拍号），调用处保留 Math.max(1, newBar) 下限保护。
           const originalBeats =
-            (draggingState.originalBar - viewRange.startBar) * BEATS_PER_BAR +
-            (draggingState.originalBeat - 1);
+            timeline.qnOf(draggingState.originalBar, draggingState.originalBeat) -
+            timeline.barStartQn(viewRange.startBar);
           const newTotalBeats = originalBeats + deltaBeats;
-          const newBar =
-            viewRange.startBar + Math.max(0, Math.floor(newTotalBeats / BEATS_PER_BAR));
-          const newBeat = ((newTotalBeats % BEATS_PER_BAR) + BEATS_PER_BAR) % BEATS_PER_BAR + 1;
+          const { bar: newBar, beat: newBeat } = timeline.barBeatFromQn(
+            newTotalBeats + timeline.barStartQn(viewRange.startBar)
+          );
           const deltaPitch = -Math.round(deltaY / NOTE_HEIGHT);
           const newPitch = Math.max(
             MIN_PITCH,
@@ -183,7 +244,7 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
         setHoveredNoteId(hit?.noteId ?? null);
       }
     },
-    [draggingState, pixelsPerBeat, viewRange.startBar, onNoteMove, onNoteResize, hitTest]
+    [draggingState, pixelsPerBeat, viewRange.startBar, timeline, onNoteMove, onNoteResize, hitTest]
   );
 
   const handleMouseUp = useCallback(

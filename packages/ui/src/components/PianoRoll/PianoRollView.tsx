@@ -7,6 +7,7 @@ import {
 } from "./usePianoRollInteraction";
 import { useI18n } from "../../i18n";
 import styles from "./PianoRoll.module.css";
+import { createBarTimeline } from "./bar-timeline";
 
 interface PianoRollViewProps {
   notes: NoteEvent[];
@@ -39,8 +40,9 @@ interface PianoRollViewProps {
    */
   playheadPosition?: { bar: number; beat: number };
   /**
-   * v2.1.0 S3 (D13-5)：时间轴点击定位回调。点击 x → 反演为 bar/beat（按视图
-   * 的 4 拍/小节网格）→ 回调。undefined 零行为变化（时间轴无 onClick）。
+   * v2.1.0 S3 (D13-5，v2.3.0 S3 修订)：时间轴点击定位回调。点击 x → 反演为
+   * bar/beat（按 `tempoMap` **真实拍号**，即 numerator×4/denominator 四分音符/小节，
+   * 见 bar-timeline.ts）→ 回调。undefined 零行为变化（时间轴无 onClick）。
    */
   onSeek?: (pos: { bar: number; beat: number }) => void;
   /**
@@ -81,7 +83,6 @@ type ToolMode = "select" | "draw";
 
 const NOTE_HEIGHT = 18;
 const KEYBOARD_WIDTH = 56;
-const BEATS_PER_BAR = 4;
 const MIN_PIXELS_PER_BEAT = 15;
 const MAX_PIXELS_PER_BEAT = 200;
 /** v1.28.0 (D1-2): autoScrollFollow 的右缘/左缘留白（px）。 */
@@ -163,14 +164,25 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     startScrollY: number;
   } | null>(null);
 
+  // v2.3.0 Stage 3 (S3)：拍号时间线——一次 O(N) 建前缀表，六处时间数学共用。
+  // qnBase = 视图首小节起点的绝对四分音符坐标；totalRelQn = 相对总拍数
+  // （4/4 下逐值等于旧式 `(endBar - startBar + 1) * BEATS_PER_BAR`）。
+  const timeline = useMemo(
+    () =>
+      createBarTimeline(tempoMap, {
+        startBar: viewRange.startBar,
+        endBar: viewRange.endBar,
+      }),
+    [tempoMap, viewRange.startBar, viewRange.endBar]
+  );
+  const qnBase = timeline.barStartQn(viewRange.startBar);
+  const totalRelQn = timeline.barStartQn(viewRange.endBar + 1) - qnBase;
+
   // v2.0.0 Stage 2 (D2-3): 平移上界。maxScrollY = (MAX_PITCH-MIN_PITCH+1)*18 - h
   // （= 930 @h=600）；maxScrollX 与既有 follow effect 公式一致。
   const maxScrollX = Math.max(
     0,
-    (viewRange.endBar - viewRange.startBar + 1) *
-      BEATS_PER_BAR *
-      pixelsPerBeat -
-      canvasSize.width
+    totalRelQn * pixelsPerBeat - canvasSize.width
   );
   const maxScrollY = Math.max(
     0,
@@ -186,6 +198,9 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
 
   const interaction = usePianoRollInteraction({
     notes,
+    // v2.3.0 Stage 3b（S3 收口）：音符落点/矩形/拖拽换算与网格线同源同一 `tempoMap`
+    // （真实拍号），消除 3/4、7/8 下「网格按真实拍号、音符按 4 拍」的彼此错位。
+    tempoMap,
     viewRange,
     pixelsPerBeat,
     scrollX,
@@ -235,9 +250,11 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     ctx.fillStyle = getCSSVar('--bg-secondary');
     ctx.fillRect(0, 0, w, h);
 
-    const totalBeats =
-      (viewRange.endBar - viewRange.startBar + 1) * BEATS_PER_BAR;
-
+    // v2.3.0 Stage 3 (S3)：网格竖线**逐小节**绘制（每小节一条主 bar 线 + 小节内
+    // ceil(beatsPerBar)-1 条次线），拍号取自 timeline（真实 numerator×4/denominator，
+    // 依据 core tempo-map.ts:120/:183）。4/4 下竖线 q 序列与标签序列与旧
+    // `beat ∈ [0, totalBeats]` 派生式**逐值相同**（S3-T51 零回归负控）。
+    //
     // v1.27.0 (D1-3): 量化网格细分线开关——hint 为 0/undefined 或像素密度
     // 不足（细分间距 < 12px）时不画，保持既有行为完全不变。
     const drawSubGrid =
@@ -245,11 +262,11 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
       quantizeGridHint > 0 &&
       pixelsPerBeat * quantizeGridHint >= 12;
 
-    for (let beat = 0; beat <= totalBeats; beat++) {
-      const x = beat * pixelsPerBeat - scrollX;
-      if (x < -2 || x > w + 2) continue;
+    const drawGridVertical = (q: number, barLabel: number | null) => {
+      const x = q * pixelsPerBeat - scrollX;
+      if (x < -2 || x > w + 2) return;
 
-      const isBar = beat % BEATS_PER_BAR === 0;
+      const isBar = barLabel !== null;
       ctx.strokeStyle = isBar ? getCSSVar('--border-secondary') : getCSSVar('--border-primary');
       ctx.lineWidth = isBar ? 1 : 0.5;
       ctx.beginPath();
@@ -258,13 +275,12 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
       ctx.stroke();
 
       if (isBar) {
-        const barNum = viewRange.startBar + beat / BEATS_PER_BAR;
         ctx.fillStyle = getCSSVar('--text-muted');
         ctx.font = "10px sans-serif";
-        ctx.fillText(`${barNum}`, x + 3, 12);
+        ctx.fillText(`${barLabel}`, x + 3, 12);
       }
 
-      if (drawSubGrid && beat < totalBeats) {
+      if (drawSubGrid && q < totalRelQn) {
         // 每对相邻 beat 竖线之间画 quantizeGridHint 细分线（0.25 → 拍内
         // +0.25/+0.5/+0.75 三条；0.5 → +0.5 一条；1 → 无）。0.25 透明度与
         // 既有 border-primary 色、0.5 线宽，取整方式与 beat 线一致。
@@ -288,7 +304,18 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
           ctx.globalAlpha = 1;
         }
       }
+    };
+
+    for (let bar = viewRange.startBar; bar <= viewRange.endBar; bar++) {
+      const barStartRel = timeline.barStartQn(bar) - qnBase;
+      const subLines = Math.ceil(timeline.beatsPerBarAt(bar)) - 1;
+      drawGridVertical(barStartRel, bar);
+      for (let j = 1; j <= subLines; j++) {
+        drawGridVertical(barStartRel + j, null);
+      }
     }
+    // 收尾边界小节 endBar+1 的主 bar 线（旧 4/4 在 beat=totalBeats 处画的那条）。
+    drawGridVertical(totalRelQn, viewRange.endBar + 1);
 
     // v1.27.0 (D1-2): MIDI 录入光标竖线（下一个落盘位置，非播放头）。
     // 越界（bar 超出 viewRange / x 出画布）不画；undefined 不画。
@@ -296,8 +323,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
       const { bar, beat } = cursorPosition;
       const inViewRange =
         bar >= viewRange.startBar && bar <= viewRange.endBar;
-      const cursorTicks =
-        (bar - viewRange.startBar) * BEATS_PER_BAR + (beat - 1);
+      const cursorTicks = timeline.qnOf(bar, beat) - qnBase;
       const cursorX = cursorTicks * pixelsPerBeat - scrollX;
       if (inViewRange && cursorX >= 0 && cursorX <= w) {
         ctx.strokeStyle = getCSSVar('--accent-purple');
@@ -332,8 +358,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     if (playheadPosition) {
       const { bar, beat } = playheadPosition;
       const inViewRange = bar >= viewRange.startBar && bar <= viewRange.endBar;
-      const playheadTicks =
-        (bar - viewRange.startBar) * BEATS_PER_BAR + (beat - 1);
+      const playheadTicks = timeline.qnOf(bar, beat) - qnBase;
       const playheadX = playheadTicks * pixelsPerBeat - scrollX;
       if (inViewRange && playheadX >= 0 && playheadX <= w) {
         ctx.strokeStyle = getCSSVar('--accent-sunset');
@@ -388,8 +413,8 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     const noteRects = new Map<string, { x: number; y: number; w: number; h: number }>();
 
     for (const note of notes) {
-      const noteTotalBeats =
-        (note.bar - viewRange.startBar) * BEATS_PER_BAR + (note.beat - 1);
+      // v2.3.0 S3：音符 x 亦由 timeline 派生（4/4 下与旧式逐值相同）。
+      const noteTotalBeats = timeline.qnOf(note.bar, note.beat) - qnBase;
       const nx = noteTotalBeats * pixelsPerBeat - scrollX;
       const ny = (MAX_PITCH - note.pitchMidi) * NOTE_HEIGHT - scrollY;
       const nw = Math.max(3, note.durQn * pixelsPerBeat);
@@ -447,6 +472,9 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   }, [
     notes,
     viewRange,
+    timeline,
+    qnBase,
+    totalRelQn,
     pixelsPerBeat,
     scrollX,
     scrollY,
@@ -490,8 +518,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     const { bar, beat } = followTarget;
     if (bar < viewRange.startBar || bar > viewRange.endBar) return;
 
-    const targetTicks =
-      (bar - viewRange.startBar) * BEATS_PER_BAR + (beat - 1);
+    const targetTicks = timeline.qnOf(bar, beat) - qnBase;
     const w = canvasSize.width;
     const targetX = targetTicks * pixelsPerBeat - scrollX;
 
@@ -512,6 +539,8 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     followTarget,
     followPlayhead,
     pixelsPerBeat,
+    timeline,
+    qnBase,
     scrollX,
     canvasSize.width,
     viewRange,
@@ -584,17 +613,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
         setPixelsPerBeat(newPpb);
         // 缩放改变总宽 → 重新钳制 scrollX，避免越界。
         setScrollX((prev) =>
-          clamp(
-            prev,
-            0,
-            Math.max(
-              0,
-              (viewRange.endBar - viewRange.startBar + 1) *
-                BEATS_PER_BAR *
-                newPpb -
-                canvasSize.width
-            )
-          )
+          clamp(prev, 0, Math.max(0, totalRelQn * newPpb - canvasSize.width))
         );
         return;
       }
@@ -613,7 +632,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
       }
       setFollowSuspended(true);
     },
-    [pixelsPerBeat, maxScrollX, maxScrollY, canvasSize.width, viewRange]
+    [pixelsPerBeat, maxScrollX, maxScrollY, canvasSize.width, totalRelQn]
   );
 
   // v2.0.0 Stage 2 (D2-2): 中键拖拽平移（pointerdown button===1 → move → up）。
@@ -677,9 +696,43 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
           ? "grab"
           : "crosshair";
 
-  const totalCanvasWidth =
-    (viewRange.endBar - viewRange.startBar + 1) * BEATS_PER_BAR * pixelsPerBeat;
+  const totalCanvasWidth = totalRelQn * pixelsPerBeat;
   const totalCanvasHeight = (MAX_PITCH - MIN_PITCH + 1) * NOTE_HEIGHT;
+
+  // v2.3.0 Stage 3 (S3)：时间轴刻度亦逐小节生成（真实拍号）。4/4 下与旧
+  // `beat ∈ [0, totalBeats]` 的 span/div 序列逐值相同（S3-T51 零回归负控）。
+  const timelineMarks: React.ReactNode[] = [];
+  for (let bar = viewRange.startBar; bar <= viewRange.endBar; bar++) {
+    const barStartRel = timeline.barStartQn(bar) - qnBase;
+    timelineMarks.push(
+      <span
+        key={`bar-${bar}`}
+        className={styles.timelineMark}
+        style={{ left: `${barStartRel * pixelsPerBeat - scrollX}px` }}
+      >
+        {bar}
+      </span>
+    );
+    const subLines = Math.ceil(timeline.beatsPerBarAt(bar)) - 1;
+    for (let j = 1; j <= subLines; j++) {
+      timelineMarks.push(
+        <div
+          key={`tick-${bar}-${j}`}
+          className={styles.timelineTick}
+          style={{ left: `${(barStartRel + j) * pixelsPerBeat - scrollX}px` }}
+        />
+      );
+    }
+  }
+  timelineMarks.push(
+    <span
+      key={`bar-${viewRange.endBar + 1}`}
+      className={styles.timelineMark}
+      style={{ left: `${totalRelQn * pixelsPerBeat - scrollX}px` }}
+    >
+      {viewRange.endBar + 1}
+    </span>
+  );
 
   return (
     <div
@@ -807,16 +860,17 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
         onClick={
           onSeek
             ? (e) => {
-                // v2.1.0 S3 (D13-5)：点击 x → 反演 bar/beat。tick 的定位式为
-                // `left = beat * ppb - scrollX`（beat 为自 bar 1 起的绝对拍），
-                // 反演即 `beat = (localX + scrollX) / ppb`（绝对定位子元素不受
-                // 容器 padding-left 影响）。负半区（视图外）忽略。
+                // v2.1.0 S3 (D13-5，v2.3.0 S3 修订)：点击 x → 反演 bar/beat。
+                // 定位式为 `x = (qnOf(bar, beat) - qnBase) * ppb - scrollX`
+                // （qnOf 为自 bar 1 起的绝对四分音符坐标），故反演
+                // `relQn = (localX + scrollX) / ppb`；再由 `barBeatFromQn` 按
+                // **`tempoMap` 真实拍号**（numerator×4/denominator 四分音符/小节）
+                // 还原 bar/beat，取代 v2.1.0 的「按视图的 4 拍/小节网格」写死式。
+                // 负半区（视图外）忽略。
                 const rect = e.currentTarget.getBoundingClientRect();
-                const beats = (e.clientX - rect.left + scrollX) / pixelsPerBeat;
-                if (beats < 0) return;
-                const bar = Math.floor(beats / BEATS_PER_BAR) + 1;
-                const beatInBar = (beats % BEATS_PER_BAR) + 1;
-                onSeek({ bar, beat: beatInBar });
+                const relQn = (e.clientX - rect.left + scrollX) / pixelsPerBeat;
+                if (relQn < 0) return;
+                onSeek(timeline.barBeatFromQn(relQn + qnBase));
               }
             : undefined
         }
@@ -827,46 +881,19 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
             data-testid="piano-roll-loop-region"
             style={{
               left: `${
-                ((loopRegion.start.bar - 1) * BEATS_PER_BAR +
-                  (loopRegion.start.beat - 1)) *
+                timeline.qnOf(loopRegion.start.bar, loopRegion.start.beat) *
                   pixelsPerBeat -
                 scrollX
               }px`,
               width: `${
-                ((loopRegion.end.bar - 1) * BEATS_PER_BAR +
-                  (loopRegion.end.beat - 1) -
-                  ((loopRegion.start.bar - 1) * BEATS_PER_BAR +
-                    (loopRegion.start.beat - 1))) *
+                (timeline.qnOf(loopRegion.end.bar, loopRegion.end.beat) -
+                  timeline.qnOf(loopRegion.start.bar, loopRegion.start.beat)) *
                 pixelsPerBeat
               }px`,
             }}
           />
         ) : null}
-        {Array.from(
-          { length: (viewRange.endBar - viewRange.startBar + 1) * BEATS_PER_BAR + 1 },
-          (_, beat) => {
-            const x = beat * pixelsPerBeat - scrollX;
-            const isBar = beat % BEATS_PER_BAR === 0;
-            if (isBar) {
-              return (
-                <span
-                  key={beat}
-                  className={styles.timelineMark}
-                  style={{ left: `${x}px` }}
-                >
-                  {viewRange.startBar + beat / BEATS_PER_BAR}
-                </span>
-              );
-            }
-            return (
-              <div
-                key={beat}
-                className={styles.timelineTick}
-                style={{ left: `${x}px` }}
-              />
-            );
-          }
-        )}
+        {timelineMarks}
       </div>
     </div>
   );

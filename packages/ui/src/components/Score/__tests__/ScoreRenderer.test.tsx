@@ -1,16 +1,115 @@
-import { describe, it, expect } from "vitest";
-import React from "react";
+/**
+ * ScoreRenderer 真实渲染测试（v2.3.0 S4b：D34-4 收口 + D34-5 高度断言）。
+ *
+ * 背景（v2.3.0 侦察 F6）：本文件原 7 条用例**全部**只调
+ * `React.createElement(ScoreRenderer, props)` 后断言「不抛错」——组件根本没挂载，
+ * 谱面渲染路径**零有效覆盖**（其中名为
+ * "renders correct number of staves from layout config" 的用例什么都没测）。
+ *
+ * 本版改为**真实渲染**（jsdom + vexflow 5 SVG 后端；无 @testing-library/react，
+ * 手写 createRoot + act，样板照抄 ScoreRenderer.anchors.test.tsx）：
+ *   T58a 空音符 → 真实渲染出 svg（不再只 createElement）。
+ *   T58b 有音符 → svg 渲染成功；onBarAnchorsChange 上报 renderBars 个锚点、bar 递增、
+ *        x0 严格递增（全序断言）。
+ *   T58c 谱表数真实生效 → 1 谱表 vs 2 谱表的覆盖层基准高之差 == 140
+ *        （差值断言，不硬编码基数）。
+ *   T58d scale 真实生效 → 画布 inline transform === "scale(0.5)"；且 scale=2 时基准高
+ *        恰为 scale=1 的两倍（**D34-5 的「scale ≠ 1 高度断言」**）。
+ *   T58e 覆盖层高度去启发式 → `.rendererStack` 显式设高（解析式 totalHeight × scale）；
+ *        覆盖层 `.layer` 自身**不再**内联 height（旧写法的 `scale===1 ? '100%'
+ *        : `${scale*100}%`` 是死分支 + 相对 `min-height:100%` 的启发式，已删）。
+ *   T58f tempoMap 真实生效（米制敏感）→ 3/4 下播放头 left 用 beatsPerBarAt = 3 插值，
+ *        与 4/4 的插值点可判别。
+ *
+ * 等待策略：动态 import 在 jsdom 下正常 resolve，用 `await vi.waitFor` 轮询至 DOM
+ * 就绪（外层不再包 act，避免 act 阻塞 waitFor 的轮询）。
+ */
+import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
+import React, { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { TempoMap } from "@collinx/core";
 import { ScoreRenderer } from "../ScoreRenderer";
-import type { NoteEvent } from "@collinx/core";
 import type { ScoreRendererLayout } from "../ScoreRenderer";
+import type { BarAnchor } from "../bar-anchors";
+import type { NoteEvent } from "@collinx/core";
 
-const defaultLayout: ScoreRendererLayout = {
+// ---------------------------------------------------------------------------
+// harness
+// ---------------------------------------------------------------------------
+
+function stubBrowserApis() {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: () => ({
+      matches: false,
+      media: "",
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+  Object.defineProperty(window, "ResizeObserver", {
+    configurable: true,
+    writable: true,
+    value: class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  });
+}
+
+function mount(ui: React.ReactElement) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  let root: Root;
+  act(() => {
+    root = createRoot(container);
+    root.render(ui);
+  });
+  return {
+    container,
+    cleanup() {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+}
+
+/** 覆盖层基准层（`.rendererStack`）的显式高度（px）。 */
+function stackHeight(container: HTMLElement): number {
+  const el = container.querySelector<HTMLElement>('[data-testid="score-renderer-stack"]');
+  expect(el).not.toBeNull();
+  const raw = el!.style.height;
+  expect(raw).toMatch(/^\d+(\.\d+)?px$/);
+  return Number.parseFloat(raw);
+}
+
+const twoStaffLayout: ScoreRendererLayout = {
   staffConfig: [
     { clef: "treble", name: "Treble", bars: 4 },
     { clef: "bass", name: "Bass", bars: 4 },
   ],
 };
+
+/** 单谱表（唯一差异：staffConfig 长度 1 vs 2）——用于 T58c 的差值断言。 */
+const oneStaffLayout: ScoreRendererLayout = {
+  staffConfig: [{ clef: "treble", name: "Treble", bars: 4 }],
+};
+
+/**
+ * 每个谱表占的纵向节距 = STAVE_HEIGHT(120) + STAVE_GAP(20)，见
+ * `ScoreRenderer.tsx` 顶部常量（`STAVE_HEIGHT = 120`、`STAVE_GAP = 20`）。
+ * 基准高公式 = 谱表数 × 节距 + 20（尾部留白）——故 1 vs 2 谱表的**差**恰为一个节距，
+ * 与尾部留白无关（这正是用差值而非绝对值的原因：不引入夹具基数）。
+ */
+const PER_STAVE_PITCH = 120 + 20;
 
 function makeNote(overrides: Partial<NoteEvent> = {}): NoteEvent {
   return {
@@ -28,74 +127,176 @@ function makeNote(overrides: Partial<NoteEvent> = {}): NoteEvent {
   };
 }
 
-describe("ScoreRenderer", () => {
-  it("renders without crashing with empty notes", () => {
-    expect(() => {
-      React.createElement(ScoreRenderer, {
-        notes: [],
-        layout: defaultLayout,
-      });
-    }).not.toThrow();
+/** 等真实渲染完成（svg 出现在画布容器内）。 */
+async function waitForSvg(container: HTMLElement) {
+  await vi.waitFor(() => expect(container.querySelector("svg")).not.toBeNull(), {
+    timeout: 5000,
+  });
+}
+
+afterEach(() => {
+  document.body.innerHTML = "";
+});
+
+describe("ScoreRenderer 真实渲染 (S4b · D34-4)", () => {
+  beforeAll(() => {
+    stubBrowserApis();
   });
 
-  it("renders without crashing with notes", () => {
+  it("T58a: 空音符 → 真实渲染出 svg（非仅 createElement） (critical)", async () => {
+    const h = mount(<ScoreRenderer notes={[]} layout={twoStaffLayout} />);
+    await waitForSvg(h.container);
+    const svg = h.container.querySelector("svg");
+    expect(svg).not.toBeNull();
+    // 画布容器内确有内容（vexflow 渲染过，而非空壳）。
+    expect(svg!.childNodes.length).toBeGreaterThan(0);
+    h.cleanup();
+  });
+
+  it("T58b: 有音符 → 渲染成功 + onBarAnchorsChange 上报 4 锚点且 x0 严格递增 (critical)", async () => {
+    const calls: BarAnchor[][] = [];
     const notes = [
       makeNote({ id: "n1", pitchMidi: 60, bar: 1, beat: 1 }),
       makeNote({ id: "n2", pitchMidi: 62, bar: 1, beat: 2 }),
       makeNote({ id: "n3", pitchMidi: 48, bar: 1, beat: 1 }),
     ];
-    expect(() => {
-      React.createElement(ScoreRenderer, {
-        notes,
-        layout: defaultLayout,
-      });
-    }).not.toThrow();
-  });
-
-  it("renders correct number of staves from layout config", () => {
-    const singleStaffLayout: ScoreRendererLayout = {
-      staffConfig: [{ clef: "treble", name: "Piano", bars: 4 }],
-    };
-    expect(() => {
-      React.createElement(ScoreRenderer, {
-        notes: [],
-        layout: singleStaffLayout,
-      });
-    }).not.toThrow();
-  });
-
-  it("handles scale prop", () => {
-    expect(() => {
-      React.createElement(ScoreRenderer, {
-        notes: [],
-        layout: defaultLayout,
-        scale: 0.5,
-      });
-    }).not.toThrow();
-  });
-
-  it("handles scale at 2.0", () => {
-    expect(() => {
-      React.createElement(ScoreRenderer, {
-        notes: [],
-        layout: defaultLayout,
-        scale: 2.0,
-      });
-    }).not.toThrow();
-  });
-
-  it("handles tempoMap prop", () => {
-    const tempoMap = new TempoMap(
-      [{ bar: 1, bpm: 140 }],
-      [{ bar: 1, numerator: 3, denominator: 4 }],
+    const h = mount(
+      <ScoreRenderer
+        notes={notes}
+        layout={twoStaffLayout}
+        onBarAnchorsChange={(a) => calls.push(a)}
+      />
     );
-    expect(() => {
-      React.createElement(ScoreRenderer, {
-        notes: [],
-        layout: defaultLayout,
-        tempoMap,
-      });
-    }).not.toThrow();
+    await waitForSvg(h.container);
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(1), {
+      timeout: 5000,
+    });
+
+    const anchors = calls[calls.length - 1];
+    // 4 小节（bars=4 且 max(…, 4) = 4）。
+    expect(anchors).toHaveLength(4);
+    for (let k = 0; k < anchors.length; k++) {
+      expect(anchors[k].bar).toBe(k + 1);
+      expect(anchors[k].x1).toBeGreaterThan(anchors[k].x0);
+      if (k > 0) {
+        // 全序：x0 严格递增（数量断言对塌缩/乱序视而不见，故必须断言全序）。
+        expect(anchors[k].x0).toBeGreaterThan(anchors[k - 1].x0);
+      }
+    }
+    h.cleanup();
+  });
+
+  it("T58c: 谱表数真实生效 → 1 vs 2 谱表的覆盖层基准高之差 == 一个谱表节距 (critical)", async () => {
+    const h1 = mount(<ScoreRenderer notes={[]} layout={oneStaffLayout} />);
+    const h2 = mount(<ScoreRenderer notes={[]} layout={twoStaffLayout} />);
+    await waitForSvg(h1.container);
+    await waitForSvg(h2.container);
+
+    const stack1 = stackHeight(h1.container);
+    const stack2 = stackHeight(h2.container);
+    expect(stack1).toBeGreaterThan(0);
+    // 差 = 1 × 谱表节距；尾部留白被差值消掉 → 无夹具基数。
+    expect(stack2 - stack1).toBe(PER_STAVE_PITCH);
+    // 负控式核对：若谱表数被忽略，两者会相等（即差值 0）→ 上面断言必红。
+    expect(stack2).not.toBe(stack1);
+
+    h1.cleanup();
+    h2.cleanup();
+  });
+
+  it("T58d: scale 真实生效——画布 transform === scale(0.5)，且 scale=2 基准高 == 2 × scale=1 (critical)", async () => {
+    const h05 = mount(<ScoreRenderer notes={[]} layout={twoStaffLayout} scale={0.5} />);
+    await waitForSvg(h05.container);
+    // 画布容器 = 基准层的第一个子 div（结构定位，不依赖 CSS module 的类名形态）。
+    const canvas = h05.container.querySelector<HTMLElement>(
+      '[data-testid="score-renderer-stack"] > div'
+    );
+    expect(canvas).not.toBeNull();
+    expect(canvas!.style.transform).toBe("scale(0.5)");
+    h05.cleanup();
+
+    // D34-5 的「scale ≠ 1 高度断言」：基准高必须随 scale 线性变化（比值断言，无夹具）。
+    const h1 = mount(<ScoreRenderer notes={[]} layout={twoStaffLayout} scale={1} />);
+    const h2 = mount(<ScoreRenderer notes={[]} layout={twoStaffLayout} scale={2} />);
+    await waitForSvg(h1.container);
+    await waitForSvg(h2.container);
+    const base = stackHeight(h1.container);
+    const doubled = stackHeight(h2.container);
+    expect(base).toBeGreaterThan(0);
+    expect(doubled).toBe(base * 2);
+    h1.cleanup();
+    h2.cleanup();
+  });
+
+  it("T58e: 覆盖层高度去启发式——基准层显式设高，覆盖层自身不再内联 height (critical)", async () => {
+    const h = mount(
+      <ScoreRenderer
+        notes={[]}
+        layout={twoStaffLayout}
+        playheadPosition={{ bar: 1, beat: 2 }}
+      />
+    );
+    await waitForSvg(h.container);
+
+    // 基准层：解析式高度（totalHeight × scale，scale=1）。
+    const stack = h.container.querySelector<HTMLElement>(
+      '[data-testid="score-renderer-stack"]'
+    );
+    expect(stack).not.toBeNull();
+    expect(stack!.style.height).toBe(`${stackHeight(h.container)}px`);
+
+    // 覆盖层：必须已渲染，且**不得**再带内联 height（旧写法的
+    // `scale===1 ? '100%' : `${scale*100}%`` 死分支已删；高度改由 CSS
+    // `.layer { top:0; bottom:0 }` 撑满基准层）。
+    await vi.waitFor(
+      () => expect(h.container.querySelector('[data-testid="score-playhead-layer"]')).not.toBeNull(),
+      { timeout: 5000 }
+    );
+    const layer = h.container.querySelector<HTMLElement>(
+      '[data-testid="score-playhead-layer"]'
+    );
+    expect(layer!.style.height).toBe("");
+
+    h.cleanup();
+  });
+
+  it("T58f: tempoMap 真实生效（米制敏感）→ 3/4 下播放头 left 按 beatsPerBar = 3 插值 (critical)", async () => {
+    const captured: BarAnchor[][] = [];
+    const h = mount(
+      <ScoreRenderer
+        notes={[]}
+        layout={twoStaffLayout}
+        tempoMap={new TempoMap([], [{ bar: 1, numerator: 3, denominator: 4 }])}
+        playheadPosition={{ bar: 1, beat: 2 }}
+        onBarAnchorsChange={(a) => captured.push(a)}
+      />
+    );
+    await waitForSvg(h.container);
+    await vi.waitFor(() => expect(captured.length).toBeGreaterThanOrEqual(1), {
+      timeout: 5000,
+    });
+    await vi.waitFor(
+      () => expect(h.container.querySelector('[data-testid="score-playhead"]')).not.toBeNull(),
+      { timeout: 5000 }
+    );
+
+    const a1 = captured[captured.length - 1][0];
+    expect(a1.bar).toBe(1);
+    const left = Number.parseFloat(
+      h.container.querySelector<HTMLElement>('[data-testid="score-playhead"]')!.style.left
+    );
+
+    // 3/4 → beatsPerBarAt = 3 × 4 / 4 = 3 → fraction = (2 − 1) / 3。
+    const expected34 = a1.x0 + ((2 - 1) / 3) * (a1.x1 - a1.x0);
+    expect(Math.abs(left - expected34)).toBeLessThan(1e-6);
+
+    // 判别性：4/4 的插值点（fraction = 1/4）必须与 3/4 不同 → 证明用的是真实拍号，
+    // 而非「恒 4」的回落值。
+    const expected44 = a1.x0 + ((2 - 1) / 4) * (a1.x1 - a1.x0);
+    expect(Math.abs(expected34 - expected44)).toBeGreaterThan(1e-6);
+    expect(Math.abs(left - expected44)).toBeGreaterThan(1e-6);
+
+    h.cleanup();
   });
 
   it("is a function component", () => {
