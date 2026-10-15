@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { PresetCard } from "./PresetCard";
 import { PresetEditor } from "./PresetEditor";
+import { Icon } from "../Icon/Icon";
 import styles from "./PresetBrowser.module.css";
 
 export interface PresetInfo {
@@ -292,7 +293,9 @@ export const PresetBrowser: React.FC<PresetBrowserProps> = ({
       <div className={styles.presetList}>
         {filteredPresets.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>&#9835;</div>
+            <div className={styles.emptyIcon}>
+              <Icon name="note" size={26} strokeWidth={1.4} aria-hidden />
+            </div>
             <div className={styles.emptyText}>
               {hasActiveFilters ? "没有匹配的预设" : "暂无预设"}
             </div>

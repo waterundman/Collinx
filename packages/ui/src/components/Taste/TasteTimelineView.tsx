@@ -314,7 +314,7 @@ export const TasteTimelineView: React.FC<TasteTimelineViewProps> = ({
         }}
       >
         <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--accent-cyan)" }}>版本时间线</span>
-        <span style={{ fontSize: "11px", color: "var(--text-disabled)" }}>
+        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
           共 {store.getVersionHistory().length} 个版本
         </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>

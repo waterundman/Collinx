@@ -30,6 +30,25 @@
   display: block;
 }
 
+/* ============================================================
+   v2.5.0：乐谱墨色跟随主题
+   VexFlow 把音乐字形的 fill/stroke 写死为黑色，暗色主题下整份谱面
+   不可见（黑 on #0a0a0a ≈ 1.05:1）。乐谱本身是单色印刷品，这里统一
+   覆盖为 --score-ink，两个主题下都成立。部分元素带内联 style，
+   故用 !important 保证覆盖。
+   ============================================================ */
+.rendererCanvas :global(svg) path,
+.rendererCanvas :global(svg) rect,
+.rendererCanvas :global(svg) line,
+.rendererCanvas :global(svg) polyline,
+.rendererCanvas :global(svg) polygon,
+.rendererCanvas :global(svg) circle,
+.rendererCanvas :global(svg) ellipse,
+.rendererCanvas :global(svg) text {
+  fill: var(--score-ink) !important;
+  stroke: var(--score-ink) !important;
+}
+
 .errorPlaceholder {
   display: flex;
   align-items: center;

@@ -36,7 +36,7 @@
 
 .toolbarButtonActive {
   background: var(--accent-purple);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   border-color: var(--accent-purple);
 }
 
@@ -86,7 +86,7 @@
   padding-right: 3px;
   padding-bottom: 1px;
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--piano-key-label);
 }
 
 .whiteKey.playing {

@@ -97,6 +97,8 @@ export interface ProjectStoreState {
   notes: NoteEvent[];
   pendingDiffs: DiffEnvelope[];
   appliedDiffs: DiffEnvelope[];
+  /** v2.5.0：被用户拒绝的提案（留痕，供 Agent 面板显示"已拒绝"计数） */
+  rejectedDiffs: DiffEnvelope[];
   rollbackTokens: string[];
   mixer: MixerState;
   mixerDiffLog: DiffEnvelope[];
@@ -955,6 +957,7 @@ export function createInitialState(
     notes: deriveNotes(graph),
     pendingDiffs: params.pendingDiffs ?? [],
     appliedDiffs: params.appliedDiffs ?? [],
+    rejectedDiffs: [],
     rollbackTokens: [],
     mixer: params.mixer ?? createDemoMixer(),
     mixerDiffLog: [],
@@ -1172,6 +1175,12 @@ export function createProjectReducer(
   ): ProjectStoreState {
     switch (action.type) {
       case "APPLY_DIFF": {
+        // v2.5.0：幂等守卫。同一 diffId 已在 appliedDiffs 中说明它已被应用过 ——
+        // 重复派发（用户连点"应用"、或"全部应用"里含已应用项）必须被忽略，
+        // 否则会重复记录（已应用计数 +2）并产生重复的 React key。
+        if (state.appliedDiffs.some((d) => d.diffId === action.diff.diffId)) {
+          return state;
+        }
         // Mixer diffs (ops in the synthetic /tracks/<id> namespace with
         // MixerChange payloads) apply to the mixer state, not the
         // ProjectGraph. Route them through diffToMixer so the graph diff
@@ -1203,7 +1212,13 @@ export function createProjectReducer(
           );
         }
 
-        const result = diffEngine.apply(action.diff, state.graph);
+        // v2.5.0：应用时把 baseRevision 对齐到"当前"图 revision。否则连续应用
+        // 多条提案（或"全部应用"）时，第一条之后 revision 已改变，后续提案会被
+        // DiffEngine 的 baseRevision 校验直接拒绝（用户看到"只有第一条能应用"）。
+        const result = diffEngine.apply(
+          { ...action.diff, baseRevision: state.graph.getRevisionId() },
+          state.graph,
+        );
         // Stage 2: materialize the Agent decision as an evidence node so the
         // Knowledge Graph can show why this diff was proposed. Non-agent diffs
         // (user/system) are still applied but leave no trace node.
@@ -1228,12 +1243,17 @@ export function createProjectReducer(
           pendingDiffs: [...state.pendingDiffs, ...action.diffs],
         };
 
-      case "REJECT_DIFF":
+      case "REJECT_DIFF": {
+        // v2.5.0：拒绝的提案单独留痕。此前它只是从 pendingDiffs 里消失，
+        // 导致 Agent 面板的"已拒绝"计数恒为 0（loop-tester 报告）。
+        const rejected = state.pendingDiffs.filter((d) => d.diffId === action.diffId);
         return withUndo(state, {
           pendingDiffs: state.pendingDiffs.filter(
             (d) => d.diffId !== action.diffId
           ),
+          rejectedDiffs: [...state.rejectedDiffs, ...rejected],
         });
+      }
 
       case "RECORD_DECISION_EVIDENCE": {
         // Explicit trace: record an applied (or arbitrary) diff as an
@@ -1252,6 +1272,10 @@ export function createProjectReducer(
         if (mixerSnapshot) {
           const snapshots = { ...state.mixerRollbackSnapshots };
           delete snapshots[action.rollbackToken];
+          // v2.5.0：与 graph 分支一致 —— 回滚的混音提案放回待审批队列
+          const rolledBackMixer = state.appliedDiffs.find(
+            (d) => d.rollbackToken === action.rollbackToken
+          );
           return {
             ...state,
             mixer: mixerSnapshot,
@@ -1262,6 +1286,9 @@ export function createProjectReducer(
             mixerDiffLog: state.mixerDiffLog.filter(
               (d) => d.rollbackToken !== action.rollbackToken
             ),
+            pendingDiffs: rolledBackMixer
+              ? [...state.pendingDiffs, rolledBackMixer]
+              : state.pendingDiffs,
           };
         }
 
@@ -1272,6 +1299,11 @@ export function createProjectReducer(
           // Unknown/expired token: keep the current graph untouched.
           return state;
         }
+        // v2.5.0：回滚后把该提案放回待审批队列。此前它既不在 appliedDiffs
+        // 也不在 pendingDiffs 里 —— 用户回滚后无法再应用它（loop-tester 报）。
+        const rolledBack = state.appliedDiffs.find(
+          (d) => d.rollbackToken === action.rollbackToken
+        );
         return {
           ...state,
           graph,
@@ -1287,6 +1319,9 @@ export function createProjectReducer(
           rollbackTokens: state.rollbackTokens.filter(
             (t) => t !== action.rollbackToken
           ),
+          pendingDiffs: rolledBack
+            ? [...state.pendingDiffs, rolledBack]
+            : state.pendingDiffs,
         };
       }
 

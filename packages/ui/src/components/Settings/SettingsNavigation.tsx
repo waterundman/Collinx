@@ -70,14 +70,17 @@ const NavigationIcons: Record<SettingsCategory, React.ReactNode> = {
 };
 
 /** 导航分类配置 */
+/* v2.5.0：labelKey 必须指向**叶子**键。原先写的是分类对象名
+   （settings.general 等），i18next 在 returnObjects:false 下会直接回显
+   key 字面量 —— 侧栏显示成 "settings.general"，一眼就是未完成品。 */
 const NAVIGATION_ITEMS: NavigationItem[] = [
-  { key: 'general', labelKey: 'settings.general', icon: NavigationIcons.general },
-  { key: 'audio', labelKey: 'settings.audio', icon: NavigationIcons.audio },
-  { key: 'midi', labelKey: 'settings.midi', icon: NavigationIcons.midi },
-  { key: 'mixer', labelKey: 'settings.mixing', icon: NavigationIcons.mixer },
-  { key: 'score', labelKey: 'settings.notation', icon: NavigationIcons.score },
-  { key: 'agent', labelKey: 'settings.agent', icon: NavigationIcons.agent },
-  { key: 'taste', labelKey: 'settings.taste', icon: NavigationIcons.taste },
+  { key: 'general', labelKey: 'settings.general.title', icon: NavigationIcons.general },
+  { key: 'audio', labelKey: 'settings.audio.title', icon: NavigationIcons.audio },
+  { key: 'midi', labelKey: 'settings.midi.title', icon: NavigationIcons.midi },
+  { key: 'mixer', labelKey: 'settings.mixing.title', icon: NavigationIcons.mixer },
+  { key: 'score', labelKey: 'settings.notation.title', icon: NavigationIcons.score },
+  { key: 'agent', labelKey: 'settings.agent.title', icon: NavigationIcons.agent },
+  { key: 'taste', labelKey: 'settings.taste.title', icon: NavigationIcons.taste },
 ];
 
 export interface SettingsNavigationProps {

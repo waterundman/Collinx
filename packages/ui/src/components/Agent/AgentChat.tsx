@@ -10,6 +10,9 @@ import {
   runAgentLoop,
 } from "../../services/llm";
 import type { LlmErrorKind, LlmMessage } from "../../services/llm";
+import { Icon } from "../Icon/Icon";
+import { renderMarkdown } from "./markdown";
+import { loadChatSession, saveChatSession } from "./chatSession";
 import styles from "./AgentChat.module.css";
 
 export interface ChatMessage {
@@ -28,6 +31,11 @@ export interface AgentChatProps {
   agentName?: string;
   /** 未配置模型时"去设置"按钮的回调 */
   onOpenSettings?: () => void;
+  /**
+   * v2.5.0：会话持久化键。传入后，对话在标签页切换与页面刷新后都会保留
+   * （App 传入；测试不传，避免用例间互相污染）。
+   */
+  persistKey?: string;
 }
 
 /** 快捷提示词（空状态展示，点击直接发送） */
@@ -59,11 +67,21 @@ function toLlmHistory(messages: ChatMessage[]): LlmMessage[] {
   return out;
 }
 
-export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings }: AgentChatProps) {
+export function AgentChat({
+  initialMessages,
+  agentName = "Agent",
+  onOpenSettings,
+  persistKey,
+}: AgentChatProps) {
   const { t } = useI18n();
-  const { actions } = useProjectStore();
+  const { actions, pendingDiffs } = useProjectStore();
   const { settings } = useSettings();
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
+  // v2.5.0：对话内进度反馈（思考 / 执行工具），取代此前无信息的三个点
+  const [activeTool, setActiveTool] = useState<string | null>(null);
+  // v2.5.0：对话历史从会话缓存恢复 —— 此前切标签页会静默清空整段对话
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    () => initialMessages ?? (persistKey ? loadChatSession(persistKey) : []),
+  );
   const [isTyping, setIsTyping] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [inputValue, setInputValue] = useState("");
@@ -81,6 +99,11 @@ export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping, streamingText, scrollToBottom]);
+
+  // v2.5.0：对话变更写回会话缓存（切换标签页/刷新后不丢）
+  useEffect(() => {
+    if (persistKey) saveChatSession(persistKey, messages);
+  }, [persistKey, messages]);
 
   useEffect(() => {
     return () => {
@@ -150,6 +173,8 @@ export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings
             list: () => actions.listAgentTools(),
             execute: (name, args) => actions.runAgentTool(name, args),
           },
+          // 让用户在等待期间看到"正在执行哪个工具"，而不是三个无信息的点
+          onToolCall: (inv) => setActiveTool(inv.name),
         });
 
         const proposalCount = result.toolInvocations.reduce(
@@ -210,6 +235,7 @@ export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings
         abortRef.current = null;
         setIsTyping(false);
         setStreamingText("");
+        setActiveTool(null);
       }
     },
     [actions, agentName, configured, isTyping, llm, messages, pushMessage, t]
@@ -245,7 +271,9 @@ export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings
     <div className={styles.chatContainer} data-testid="agent-chat">
       <div className={styles.chatHeader}>
         <div className={styles.headerInfo}>
-          <span className={styles.agentAvatar}>🤖</span>
+          <span className={styles.agentBadge}>
+            <Icon name="spark" size={15} strokeWidth={1.6} aria-hidden />
+          </span>
           <div className={styles.headerText}>
             <span className={styles.agentName}>{agentName}</span>
             <span className={styles.status} data-testid="agent-chat-status">
@@ -268,7 +296,9 @@ export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings
       <div className={styles.messagesContainer} data-testid="agent-chat-messages">
         {messages.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>💬</div>
+            <div className={styles.emptyIcon}>
+              <Icon name="chat" size={26} strokeWidth={1.4} aria-hidden />
+            </div>
             <div className={styles.emptyText}>
               {t("agentChat.startConversation", { name: agentName })}
             </div>
@@ -310,7 +340,9 @@ export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings
               className={`${styles.message} ${styles[msg.role]}${msg.isError ? ` ${styles.error}` : ""}`}
             >
               {msg.role === "agent" && (
-                <div className={styles.messageAvatar}>🤖</div>
+                <div className={styles.messageAvatar}>
+                  <Icon name="spark" size={14} strokeWidth={1.8} aria-hidden />
+                </div>
               )}
               <div className={styles.messageContent}>
                 {msg.role === "agent" && (
@@ -319,36 +351,46 @@ export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings
                   </div>
                 )}
                 <div className={styles.messageBubble}>
-                  <div className={styles.messageText}>{msg.content}</div>
+                  <div className={styles.messageText}>{renderMarkdown(msg.content)}</div>
                   <div className={styles.messageTime}>
                     {formatTime(msg.timestamp)}
                   </div>
                 </div>
               </div>
               {msg.role === "user" && (
-                <div className={styles.messageAvatar}>👤</div>
+                <div className={styles.messageAvatar}>
+                  <Icon name="user" size={14} strokeWidth={1.8} aria-hidden />
+                </div>
               )}
             </div>
           ))
         )}
         {isTyping && (
           <div className={`${styles.message} ${styles.agent}`}>
-            <div className={styles.messageAvatar}>🤖</div>
+            <div className={styles.messageAvatar}>
+              <Icon name="spark" size={14} strokeWidth={1.8} aria-hidden />
+            </div>
             <div className={styles.messageContent}>
               <div className={styles.messageBubble}>
                 {streamingText ? (
                   <div className={styles.messageText} data-testid="agent-chat-streaming">
-                    {streamingText}
+                    {renderMarkdown(streamingText)}
                   </div>
                 ) : (
-                  <>
-                    <div className={styles.typingIndicator}>
-                      <span></span>
-                      <span></span>
-                      <span></span>
-                    </div>
-                    <div className={styles.messageTime}>{t("agentChat.thinking")}</div>
-                  </>
+                  <div className={styles.progress} data-testid="agent-chat-progress">
+                    <Icon
+                      name="wave"
+                      size={14}
+                      strokeWidth={1.6}
+                      className={styles.progressIcon}
+                      aria-hidden
+                    />
+                    <span className={styles.progressText}>
+                      {activeTool
+                        ? t("agentChat.toolRunning", { tool: activeTool })
+                        : t("agentChat.thinking")}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -356,6 +398,31 @@ export function AgentChat({ initialMessages, agentName = "Agent", onOpenSettings
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* v2.5.0：AI 的产出在对话内可见可操作 —— 不必切到 Agent 面板才知道
+          AI 生成了什么、也不用跳转才能审批。 */}
+      {pendingDiffs.length > 0 && (
+        <div className={styles.proposalBar} data-testid="agent-chat-proposals">
+          <span className={styles.proposalIcon}>
+            <Icon name="layers" size={14} strokeWidth={1.6} aria-hidden />
+          </span>
+          <span className={styles.proposalText}>
+            {t("agentChat.pendingProposals", { count: pendingDiffs.length })}
+          </span>
+          <button
+            type="button"
+            className={styles.proposalAction}
+            data-testid="agent-chat-apply-all"
+            onClick={() => {
+              for (const diff of pendingDiffs) {
+                actions.applyDiff(diff);
+              }
+            }}
+          >
+            {t("agentChat.applyAll")}
+          </button>
+        </div>
+      )}
 
       <form className={styles.inputContainer} data-testid="agent-chat-form" onSubmit={handleSubmit}>
         <textarea

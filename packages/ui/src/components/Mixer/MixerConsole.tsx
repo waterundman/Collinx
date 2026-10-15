@@ -9,6 +9,7 @@ import {
   createFXSlot,
 } from "@collinx/core";
 import { useI18n } from "../../i18n";
+import { Icon } from "../Icon/Icon";
 import styles from "./MixerConsole.module.css";
 
 interface MixerConsoleProps {
@@ -563,7 +564,9 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
       <div className={styles.stripsContainer} data-testid="mixer-strips" ref={containerRef}>
         {allTracks.length === 0 ? (
           <div className={styles.emptyState}>
-            <span className={styles.emptyIcon}>🎛</span>
+            <span className={styles.emptyIcon}>
+              <Icon name="sliders" size={28} strokeWidth={1.4} aria-hidden />
+            </span>
             <span>{t('mixer.noTracks')}</span>
             <button
               className={styles.addTrackBtn}

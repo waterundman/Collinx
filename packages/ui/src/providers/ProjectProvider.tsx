@@ -507,7 +507,15 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
   const actions = useMemo(
     () => ({
       applyDiff: (diff: DiffEnvelope): string => {
-        dispatch({ type: "APPLY_DIFF", diff } satisfies ProjectStoreAction);
+        // v2.5.0：应用前再次把 baseRevision 对齐到"当前"图 revision。
+        // 只做入队时对齐是不够的 —— 连续应用多条提案时，第一条应用后图
+        // revision 已改变，第二条会因 baseRevision 失配被 DiffEngine 拒绝
+        // （用户看到"第一条能应用、后面都点不动"）。
+        const aligned: DiffEnvelope = {
+          ...diff,
+          baseRevision: stateRef.current.graph.getRevisionId(),
+        };
+        dispatch({ type: "APPLY_DIFF", diff: aligned } satisfies ProjectStoreAction);
         return diff.rollbackToken;
       },
       rejectDiff: (diffId: string): void => {
@@ -1151,6 +1159,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       notes: state.notes,
       pendingDiffs: state.pendingDiffs,
       appliedDiffs: state.appliedDiffs,
+      rejectedDiffs: state.rejectedDiffs,
       rollbackTokens: state.rollbackTokens,
       mixer: state.mixer,
       mixerDiffLog: state.mixerDiffLog,

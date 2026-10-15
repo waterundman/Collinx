@@ -15,14 +15,17 @@
 
 .pill:hover {
   color: var(--ink);
-  border-color: rgba(255, 255, 255, 0.25);
+  /* v2.5.0：原为硬编码 rgba(255,255,255,.25)，浅色主题下几乎不可见 */
+  border-color: var(--border-secondary);
   background: var(--canvas-soft);
 }
 
+/* v2.5.0：选中态从「黑白反色药丸」改为品牌强调色 —— 与图标/色条体系一致，
+   且两主题下都保持足够对比度（dark 亮青 / light 深青）。 */
 .pillActive,
 .pillActive:hover {
-  background: var(--ink);
-  color: var(--canvas);
-  border-color: var(--ink);
-  font-weight: 500;
+  background: color-mix(in srgb, var(--accent-cyan) 14%, transparent);
+  color: var(--accent-cyan);
+  border-color: color-mix(in srgb, var(--accent-cyan) 55%, transparent);
+  font-weight: 600;
 }

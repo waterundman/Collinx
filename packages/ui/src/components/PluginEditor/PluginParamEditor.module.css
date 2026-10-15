@@ -75,7 +75,7 @@
 
 .tabActive {
   background: var(--accent-cyan);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
 }
 
 .content {
@@ -228,7 +228,7 @@
 .automationAddBtn {
   background: var(--accent-cyan);
   border: none;
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   font-size: 11px;
   font-weight: 600;
   padding: var(--space-2) var(--space-3);
@@ -310,7 +310,7 @@
   background: var(--accent-red);
   border: none;
   border-radius: var(--radius-full);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   font-size: 10px;
   cursor: pointer;
   display: none;
@@ -359,7 +359,7 @@
 .mappingAddBtn {
   background: var(--accent-cyan);
   border: none;
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   font-size: 11px;
   font-weight: 600;
   padding: var(--space-2) var(--space-3);
@@ -428,7 +428,7 @@
 
 .mappingDelete:hover {
   background: var(--accent-red);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
 }
 
 .mappingConfig {
@@ -487,7 +487,7 @@
 .presetSaveBtn {
   background: var(--accent-cyan);
   border: none;
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   font-size: 11px;
   font-weight: 600;
   padding: var(--space-2) var(--space-3);
@@ -566,5 +566,5 @@
 
 .presetDeleteBtn:hover {
   background: var(--accent-red);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
 }

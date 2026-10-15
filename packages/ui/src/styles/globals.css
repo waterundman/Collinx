@@ -58,12 +58,14 @@ button:disabled {
 }
 
 a {
-  color: var(--accent-breeze);
+  /* v2.5.0：原为 --accent-breeze(#a0c3ec)，浅色主题下对白底仅 1.9:1，
+     链接几乎读不出来。改用可按主题切换的强调色。 */
+  color: var(--accent-primary);
   text-decoration: none;
 }
 
 a:hover {
-  color: var(--ink);
+  color: var(--accent-cyan-hover);
 }
 
 :focus-visible {
@@ -90,3 +92,113 @@ a:hover {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* ============================================================
+   v2.5.0：AI 回复的 Markdown 排版（类名由 renderMarkdown 产出，
+   故定义在全局作用域而非 CSS Module）
+   ============================================================ */
+.cx-md-p {
+  margin: 0 0 var(--space-2);
+  white-space: pre-wrap;
+  line-height: 1.62;
+}
+
+.cx-md-p:last-child {
+  margin-bottom: 0;
+}
+
+.cx-md-h {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--text-primary);
+}
+
+.cx-md-h:first-child {
+  margin-top: 0;
+}
+
+.cx-md-list {
+  margin: 0 0 var(--space-2);
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cx-md-list li {
+  line-height: 1.6;
+}
+
+.cx-md-code {
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-cyan);
+  background: color-mix(in srgb, var(--accent-cyan) 10%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.cx-md-pre {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-3);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-primary);
+  border-left: 2px solid var(--accent-cyan);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.cx-md-quote {
+  margin: 0 0 var(--space-2);
+  padding: 2px 0 2px var(--space-3);
+  border-left: 2px solid var(--border-secondary);
+  color: var(--text-secondary);
+}
+
+/* 表格：不做列宽对齐，只保证单元格可读、不挤成一团 */
+.cx-md-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 12.5px;
+}
+
+.cx-md-cell {
+  min-width: 84px;
+}
+
+.cx-md-cell:first-child {
+  color: var(--text-muted);
+}
+
+/* 消息内的行内元素跟随正文色，避免强调色过载 */
+.cx-md-p strong,
+.cx-md-list strong,
+.cx-md-row strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+/* ============================================================
+   v2.5.0：原生控件跟随主题
+   此前未声明 color-scheme，暗色主题下 <select>/<input>/<checkbox> 与滚动条
+   仍由浏览器按浅色渲染（白底），与浅色文字组成 ~2:1 的不可读组合
+   （设置页的"风格 / 可演奏性 / 导出格式"等下拉尤其明显）。
+   ============================================================ */
+:root {
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+

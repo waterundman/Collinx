@@ -343,7 +343,7 @@
   margin-top: var(--space-5);
   padding: var(--space-2) var(--space-8);
   background: var(--accent-purple);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   border: none;
   border-radius: var(--radius-lg);
   font-size: 14px;

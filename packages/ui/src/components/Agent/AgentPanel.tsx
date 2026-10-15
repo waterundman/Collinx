@@ -1,12 +1,15 @@
 import React from "react";
 import type { DiffEnvelope } from "@collinx/core";
 import { useI18n } from "../../i18n";
+import { Icon } from "../Icon/Icon";
 import { DiffCard } from "./DiffCard";
 import styles from "./AgentPanel.module.css";
 
 export interface AgentPanelProps {
   pendingDiffs: DiffEnvelope[];
   historyDiffs: DiffEnvelope[];
+  /** v2.5.0：被拒绝的提案（留痕计数；此前"已拒绝"恒显示 0） */
+  rejectedDiffs?: DiffEnvelope[];
   onApply: (diffId: string) => void;
   onReject: (diffId: string) => void;
   onRollback: (rollbackToken: string) => void;
@@ -20,6 +23,7 @@ interface HistoryEntry {
 export function AgentPanel({
   pendingDiffs,
   historyDiffs,
+  rejectedDiffs,
   onApply,
   onReject,
   onRollback,
@@ -34,7 +38,8 @@ export function AgentPanel({
   }));
 
   const appliedCount = historyEntries.filter((e) => e.status === "applied").length;
-  const rejectedCount = historyEntries.filter((e) => e.status === "rejected").length;
+  // v2.5.0：拒绝计数来自 store 的 rejectedDiffs 留痕（此前恒为 0）
+  const rejectedCount = (rejectedDiffs ?? []).length;
 
   return (
     <div className={styles.panel} data-testid="agent-panel">
@@ -52,7 +57,10 @@ export function AgentPanel({
             {t('agentPanel.pendingReview')} ({pendingDiffs.length})
           </div>
           {pendingDiffs.length === 0 ? (
-            <div className={styles.emptyState}>{t('agentPanel.noPendingDiffs')}</div>
+            <div className={styles.emptyState} data-testid="agent-panel-empty-pending">
+              <Icon name="layers" size={20} strokeWidth={1.5} className={styles.emptyIcon} aria-hidden />
+              <span>{t('agentPanel.noPendingDiffs')}</span>
+            </div>
           ) : (
             <div className={styles.cardList}>
               {pendingDiffs.map((diff) => (
@@ -74,7 +82,10 @@ export function AgentPanel({
             {t('agentPanel.history')} ({historyDiffs.length})
           </div>
           {historyEntries.length === 0 ? (
-            <div className={styles.emptyState}>{t('agentPanel.noHistory')}</div>
+            <div className={styles.emptyState} data-testid="agent-panel-empty-history">
+              <Icon name="check" size={20} strokeWidth={1.5} className={styles.emptyIcon} aria-hidden />
+              <span>{t('agentPanel.noHistory')}</span>
+            </div>
           ) : (
             <div className={styles.cardList}>
               {historyEntries.map((entry) => (

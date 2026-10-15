@@ -1557,7 +1557,9 @@
     "suggestionMix": "为旋律轨建议一条效果链",
     "suggestionExplain": "解释这个和声进行为什么成立",
     "toolRunning": "正在执行 {{tool}}…",
-    "proposalsCreated": "已生成 {{count}} 条待审批提案 — 请在 Agent 面板审批"
+    "proposalsCreated": "已生成 {{count}} 条待审批提案 — 请在 Agent 面板审批",
+    "pendingProposals": "{{count}} 条提案待审批",
+    "applyAll": "全部应用"
   },
   "agentPanel": {
     "title": "Agent 面板",
@@ -1642,7 +1644,7 @@
       "genomeVersion": "Genome v{{version}}",
       "activePlan": "活跃方案",
       "pendingActivation": "待激活",
-      "pending": "{{count}} pending",
+      "pending": "{{count}} 条待审",
       "nodes": "{{count}} nodes"
     },
     "arrange": {

@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import type { DiffEnvelope } from "@collinx/core";
 import { useI18n } from "../../i18n";
+import { Icon } from "../Icon/Icon";
 import styles from "./TeachingPanel.module.css";
 
 export type UserLevel = "beginner" | "intermediate" | "advanced" | "professional";
@@ -111,7 +112,9 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({
       <div className={styles.body}>
         {!activeDiff ? (
           <div className={styles.emptyState} data-testid="teaching-empty">
-            <div className={styles.emptyIcon}>&#9835;</div>
+            <div className={styles.emptyIcon}>
+              <Icon name="spark" size={26} strokeWidth={1.4} aria-hidden />
+            </div>
             <div className={styles.emptyText}>
               暂无活跃的编曲方案<br />
               应用编排、编曲或混音方案后，<br />
@@ -268,7 +271,9 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({
           </>
         ) : (
           <div className={styles.emptyState} data-testid="teaching-no-explanation">
-            <div className={styles.emptyIcon}>&#9835;</div>
+            <div className={styles.emptyIcon}>
+              <Icon name="spark" size={26} strokeWidth={1.4} aria-hidden />
+            </div>
             <div className={styles.emptyText}>
               尚未生成解释<br />
               等待教学系统返回当前方案的解释内容

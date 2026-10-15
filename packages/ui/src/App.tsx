@@ -157,6 +157,7 @@ export function App() {
     graph,
     pendingDiffs,
     appliedDiffs,
+    rejectedDiffs,
     mixer,
     tempoChanges,
     meterChanges,
@@ -1323,13 +1324,18 @@ export function App() {
       {activeTab === "agent" && (
         <div className={styles.agentLayout} data-testid="agent-layout">
           <div className={styles.agentChatContainer}>
-            <AgentChat agentName="HarmonyBot" onOpenSettings={() => setSettingsOpen(true)} />
+            <AgentChat
+              agentName="HarmonyBot"
+              persistKey="harmonybot"
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
           </div>
           <div className={styles.agentPanelContainer}>
             <div className={styles.agentPanelSection}>
               <AgentPanel
                 pendingDiffs={pendingDiffs}
                 historyDiffs={appliedDiffs}
+                rejectedDiffs={rejectedDiffs}
                 onApply={handleAgentApply}
                 onReject={handleAgentReject}
                 onRollback={handleAgentRollback}

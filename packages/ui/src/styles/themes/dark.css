@@ -10,8 +10,10 @@
 
   /* ---- Text ---- */
   --text-primary: #e8e8ec;
-  --text-secondary: #a0a0a8;
-  --text-muted: #66666e;
+  --text-secondary: #b4b4bc;
+  --text-muted: #8a8a96;
+  --text-disabled: #6a6a76;
+  --text-on-accent: #06121a;
 
   /* ---- Border ---- */
   --border-primary: #2a2a36;
@@ -24,6 +26,8 @@
   --accent-green: #22c55e;
   --accent-yellow: #f59e0b;
   --accent-cyan: #00d4ff;
+  --accent-sunset: #ff7a17;
+  --accent-sunset-ink: #ff7a17;
 
   /* ---- Component ---- */
   --button-bg: #2a2a36;

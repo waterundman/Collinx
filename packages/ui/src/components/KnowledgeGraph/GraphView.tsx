@@ -149,7 +149,7 @@ function runForceLayout(graph: GraphData, w: number, h: number): LayoutNode[] {
   return nodes;
 }
 
-export function GraphView({ graph, onNodeClick, width = 800, height = 600 }: GraphViewProps) {
+export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layoutRef = useRef<LayoutNode[]>([]);
   const transformRef = useRef({ panX: 0, panY: 0, zoom: 1 });
@@ -618,12 +618,28 @@ export function GraphView({ graph, onNodeClick, width = 800, height = 600 }: Gra
     [render],
   );
 
+  // v2.5.0：此前画布硬编码 800×600 显示尺寸，在 1600px 宽的窗口里
+  // 图谱只占左上角一小块（画布已按 clientWidth 绘制，但显示尺寸没跟随容器）。
+  // 改为默认铺满容器；同时补 ResizeObserver，使容器尺寸变化时重绘。
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      render();
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [render]);
+
   return (
     <canvas
       ref={canvasRef}
       className={styles.canvas}
       data-testid="graph-canvas"
-      style={{ width, height }}
+      style={{
+        width: width !== undefined ? width : "100%",
+        height: height !== undefined ? height : "100%",
+      }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}

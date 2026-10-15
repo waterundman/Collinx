@@ -93,10 +93,18 @@
 
 .emptyState {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
   flex: 1;
   padding: var(--space-8);
   color: var(--text-muted);
   font-size: 12px;
+  text-align: center;
+}
+
+/* v2.5.0：空状态加图标锚点，避免整块面板只剩一行小灰字 */
+.emptyIcon {
+  color: var(--text-disabled);
 }

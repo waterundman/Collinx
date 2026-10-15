@@ -14,6 +14,7 @@
  */
 import React from "react";
 import { useI18n } from "../../i18n";
+import { Icon } from "../Icon/Icon";
 import styles from "./TransportBar.module.css";
 
 export interface TransportBarProps {
@@ -108,7 +109,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
             title={pauseLabel}
             onClick={onPause}
           >
-            <span aria-hidden="true">❚❚</span>
+            <Icon name="pause" size={15} aria-hidden />
           </button>
         ) : (
           <button
@@ -119,7 +120,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
             title={playLabel}
             onClick={onPlay}
           >
-            <span aria-hidden="true">▶</span>
+            <Icon name="play" size={15} aria-hidden />
           </button>
         )}
         <button
@@ -130,7 +131,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
           title={stopLabel}
           onClick={onStop}
         >
-          <span aria-hidden="true">■</span>
+          <Icon name="stop" size={15} aria-hidden />
         </button>
       </div>
 
@@ -171,7 +172,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
           aria-pressed={isRecording}
           onClick={onToggleRecord}
         >
-          <span aria-hidden="true">{isRecording ? "●" : "○"}</span>
+          <Icon name="record" size={13} aria-hidden />
         </button>
       ) : null}
 
@@ -239,7 +240,7 @@ export const TransportBar: React.FC<TransportBarProps> = ({
           aria-pressed={!!loop?.enabled}
           onClick={onLoopToggle}
         >
-          <span aria-hidden="true">{loop?.enabled ? "⟳" : "⟲"}</span>
+          <Icon name="loop" size={14} aria-hidden />
         </button>
       ) : null}
     </div>

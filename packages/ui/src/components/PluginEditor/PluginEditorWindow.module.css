@@ -81,7 +81,7 @@
 
 .closeButton:hover {
   background: var(--accent-red);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
 }
 
 /* Tabs */
@@ -559,5 +559,5 @@
 
 .minimizedClose:hover {
   background: var(--accent-red);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
 }

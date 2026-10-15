@@ -26,7 +26,7 @@
 .addRouteBtn {
   background: var(--accent-cyan);
   border: none;
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   font-size: 11px;
   font-weight: 600;
   padding: var(--space-2) var(--space-3);
@@ -226,7 +226,7 @@
 
 .routeDelete:hover {
   background: var(--accent-red);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
 }
 
 .routeConfig {
@@ -303,7 +303,7 @@
 .routeBipolarActive {
   background: var(--accent-cyan);
   border-color: var(--accent-cyan);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
 }
 
 /* Destinations Panel */

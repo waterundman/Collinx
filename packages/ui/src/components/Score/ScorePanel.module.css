@@ -56,7 +56,7 @@
 
 .toolbarBtnActive {
   background: var(--accent-cyan) !important;
-  color: var(--text-primary) !important;
+  color: var(--text-on-accent) !important;
   border-color: var(--accent-cyan) !important;
 }
 
@@ -144,7 +144,10 @@
 }
 
 .staffClef {
-  font-family: serif;
+  /* v2.5.0：谱号是 SMuFL 音乐符号（U+1D11E / U+1D122），必须由音乐字体渲染。
+     此前写 font-family: serif → 各平台回落到不同的衬线体，字形与基线不可控
+     （taste-critic 实测该元素落到 serif）。 */
+  font-family: 'Bravura', 'Noto Music', serif;
   font-size: 18px;
   color: var(--text-primary);
   width: var(--space-6);

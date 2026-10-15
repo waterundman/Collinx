@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { TasteGenome, TasteDomain, TASTE_DOMAINS, TasteParameter } from "@collinx/core";
+import { Icon } from "../Icon/Icon";
+import type { IconName } from "../Icon/Icon";
 import styles from "./TastePanel.module.css";
 
 interface TasteLibraryPanelProps {
@@ -8,15 +10,17 @@ interface TasteLibraryPanelProps {
   onDeleteEvidence?: (paramKey: string, evidenceId: string) => void;
 }
 
-const DOMAIN_META: Record<TasteDomain, { label: string; icon: string }> = {
-  [TasteDomain.Harmony]: { label: "和声", icon: "♪" },
-  [TasteDomain.Melody]: { label: "旋律", icon: "♫" },
-  [TasteDomain.Rhythm]: { label: "节奏", icon: "♩" },
-  [TasteDomain.Texture]: { label: "织体", icon: "▦" },
-  [TasteDomain.Timbre]: { label: "音色", icon: "◇" },
-  [TasteDomain.Form]: { label: "曲式", icon: "◧" },
-  [TasteDomain.Mix]: { label: "混音", icon: "◉" },
-  [TasteDomain.Reject]: { label: "排除项", icon: "⊘" },
+/* v2.5.0：域图标改用统一线性图标（原为 ♪ ♫ ♩ ▦ ◇ ◧ ◉ ⊘ 等字面字形 ——
+   跨平台字形/基线不可控，且与 Icon.tsx 的其它图标语言不一致） */
+const DOMAIN_META: Record<TasteDomain, { label: string; icon: IconName }> = {
+  [TasteDomain.Harmony]: { label: "和声", icon: "note" },
+  [TasteDomain.Melody]: { label: "旋律", icon: "wave" },
+  [TasteDomain.Rhythm]: { label: "节奏", icon: "sliders" },
+  [TasteDomain.Texture]: { label: "织体", icon: "layers" },
+  [TasteDomain.Timbre]: { label: "音色", icon: "spark" },
+  [TasteDomain.Form]: { label: "曲式", icon: "layers" },
+  [TasteDomain.Mix]: { label: "混音", icon: "sliders" },
+  [TasteDomain.Reject]: { label: "排除项", icon: "close" },
 };
 
 const PARAM_LABELS: Record<string, string> = {
@@ -107,7 +111,9 @@ export const TasteLibraryPanel: React.FC<TasteLibraryPanelProps> = ({
   if (!genome) {
     return (
       <div className={styles.emptyState}>
-        <div className={styles.emptyStateIcon}>🎵</div>
+        <div className={styles.emptyStateIcon}>
+          <Icon name="note" size={26} strokeWidth={1.4} aria-hidden />
+        </div>
         <div className={styles.emptyStateText}>
           尚无口味数据，导出你的第一首歌来开始建立口味档案
         </div>
@@ -130,7 +136,9 @@ export const TasteLibraryPanel: React.FC<TasteLibraryPanelProps> = ({
               className={`${styles.domainItem} ${activeDomain === domain ? styles.domainItemActive : ""}`}
               onClick={() => setActiveDomain(domain)}
             >
-              <span className={styles.domainIcon}>{meta.icon}</span>
+              <span className={styles.domainIcon}>
+                <Icon name={meta.icon} size={13} strokeWidth={1.7} aria-hidden />
+              </span>
               <span className={isReject ? styles.rejectTag : undefined}>
                 {meta.label}
               </span>
@@ -142,9 +150,11 @@ export const TasteLibraryPanel: React.FC<TasteLibraryPanelProps> = ({
 
       <div className={styles.paramPanel}>
         <div className={styles.paramHeader}>
-          <span className={styles.domainIcon}>{DOMAIN_META[activeDomain].icon}</span>
+          <span className={styles.domainIcon}>
+            <Icon name={DOMAIN_META[activeDomain].icon} size={14} aria-hidden />
+          </span>
           <span>{DOMAIN_META[activeDomain].label}</span>
-          <span style={{ fontSize: "11px", color: "var(--text-disabled)" }}>
+          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
             ({params.length} 个参数)
           </span>
         </div>
@@ -231,7 +241,7 @@ export const TasteLibraryPanel: React.FC<TasteLibraryPanelProps> = ({
                                 i < starCount ? styles.confidenceStarFilled : styles.confidenceStar
                               }
                             >
-                              ★
+                              <Icon name="star" size={11} aria-hidden />
                             </span>
                           ))}
                         </div>

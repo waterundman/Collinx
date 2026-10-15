@@ -6,28 +6,53 @@
   /* ---- Background ---- */
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f7;
+  --bg-surface: #ffffff;
   --bg-elevated: #ffffff;
+  --bg-overlay: #f3f4f6;
+  --bg-active: #e0f2fe;
+  --bg-error: #fef2f2;
+  --bg-warning: #fffbeb;
+
+  /* ---- xAI-style Surface Alias（v2.5.0 补齐：此前继承暗色值，
+         导致 --ink(#fff) 被用在白底上 → 顶栏品牌字"看不见"） ---- */
+  --canvas: #ffffff;
+  --canvas-soft: #f8fafc;
+  --canvas-card: #ffffff;
+  --canvas-mid: #e2e8f0;
+  --hairline: #e5e7eb;
+  --ink: #0f172a;
+  --ink-hover: #1e293b;
+  --body: #334155;
+  --body-mid: #5f6673;
+  --mute: #7c8798;
 
   /* ---- Text ---- */
-  --text-primary: #1a1a2e;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --text-primary: #16161e;  --text-secondary: #4b5563;
+  --text-muted: #5f6673;
+  --text-disabled: #94a3b8;
+  /* 浅色主题强调色偏深，其上的文字用白色 */
+  --text-on-accent: #ffffff;
 
   /* ---- Border ---- */
   --border-primary: #e5e7eb;
   --border-secondary: #d1d5db;
 
   /* ---- Accent ---- */
-  --accent-primary: #0284c7;
-  --accent-secondary: #0ea5e9;
+  /* v2.5.0：#0284c7 作为文字/底色的对比度不足（白字 4.1:1），加深到 #0369a1 */
+  --accent-primary: #0369a1;
+  --accent-secondary: #0284c7;
   --accent-red: #dc2626;
-  --accent-green: #16a34a;
-  --accent-yellow: #d97706;
-  --accent-cyan: #0284c7;
+  --accent-green: #15803d;
+  --accent-yellow: #b45309;
+  --accent-cyan: #0369a1;
+  --accent-cyan-hover: #075985;
+  /* sunset 的可读文字变体（#ff7a17 在浅底上仅 2.4:1） */
+  --accent-sunset: #ff7a17;
+  --accent-sunset-ink: #c2410c;
 
   /* ---- Component ---- */
   --button-bg: #f3f4f6;
-  --button-text: #1a1a2e;
+  --button-text: #16161e;
   --input-bg: #ffffff;
   --input-border: #d1d5db;
   --card-bg: #ffffff;
@@ -36,68 +61,70 @@
   /* ---- Semantic Colors (for canvas/charts) ---- */
   --canvas-bg: #ffffff;
   --canvas-grid: #e5e7eb;
-  --canvas-node-default: #9ca3af;
-  --canvas-highlight: #0284c7;
+  --canvas-node-default: #64748b;
+  --canvas-highlight: #0369a1;
+  --score-ink: #14161c;
 
   /* ---- Section Colors (ArrangementView) ---- */
-  --section-verse: #3b82f6;
-  --section-chorus: #d97706;
-  --section-bridge: #10b981;
-  --section-intro: #6b7280;
-  --section-outro: #8b5cf6;
-  --section-prechorus: #ef4444;
-  --section-breakdown: #06b6d4;
-  --section-interlude: #f97316;
-  --section-outro-chorus: #ea580c;
-  --section-build-up: #7c3aed;
-  --section-drop: #ec4899;
-  --section-solo: #eab308;
+  --section-verse: #2563eb;
+  --section-chorus: #b45309;
+  --section-bridge: #047857;
+  --section-intro: #4b5563;
+  --section-outro: #6d28d9;
+  --section-prechorus: #b91c1c;
+  --section-breakdown: #0e7490;
+  --section-interlude: #c2410c;
+  --section-outro-chorus: #9a3412;
+  --section-build-up: #5b21b6;
+  --section-drop: #be185d;
+  --section-solo: #a16207;
 
   /* ---- Domain Colors (KnowledgeGraph) ---- */
-  --domain-harmony: #3b82f6;
-  --domain-melody: #d97706;
-  --domain-rhythm: #10b981;
-  --domain-texture: #8b5cf6;
-  --domain-timbre: #ec4899;
-  --domain-form: #f97316;
-  --domain-mix: #06b6d4;
-  --domain-reject: #ef4444;
+  --domain-harmony: #2563eb;
+  --domain-melody: #b45309;
+  --domain-rhythm: #047857;
+  --domain-texture: #6d28d9;
+  --domain-timbre: #be185d;
+  --domain-form: #c2410c;
+  --domain-mix: #0e7490;
+  --domain-reject: #b91c1c;
 
   /* ---- Node Type Colors (KnowledgeGraph) ---- */
   --node-phrase: #0284c7;
   --node-motif: #16a34a;
-  --node-track: #6b7280;
-  --node-export-version: #8b5cf6;
-  --node-taste-evidence: #d97706;
-  --node-agent-decision: #c026d3;
+  --node-track: #5f6673;
+  --node-export-version: #6d28d9;
+  --node-taste-evidence: #b45309;
+  --node-agent-decision: #a21caf;
 
   /* ---- Accent Extended ---- */
-  --accent-cyan-dark: #0284c7;
+  --accent-cyan-dark: #075985;
   --accent-cyan-light: #38bdf8;
-  --accent-green-light: #4ade80;
-  --accent-red-light: #f87171;
-  --accent-red-pale: #fca5a5;
-  --accent-yellow-light: #facc15;
-  --accent-purple-dark: #7c3aed;
-  --accent-purple-light: #a78bfa;
+  --accent-green-light: #15803d;
+  --accent-red-light: #b91c1c;
+  --accent-red-pale: #b91c1c;
+  --accent-yellow-light: #a16207;
+  --accent-purple: #6d28d9;
+  --accent-purple-dark: #5b21b6;
+  --accent-purple-light: #7c3aed;
   --accent-blue: #2563eb;
-  --accent-blue-light: #60a5fa;
-  --accent-orange: #ea580c;
-  --accent-orange-dark: #c2410c;
-  --accent-amber: #d97706;
-  --accent-pink: #ec4899;
-  --accent-gold: #ca8a04;
-  --accent-peach: #fb923c;
-  --accent-mint: #34d399;
-  --accent-teal: #14b8a6;
-  --accent-sky: #0ea5e9;
-  --accent-sky-light: #7dd3fc;
-  --accent-lavender: #a78bfa;
-  --accent-lavender-light: #c4b5fd;
-  --accent-cyan-pale: #67e8f9;
-  --accent-hot-pink: #f43f5e;
-  --accent-peach-light: #fca5a5;
-  --accent-magenta: #d946ef;
+  --accent-blue-light: #1d4ed8;
+  --accent-orange: #c2410c;
+  --accent-orange-dark: #9a3412;
+  --accent-amber: #b45309;
+  --accent-pink: #be185d;
+  --accent-gold: #a16207;
+  --accent-peach: #c2410c;
+  --accent-mint: #047857;
+  --accent-teal: #0f766e;
+  --accent-sky: #0369a1;
+  --accent-sky-light: #0284c7;
+  --accent-lavender: #6d28d9;
+  --accent-lavender-light: #7c3aed;
+  --accent-cyan-pale: #0e7490;
+  --accent-hot-pink: #be123c;
+  --accent-peach-light: #b91c1c;
+  --accent-magenta: #a21caf;
 
   /* ---- Gradient Stops ---- */
   --gradient-blue-start: #60a5fa;
@@ -105,7 +132,7 @@
   --gradient-green-start: #4ade80;
   --gradient-green-end: #16a34a;
   --gradient-yellow-start: #facc15;
-  --gradient-yellow-end: #ca8a04;
+  --gradient-yellow-end: #a16207;
   --gradient-orange-start: #fb923c;
   --gradient-orange-end: #c2410c;
   --gradient-red-start: #f87171;
@@ -116,19 +143,19 @@
   --piano-white-playing: #fef3c7;
   --piano-black: #1f2937;
   --piano-black-border: #111827;
-  --piano-black-playing: #d97706;
+  --piano-black-playing: #b45309;
 
   /* ---- ABPlayer States ---- */
-  --ab-reference: #059669;
-  --ab-compare: #7c3aed;
-  --ab-different: #dc2626;
+  --ab-reference: #047857;
+  --ab-compare: #6d28d9;
+  --ab-different: #b91c1c;
   --ab-same: #2563eb;
-  --ab-unknown: #9ca3af;
-  --ab-reference-bg: rgba(5, 150, 105, 0.1);
-  --ab-compare-bg: rgba(124, 58, 237, 0.1);
-  --ab-different-bg: rgba(220, 38, 38, 0.1);
+  --ab-unknown: #64748b;
+  --ab-reference-bg: rgba(4, 120, 87, 0.1);
+  --ab-compare-bg: rgba(109, 40, 217, 0.1);
+  --ab-different-bg: rgba(185, 28, 28, 0.1);
   --ab-same-bg: rgba(37, 99, 235, 0.1);
-  --ab-unknown-bg: rgba(156, 163, 175, 0.1);
+  --ab-unknown-bg: rgba(100, 116, 139, 0.1);
 
   /* ---- Plugin Mockup ---- */
   --mockup-bg-start: #e5e7eb;

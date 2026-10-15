@@ -25,7 +25,9 @@
 .status {
   margin-left: auto;
   font-size: 11px;
-  color: var(--text-disabled);
+  /* v2.5.0：状态文字是次级信息而非"禁用态"，此前误用 --text-disabled
+     （暗色下 #44444e on #0a0a0a = 2.06:1，几乎看不见）。 */
+  color: var(--text-muted);
   white-space: nowrap;
   font-family: var(--font-mono);
   letter-spacing: 1px;

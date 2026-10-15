@@ -35,7 +35,7 @@
   margin-left: auto;
   background: var(--accent-green);
   border: 1px solid var(--accent-green);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   border-radius: var(--radius-sm);
   padding: var(--space-1) var(--space-3);
   font-size: 12px;
@@ -268,7 +268,7 @@
 
 .muteBtnActive {
   background: var(--accent-red);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   border-color: var(--accent-red);
 }
 
@@ -587,7 +587,7 @@
 
 .modalBtnPrimary {
   background: var(--accent-green);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   border-color: var(--accent-green);
 }
 

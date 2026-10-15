@@ -1557,7 +1557,9 @@
     "suggestionMix": "Suggest an FX chain for the melody track",
     "suggestionExplain": "Explain why this chord progression works",
     "toolRunning": "Running {{tool}}…",
-    "proposalsCreated": "{{count}} proposal(s) queued — review them in the Agent panel"
+    "proposalsCreated": "{{count}} proposal(s) queued — review them in the Agent panel",
+    "pendingProposals": "{{count}} proposal(s) awaiting review",
+    "applyAll": "Apply all"
   },
   "agentPanel": {
     "title": "Agent Panel",

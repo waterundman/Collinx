@@ -36,6 +36,6 @@
 .optionActive {
   border-color: var(--accent-primary);
   background: var(--accent-primary);
-  color: var(--text-primary);
+  color: var(--text-on-accent);
   font-weight: 600;
 }

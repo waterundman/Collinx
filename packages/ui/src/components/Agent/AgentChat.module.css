@@ -213,7 +213,9 @@
 .input {
   flex: 1;
   padding: var(--space-2) var(--space-3);
-  background: var(--bg-primary);
+  /* v2.5.0：原为 --bg-primary，浅色主题下与容器（--bg-elevated）同为纯白 →
+     输入框边界完全看不见。改用 overlay 层保证两主题都可辨识。 */
+  background: var(--bg-overlay);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
   color: var(--text-primary);
@@ -325,4 +327,150 @@
 
 .message.error .messageBubble {
   border-color: var(--danger-primary, #d94a4a);
+}
+
+/* ============================================================
+   v2.5.0 视觉革新 —— 对话流改为"工程日志"语言：
+   去 emoji 头像（改用线性图标徽标）、语义色条、实时进度态、
+   以及把 AI 提案直接呈现在对话底部（不必切面板才能审批）。
+   ============================================================ */
+
+.agentBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--accent-cyan) 55%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--accent-cyan);
+  background: color-mix(in srgb, var(--accent-cyan) 12%, transparent);
+}
+
+/* 旧的 emoji 头像容器 → 线性图标徽标（font-size:0 兜底清掉 emoji 尺寸） */
+.messageAvatar {
+  font-size: 0;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.message.agent .messageAvatar {
+  color: var(--accent-cyan);
+  border-color: color-mix(in srgb, var(--accent-cyan) 45%, transparent);
+}
+
+.message.user .messageAvatar {
+  color: var(--accent-sunset-ink);
+  border-color: color-mix(in srgb, var(--accent-sunset-ink) 45%, transparent);
+}
+
+.emptyIcon {
+  font-size: 0;
+  opacity: 1;
+  color: var(--text-muted);
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border-secondary);
+  border-radius: var(--radius-lg);
+}
+
+/* 气泡弱化 + 语义色条：像 IDE 的日志/差异视图，而不是通用聊天 App。
+   v2.5.0 修正：原先用 color-mix(..., transparent) 做底，浅色主题下与页面
+   同为纯白 → 气泡边界完全消失，长回复变成"一堵裸文字"。改为不透明底色。 */
+.messageBubble {
+  border: 1px solid var(--border-primary);
+  border-left: 3px solid var(--accent-cyan);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  padding: var(--space-3) var(--space-4);
+}
+
+.message.agent .messageBubble {
+  border-left-color: var(--accent-cyan);
+}
+
+.message.user .messageBubble {
+  border: 1px solid color-mix(in srgb, var(--accent-sunset-ink) 30%, var(--border-primary));
+  border-right: 3px solid var(--accent-sunset-ink);
+  background: color-mix(in srgb, var(--accent-sunset-ink) 9%, var(--bg-secondary));
+}
+
+/* 等待期的实时进度（取代三个无信息的点） */
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.progressIcon {
+  color: var(--accent-cyan);
+  flex-shrink: 0;
+  animation: cx-agent-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes cx-agent-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressIcon {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
+/* 对话内的提案条：AI 的产出当场可见、可一键应用 */
+.proposalBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border-primary);
+  background: color-mix(in srgb, var(--accent-cyan) 8%, var(--bg-elevated));
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.proposalIcon {
+  display: flex;
+  color: var(--accent-cyan);
+  flex-shrink: 0;
+}
+
+.proposalText {
+  flex: 1;
+  min-width: 0;
+}
+
+.proposalAction {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--accent-cyan);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent-cyan) 60%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.proposalAction:hover {
+  background: color-mix(in srgb, var(--accent-cyan) 18%, transparent);
 }

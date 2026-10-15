@@ -8,6 +8,7 @@ import {
   type InstrumentFamily,
 } from "@collinx/core";
 import { useI18n } from "../../i18n";
+import { Icon } from "../Icon/Icon";
 import styles from "./OrchestratorPanel.module.css";
 
 export interface Player {
@@ -242,7 +243,7 @@ export const OrchestratorPanel: React.FC<OrchestratorPanelProps> = ({
                   <span
                     className={`${styles.familyArrow} ${isExpanded ? styles.familyArrowOpen : ""}`}
                   >
-                    &#9654;
+                    <Icon name="chevronRight" size={12} strokeWidth={2} aria-hidden />
                   </span>
                   <span className={styles.familyCount}>
                     {familyCount}/{instruments.length}

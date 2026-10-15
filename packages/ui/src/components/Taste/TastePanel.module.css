@@ -49,8 +49,9 @@
 
 .domainBadge {
   margin-left: auto;
-  background: var(--border-primary);
-  color: var(--text-muted);
+  /* v2.5.0：原为 border-primary 底 + text-muted 字（2.05–2.49:1） */
+  background: var(--bg-overlay);
+  color: var(--text-secondary);
   font-size: 10px;
   padding: 1px var(--space-1);
   border-radius: var(--radius-lg);
@@ -182,7 +183,8 @@
 }
 
 .confidenceStar {
-  color: var(--border-secondary);
+  /* v2.5.0：此前用边框色当文字色（暗色下 1.61:1，星标完全看不见） */
+  color: var(--accent-gold);
   font-size: 12px;
 }
 
@@ -194,7 +196,8 @@
 /* ---------- Tags & Badges ---------- */
 .distTag {
   background: var(--bg-surface);
-  color: var(--accent-sky-light);
+  /* v2.5.0：--accent-sky-light 在浅底上只有 4.1:1，改用可按主题切换的 --accent-sky */
+  color: var(--accent-sky);
   font-size: 10px;
   padding: 1px var(--space-1);
   border-radius: var(--radius-sm);

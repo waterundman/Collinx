@@ -67,7 +67,8 @@
 .barBeat {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent-sunset);
+  /* v2.5.0：亮橙 #ff7a17 在浅底上仅 2.4:1 → 用可按主题切换的可读变体 */
+  color: var(--accent-sunset-ink);
 }
 
 .time {
