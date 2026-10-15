@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createNoteEvent } from "@collinx/core";
+import type { DiffEnvelope } from "@collinx/core";
 import {
   AUTOSAVE_INTERVAL_MS,
   AUTOSAVE_SLOT_COUNT,
@@ -12,6 +13,7 @@ import {
 } from "../autosave";
 import { ProjectProvider } from "../../providers/ProjectProvider";
 import { useProjectStore } from "../../hooks/useProjectStore";
+import { makeFixtureDiffs } from "../../test-utils/fixture-diffs";
 import type { ProjectStoreValue } from "../../store/project-store";
 
 // ---------------------------------------------------------------------------
@@ -91,7 +93,11 @@ describe("autosave service (T01)", () => {
 // T02: 脏检测 —— 经真实 ProjectProvider 的 autosave interval 验证。
 // ---------------------------------------------------------------------------
 
-function setupProvider(key: string) {
+function setupProvider(
+  key: string,
+  // v2.4.0 S5：不再有生产预置提案 → 显式注入夹具（等量置换用例依赖初始 2 条）
+  pendingDiffs: DiffEnvelope[] = makeFixtureDiffs(2),
+) {
   let current: ProjectStoreValue | null = null;
   let root: Root;
   let container: HTMLDivElement;
@@ -109,6 +115,7 @@ function setupProvider(key: string) {
       <ProjectProvider
         title="Autosave Dirty Test"
         persistenceKey={key}
+        pendingDiffs={pendingDiffs}
         initialNotes={[
           createNoteEvent({ trackId: "melody", bar: 1, beat: 1, durQn: 1, pitchMidi: 60 }),
         ]}

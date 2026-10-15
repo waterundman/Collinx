@@ -60,11 +60,22 @@ export interface ScoreSettings {
   exportFormat: 'pdf' | 'musicxml' | 'midi';
 }
 
+/** v2.4.0 S1: LLM 提供方配置（密钥仅存本机，不落仓库） */
+export interface AgentLlmSettings {
+  provider: 'deepseek' | 'openai' | 'custom';
+  apiKey: string;
+  baseURL: string;
+  model: string;
+  temperature: number;
+  stream: boolean;
+}
+
 /** Agent设置 */
 export interface AgentSettings {
   autoSuggest: boolean;
   explanationLevel: 'brief' | 'normal' | 'detailed';
   confirmationMode: 'always' | 'risky' | 'never';
+  llm: AgentLlmSettings;
 }
 
 /** Taste设置 */
@@ -150,6 +161,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
     autoSuggest: true,
     explanationLevel: 'normal',
     confirmationMode: 'risky',
+    // v2.4.0 S1：默认 DeepSeek；apiKey 留空（运行时由用户在设置页填写，
+    // 或由构建期 VITE_DEEPSEEK_API_KEY 注入）。任何情况下都不得写入真实密钥。
+    llm: {
+      provider: 'deepseek',
+      apiKey: '',
+      baseURL: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+      temperature: 0.7,
+      stream: true,
+    },
   },
   taste: {
     autoLearn: true,

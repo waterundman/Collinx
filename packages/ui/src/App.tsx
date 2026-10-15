@@ -394,7 +394,7 @@ export function App() {
     new Map<number, { velocity: number; tOn: number }>()
   );
 
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const recording = settings.midi.recording;
 
   const handleNoteAdd = useCallback((note: Omit<NoteEvent, "id">) => {
@@ -643,15 +643,24 @@ export function App() {
     setDiffReport(report);
   }, [notes, tempoMap, tasteStore, analyzer, generator]);
 
-  const handleConfirmWrite = useCallback((_evidenceIds: string[]) => {
-    setDiffReport(null);
-  }, []);
+  // v2.4.0 S5: "确认写入品味库" 必须真的落库。原先只 setDiffReport(null)，
+  // 用户点了什么也不会改变 —— 现在把选中条目的分析值写入对应品味参数
+  // （updateTasteParameter 会 save genome 并 bump genomeVersion，时间线与
+  // 参数卡片随之更新）。
+  const handleConfirmWrite = useCallback(
+    (evidenceIds: string[]) => {
+      if (!diffReport) return;
+      const items = diffReport.evidenceItems.filter((it) => evidenceIds.includes(it.paramKey));
+      for (const item of items) {
+        actions.updateTasteParameter(item.paramKey, String(item.currentValue));
+      }
+      setDiffReport(null);
+    },
+    [actions, diffReport]
+  );
 
-  const handleIgnore = useCallback((_evidenceIds: string[]) => {
-  }, []);
-
-  const handleWriteToReject = useCallback((_evidenceIds: string[]) => {
-  }, []);
+  // "忽略" = 本次不写入（条目已从弹窗列表移除，无需落库）。
+  const handleIgnore = useCallback((_evidenceIds: string[]) => {}, []);
 
   const handleApplyArrangerDiff = useCallback((diff: DiffEnvelope) => {
     setArrangerDiff(diff);
@@ -1128,6 +1137,15 @@ export function App() {
                 cursorPosition={inputCursor}
                 playheadPosition={transport.position}
                 quantizeGridHint={recording.quantizeGrid}
+                // v2.4.0 S5：量化下拉写回设置（此前是无回调的死控件）
+                onQuantizeGridChange={(grid) =>
+                  updateSettings({
+                    midi: {
+                      ...settings.midi,
+                      recording: { ...settings.midi.recording, quantizeGrid: grid },
+                    },
+                  })
+                }
                 autoScrollFollow={settings.midi.playback.followPlayhead}
                 transportRunId={transportRunId}
                 followPlayhead={transportRunning}
@@ -1305,7 +1323,7 @@ export function App() {
       {activeTab === "agent" && (
         <div className={styles.agentLayout} data-testid="agent-layout">
           <div className={styles.agentChatContainer}>
-            <AgentChat agentName="HarmonyBot" />
+            <AgentChat agentName="HarmonyBot" onOpenSettings={() => setSettingsOpen(true)} />
           </div>
           <div className={styles.agentPanelContainer}>
             <div className={styles.agentPanelSection}>
@@ -1349,7 +1367,6 @@ export function App() {
           report={diffReport}
           onConfirmWrite={handleConfirmWrite}
           onIgnore={handleIgnore}
-          onWriteToReject={handleWriteToReject}
         />
       )}
 

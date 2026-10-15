@@ -56,6 +56,8 @@ interface PianoRollViewProps {
   } | null;
   /** v1.27.0: 量化网格细分提示（与 settings.midi.recording.quantizeGrid 同型）。undefined/0 零行为变化 */
   quantizeGridHint?: 0 | 0.25 | 0.5 | 1;
+  /** v2.4.0 S5：工具栏「量化」下拉的真实落点（写回 settings.midi.recording.quantizeGrid）。 */
+  onQuantizeGridChange?: (grid: 0 | 0.25 | 0.5 | 1) => void;
   /** v1.28.0: cursor 越视口自动滚动跟随（if-needed 最小平移语义，DAW 惯例）。
    *  右缘阈值 w-48 / 左出时左缘留 48px；clamp [0, maxScrollX]。
    *  默认 false 零行为变化。
@@ -139,6 +141,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   onSeek,
   loopRegion,
   quantizeGridHint,
+  onQuantizeGridChange,
   autoScrollFollow,
   transportRunId,
   followPlayhead = true,
@@ -151,7 +154,9 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-  const [toolMode, setToolMode] = useState<ToolMode>("select");
+  // v2.4.0 S5：默认「绘制」= 双击新增音符（与改动前行为一致）；切到「选择」后
+  // 双击不再新增，工具按钮因此真正影响交互而非只换高亮。
+  const [toolMode, setToolMode] = useState<ToolMode>("draw");
   const animationRef = useRef<number>(0);
 
   // v2.0.0 Stage 2 (D2-4): 手动平移挂起跟随；transportRunId 值变化即复位。
@@ -212,6 +217,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
     onNoteSelect,
     onNoteAudition,
     selectedNoteIds,
+    toolMode,
   });
 
   useEffect(() => {
@@ -759,10 +765,18 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
           {t('pianoRoll.draw')}
         </button>
         <span className={styles.toolbarLabel}>{t('pianoRoll.quantize')}</span>
-        <select className={styles.toolbarSelect} data-testid="piano-roll-quantize" defaultValue="1/4">
-          <option value="1/4">1/4</option>
-          <option value="1/8">1/8</option>
-          <option value="1/16">1/16</option>
+        <select
+          className={styles.toolbarSelect}
+          data-testid="piano-roll-quantize"
+          value={String(quantizeGridHint ?? 0)}
+          onChange={(e) =>
+            onQuantizeGridChange?.(Number(e.target.value) as 0 | 0.25 | 0.5 | 1)
+          }
+        >
+          <option value="0">关</option>
+          <option value="0.25">1/16</option>
+          <option value="0.5">1/8</option>
+          <option value="1">1/4</option>
         </select>
         <span className={styles.toolbarLabel}>{t('pianoRoll.zoom')}</span>
         <button

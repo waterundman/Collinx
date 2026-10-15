@@ -1,5 +1,5 @@
 import type { ToolRegistry, ToolResult, NoteEvent } from "@collinx/core";
-import { createNoteEvent, randomUUID } from "@collinx/core";
+import { createNoteEvent, createDiffEnvelope, randomUUID } from "@collinx/core";
 
 const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
 const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10];
@@ -168,6 +168,27 @@ export class Composer {
         },
         notes,
       },
+      // v2.4.0 S4：产出可审批的 DiffEnvelope。此前只有 data.notes，没有 diff，
+      // 用户在 Agent 面板看不到任何待审提案，"让 AI 生成动机"实际上改不了工程。
+      // baseRevision 由 ProjectProvider.alignRevision 在入队时对齐到当前图。
+      diff: createDiffEnvelope({
+        baseRevision: "",
+        actor: { type: "agent", name: "Composer" },
+        permissionScope: "proposal_only",
+        summary: `生成 ${bars} 小节动机（${key} ${scaleName} / ${styleHint}）`,
+        ops: [
+          {
+            op: "add_node",
+            path: "/",
+            nodeType: "Motif",
+            data: {
+              name: `Motif-${key}-${scaleName}`,
+              tags: [styleHint],
+            },
+          },
+          { op: "add_note_group", path: "/", notes },
+        ],
+      }),
       confidence: 0.75,
       requiresUserConfirmation: true,
       auditRef: randomUUID(),

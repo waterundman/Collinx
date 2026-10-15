@@ -90,7 +90,7 @@ describe("TasteDiffPanel", () => {
     }).not.toThrow();
   });
 
-  it("accepts onIgnore and onWriteToReject callbacks", () => {
+  it("accepts onConfirmWrite and onIgnore callbacks", () => {
     const report = {
       reportId: "r1",
       exportRef: "export-001",
@@ -109,8 +109,8 @@ describe("TasteDiffPanel", () => {
     expect(() => {
       React.createElement(TasteDiffPanel, {
         report,
+        onConfirmWrite: () => {},
         onIgnore: () => {},
-        onWriteToReject: () => {},
       });
     }).not.toThrow();
   });

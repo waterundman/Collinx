@@ -18,6 +18,7 @@ import { Orchestrator, EngravingAgent, TeachingAgent } from "@collinx/agent";
 import { ProjectProvider } from "../../providers/ProjectProvider";
 import { useProjectStore } from "../../hooks/useProjectStore";
 import { createBrowserTasteFsAdapter } from "../../services/tasteFsAdapter";
+import { makeFixtureDiffs } from "../../test-utils/fixture-diffs";
 import {
   isMixerDiff,
   MAX_UNDO,
@@ -87,7 +88,13 @@ function makeMixer(): MixerState {
   };
 }
 
-function setup(initialNotes?: NoteEvent[], initialMixer?: MixerState, pendingDiffs?: DiffEnvelope[]) {
+function setup(
+  initialNotes?: NoteEvent[],
+  initialMixer?: MixerState,
+  // v2.4.0 S5：生产代码不再预置示例提案（原为假 AI 数据），改为测试显式注入
+  // 夹具，使队列/审批/回滚等断言的强度保持不变。
+  pendingDiffs: DiffEnvelope[] = makeFixtureDiffs(2),
+) {
   let current: ProjectStoreValue | null = null;
   let root: Root;
   let container: HTMLDivElement;

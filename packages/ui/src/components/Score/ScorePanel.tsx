@@ -74,7 +74,9 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   onSeek,
 }) => {
   const { t } = useI18n();
-  const [viewMode, setViewMode] = useState<"data" | "rendered">("data");
+  // v2.4.0 S6：默认直接进入渲染视图。此前默认 "data"，用户打开「乐谱」看到的
+  // 是"渲染引擎处理中"占位（文案还暗示正在加载），误以为功能坏了。
+  const [viewMode, setViewMode] = useState<"data" | "rendered">("rendered");
   // Layout/Staff config fields are optional on the core Layout type; fall back
   // to safe defaults so a pure core layout still renders gracefully.
   const staffConfig = layout.staffConfig ?? [];

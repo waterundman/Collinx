@@ -1,6 +1,8 @@
 import React from 'react';
 import { useI18n } from '../../i18n/hooks';
+import i18n from '../../i18n';
 import { useSettings } from '../../hooks/useSettings';
+import { ThemeContext } from '../../providers/ThemeProvider';
 import type { SettingsCategory } from '../../types/settings';
 import { AudioSettings } from './AudioSettings';
 import { MidiSettings } from './MidiSettings';
@@ -20,7 +22,31 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
   activeCategory,
 }) => {
   const { t } = useI18n();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
+  // v2.4.0 S5: 主题经 ThemeProvider 生效；其余控件一律写回 settings（localStorage）。
+  const themeCtx = React.useContext(ThemeContext);
+
+  const setGeneral = (patch: Partial<typeof settings.general>) =>
+    updateSettings({ general: { ...settings.general, ...patch } });
+
+  const handleLanguageChange = (value: string) => {
+    setGeneral({ language: value });
+    void i18n.changeLanguage(value);
+  };
+
+  const handleThemeChange = (value: 'light' | 'dark' | 'system') => {
+    setGeneral({ theme: value });
+    themeCtx?.setTheme(value);
+  };
+
+  const setMixer = (patch: Partial<typeof settings.mixer>) =>
+    updateSettings({ mixer: { ...settings.mixer, ...patch } });
+
+  const setScore = (patch: Partial<typeof settings.score>) =>
+    updateSettings({ score: { ...settings.score, ...patch } });
+
+  const setTaste = (patch: Partial<typeof settings.taste>) =>
+    updateSettings({ taste: { ...settings.taste, ...patch } });
 
   // 获取分类标题和描述
   const getCategoryInfo = (category: SettingsCategory) => {
@@ -70,8 +96,11 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
             {t('settings.general.languageDesc')}
           </p>
           <div className={styles.settingControl}>
-            {/* 语言选择器将由ThemeSelector组件处理 */}
-            <select defaultValue={settings.general.language}>
+            <select
+              data-testid="settings-language"
+              value={settings.general.language}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+            >
               <option value="zh-CN">简体中文</option>
               <option value="en">English</option>
             </select>
@@ -86,8 +115,11 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
             {t('settings.general.themeDesc')}
           </p>
           <div className={styles.settingControl}>
-            {/* 主题选择器将由ThemeSelector组件处理 */}
-            <select defaultValue={settings.general.theme}>
+            <select
+              data-testid="settings-theme"
+              value={settings.general.theme}
+              onChange={(e) => handleThemeChange(e.target.value as 'light' | 'dark' | 'system')}
+            >
               <option value="light">{t('common.light')}</option>
               <option value="dark">{t('common.dark')}</option>
               <option value="system">{t('common.auto')}</option>
@@ -119,8 +151,17 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
           <div className={styles.settingControl}>
             <input
               type="text"
-              defaultValue={settings.mixer.defaultFXChain.join(', ')}
+              data-testid="settings-default-fx-chain"
+              value={settings.mixer.defaultFXChain.join(', ')}
               placeholder={t('settings.mixing.noDefaultFX')}
+              onChange={(e) =>
+                setMixer({
+                  defaultFXChain: e.target.value
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0),
+                })
+              }
             />
           </div>
         </div>
@@ -136,7 +177,9 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
             <label>
               <input
                 type="checkbox"
-                defaultChecked={settings.mixer.loudnessNormalization}
+                data-testid="settings-loudness-normalization"
+                checked={settings.mixer.loudnessNormalization}
+                onChange={(e) => setMixer({ loudnessNormalization: e.target.checked })}
               />
               {' '}{t('settings.mixing.enableLoudnessNormalization')}
             </label>
@@ -159,7 +202,11 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
             {t('settings.notation.fontDesc')}
           </p>
           <div className={styles.settingControl}>
-            <select defaultValue={settings.score.scoreFont}>
+            <select
+              data-testid="settings-score-font"
+              value={settings.score.scoreFont}
+              onChange={(e) => setScore({ scoreFont: e.target.value })}
+            >
               <option value="Bravura">Bravura</option>
               <option value="Petaluma">Petaluma</option>
               <option value="Leland">Leland</option>
@@ -177,10 +224,12 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
           <div className={styles.settingControl}>
             <input
               type="range"
+              data-testid="settings-score-size"
               min="2"
               max="5"
               step="0.1"
-              defaultValue={settings.score.scoreSize}
+              value={settings.score.scoreSize}
+              onChange={(e) => setScore({ scoreSize: Number(e.target.value) })}
             />
           </div>
         </div>
@@ -193,7 +242,11 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
             {t('settings.notation.exportFormatDesc')}
           </p>
           <div className={styles.settingControl}>
-            <select defaultValue={settings.score.exportFormat}>
+            <select
+              data-testid="settings-export-format"
+              value={settings.score.exportFormat}
+              onChange={(e) => setScore({ exportFormat: e.target.value as 'pdf' | 'musicxml' | 'midi' })}
+            >
               <option value="pdf">PDF</option>
               <option value="musicxml">MusicXML</option>
               <option value="midi">MIDI</option>
@@ -223,7 +276,9 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
             <label>
               <input
                 type="checkbox"
-                defaultChecked={settings.taste.autoLearn}
+                data-testid="settings-taste-auto-learn"
+                checked={settings.taste.autoLearn}
+                onChange={(e) => setTaste({ autoLearn: e.target.checked })}
               />
               {' '}{t('settings.taste.enableAutoLearn')}
             </label>
@@ -241,7 +296,9 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
             <label>
               <input
                 type="checkbox"
-                defaultChecked={settings.taste.askConfirmation}
+                data-testid="settings-taste-ask-confirmation"
+                checked={settings.taste.askConfirmation}
+                onChange={(e) => setTaste({ askConfirmation: e.target.checked })}
               />
               {' '}{t('settings.taste.enableAskConfirmation')}
             </label>
@@ -259,7 +316,9 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
             <label>
               <input
                 type="checkbox"
-                defaultChecked={settings.taste.projectOverlay}
+                data-testid="settings-taste-project-overlay"
+                checked={settings.taste.projectOverlay}
+                onChange={(e) => setTaste({ projectOverlay: e.target.checked })}
               />
               {' '}{t('settings.taste.enableProjectOverlay')}
             </label>

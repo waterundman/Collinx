@@ -1,6 +1,13 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useI18n } from '../../i18n/hooks';
 import { useSettings } from '../../hooks/useSettings';
+import {
+  LLM_PROVIDER_PRESETS,
+  isLlmConfigured,
+  listModels,
+  LlmError,
+} from '../../services/llm';
+import type { LlmProviderConfig, LlmErrorKind } from '../../services/llm';
 import styles from './AgentSettings.module.css';
 
 /** Agent解释详细程度选项 */
@@ -30,6 +37,51 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
   const { t } = useI18n();
   const { settings, updateSettings, resetCategory } = useSettings();
   const { agent } = settings;
+
+  // v2.4.0 S1: AI 模型配置（本地 state 只用于纯 UI 展示，配置本身一律经 updateSettings 落库）
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [testDetail, setTestDetail] = useState('');
+
+  const updateLlm = useCallback(
+    (patch: Partial<LlmProviderConfig>) => {
+      updateSettings({ agent: { ...agent, llm: { ...agent.llm, ...patch } } });
+    },
+    [agent, updateSettings],
+  );
+
+  const handleProviderChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const provider = e.target.value as LlmProviderConfig['provider'];
+      const preset = LLM_PROVIDER_PRESETS[provider];
+      // 切换提供方时同步填充预设地址与默认模型，避免用户面对空表单
+      updateLlm({
+        provider,
+        baseURL: preset.baseURL || agent.llm.baseURL,
+        model: preset.models[0] ?? agent.llm.model,
+      });
+      setTestStatus('idle');
+      setTestDetail('');
+    },
+    [agent.llm.baseURL, agent.llm.model, updateLlm],
+  );
+
+  const handleTestConnection = useCallback(async () => {
+    setTestStatus('testing');
+    setTestDetail('');
+    try {
+      const models = await listModels(agent.llm);
+      setTestStatus('ok');
+      setTestDetail(models.slice(0, 3).join(', '));
+    } catch (err) {
+      const kind: LlmErrorKind = err instanceof LlmError ? err.kind : 'unknown';
+      setTestStatus('error');
+      setTestDetail(`${kind}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [agent.llm]);
+
+  const llmConfigured = isLlmConfigured(agent.llm);
+  const providerPreset = LLM_PROVIDER_PRESETS[agent.llm.provider];
 
   // 处理自动建议变更
   const handleAutoSuggestChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,6 +198,187 @@ export const AgentSettings: React.FC<AgentSettingsProps> = ({ className }) => {
 
   return (
     <div className={`${styles.container} ${className ?? ''}`}>
+      {/* v2.4.0 S1: AI 模型配置（真实 LLM 接入的入口） */}
+      <div className={styles.section} data-testid="agent-llm-section">
+        <h3 className={styles.sectionTitle}>{t('settings.agent.llm.title', { defaultValue: 'AI 模型' })}</h3>
+
+        {!llmConfigured && (
+          <div className={styles.infoBox} data-testid="agent-llm-not-configured">
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>
+                {t('settings.agent.llm.notConfigured', { defaultValue: '未配置 API 密钥，AI 功能不可用' })}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel}>{t('settings.agent.llm.provider', { defaultValue: '服务提供方' })}</label>
+          </div>
+          <p className={styles.settingDescription}>
+            {t('settings.agent.llm.description', { defaultValue: 'AI 对话与工程操作使用的大模型服务' })}
+          </p>
+          <div className={styles.settingControl}>
+            <select
+              className={styles.selectControl}
+              data-testid="agent-llm-provider"
+              value={agent.llm.provider}
+              onChange={handleProviderChange}
+            >
+              <option value="deepseek">{t('settings.agent.llm.providerDeepseek', { defaultValue: 'DeepSeek' })}</option>
+              <option value="openai">{t('settings.agent.llm.providerOpenai', { defaultValue: 'OpenAI' })}</option>
+              <option value="custom">{t('settings.agent.llm.providerCustom', { defaultValue: '自定义' })}</option>
+            </select>
+          </div>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel}>{t('settings.agent.llm.apiKey', { defaultValue: 'API 密钥' })}</label>
+          </div>
+          <div className={styles.settingControl}>
+            <div className={styles.keyRow}>
+              <input
+                className={styles.textInput}
+                data-testid="agent-llm-apikey"
+                type={showApiKey ? 'text' : 'password'}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t('settings.agent.llm.apiKeyPlaceholder', { defaultValue: 'sk-...' })}
+                value={agent.llm.apiKey}
+                onChange={(e) => updateLlm({ apiKey: e.target.value })}
+              />
+              <button
+                type="button"
+                className={styles.actionButton}
+                data-testid="agent-llm-toggle-key"
+                onClick={() => setShowApiKey((v) => !v)}
+              >
+                {showApiKey
+                  ? t('settings.agent.llm.hideKey', { defaultValue: '隐藏' })
+                  : t('settings.agent.llm.showKey', { defaultValue: '显示' })}
+              </button>
+            </div>
+          </div>
+          <p className={styles.settingDescription}>
+            {t('settings.agent.llm.apiKeyHint', { defaultValue: '密钥仅保存在本机浏览器，不会上传或写入工程文件' })}
+          </p>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel}>{t('settings.agent.llm.baseURL', { defaultValue: '接口地址' })}</label>
+          </div>
+          <div className={styles.settingControl}>
+            <input
+              className={styles.textInput}
+              data-testid="agent-llm-baseurl"
+              type="text"
+              spellCheck={false}
+              placeholder="https://api.deepseek.com"
+              value={agent.llm.baseURL}
+              onChange={(e) => updateLlm({ baseURL: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel}>{t('settings.agent.llm.model', { defaultValue: '模型' })}</label>
+          </div>
+          <div className={styles.settingControl}>
+            <input
+              className={styles.textInput}
+              data-testid="agent-llm-model"
+              type="text"
+              list="collinx-llm-models"
+              spellCheck={false}
+              value={agent.llm.model}
+              onChange={(e) => updateLlm({ model: e.target.value })}
+            />
+            <datalist id="collinx-llm-models">
+              {providerPreset.models.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          </div>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel}>{t('settings.agent.llm.temperature', { defaultValue: '温度' })}</label>
+          </div>
+          <div className={styles.settingControl}>
+            <div className={styles.rangeControl}>
+              <input
+                type="range"
+                data-testid="agent-llm-temperature"
+                min={0}
+                max={2}
+                step={0.1}
+                value={agent.llm.temperature}
+                onChange={(e) => updateLlm({ temperature: Number(e.target.value) })}
+              />
+              <span className={styles.rangeLabel}>{agent.llm.temperature.toFixed(1)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingHeader}>
+            <label className={styles.settingLabel}>{t('settings.agent.llm.stream', { defaultValue: '流式输出' })}</label>
+          </div>
+          <div className={styles.settingControl}>
+            <label className={styles.checkboxControl}>
+              <input
+                type="checkbox"
+                className={styles.checkboxInput}
+                data-testid="agent-llm-stream"
+                checked={agent.llm.stream}
+                onChange={(e) => updateLlm({ stream: e.target.checked })}
+              />
+              <span className={styles.checkboxLabel}>
+                {t('settings.agent.llm.stream', { defaultValue: '流式输出' })}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div className={styles.settingRow}>
+          <div className={styles.settingControl}>
+            <button
+              type="button"
+              className={styles.actionButton}
+              data-testid="agent-llm-test"
+              disabled={testStatus === 'testing'}
+              onClick={() => void handleTestConnection()}
+            >
+              {testStatus === 'testing'
+                ? t('settings.agent.llm.testing', { defaultValue: '测试中…' })
+                : t('settings.agent.llm.test', { defaultValue: '测试连接' })}
+            </button>
+            {testStatus === 'ok' && (
+              <span className={styles.testResultOk} data-testid="agent-llm-test-result">
+                {t('settings.agent.llm.testSuccess', {
+                  defaultValue: '连接成功 · 可用模型：{{models}}',
+                  models: testDetail,
+                })}
+              </span>
+            )}
+            {testStatus === 'error' && (
+              <span className={styles.testResultError} data-testid="agent-llm-test-result">
+                {t('settings.agent.llm.testFailed', {
+                  defaultValue: '连接失败（{{kind}}）：{{message}}',
+                  kind: (testDetail.split(':')[0] ?? 'unknown').trim(),
+                  message: testDetail.slice(testDetail.indexOf(':') + 1).trim(),
+                })}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Agent行为设置 */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>{t('settings.agent.behavior', { defaultValue: 'Agent行为' })}</h3>

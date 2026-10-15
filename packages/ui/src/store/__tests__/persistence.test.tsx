@@ -10,6 +10,7 @@ import {
   serializeGraph,
   type NoteEvent,
   type MixerState,
+  type DiffEnvelope,
   TempoMap,
 } from "@collinx/core";
 import {
@@ -26,6 +27,7 @@ import {
 import { createDemoMixer, createDemoNotes } from "../../data/demoData";
 import { ProjectProvider } from "../../providers/ProjectProvider";
 import { useProjectStore } from "../../hooks/useProjectStore";
+import { makeFixtureDiffs } from "../../test-utils/fixture-diffs";
 
 // ---------------------------------------------------------------------------
 // Stage 1: cross-refresh persistence. T01/T02 are critical.
@@ -86,7 +88,13 @@ function makeMixer(): MixerState {
   };
 }
 
-function setupProvider(key: string, initialNotes?: NoteEvent[], initialMixer?: MixerState) {
+function setupProvider(
+  key: string,
+  initialNotes?: NoteEvent[],
+  initialMixer?: MixerState,
+  // v2.4.0 S5：不再有生产预置提案，测试显式注入夹具（保持原断言强度）
+  pendingDiffs: DiffEnvelope[] = makeFixtureDiffs(2),
+) {
   let current: ProjectStoreValue | null = null;
   let root: Root;
   let container: HTMLDivElement;
@@ -105,6 +113,7 @@ function setupProvider(key: string, initialNotes?: NoteEvent[], initialMixer?: M
         title="Persist Test"
         initialNotes={initialNotes}
         initialMixer={initialMixer}
+        pendingDiffs={pendingDiffs}
         persistenceKey={key}
       >
         <Probe setCurrent={(v) => { current = v; }} />

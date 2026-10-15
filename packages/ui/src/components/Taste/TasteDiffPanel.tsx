@@ -10,7 +10,6 @@ interface TasteDiffPanelProps {
   report: TasteDiffReport | null;
   onConfirmWrite?: (evidenceIds: string[]) => void;
   onIgnore?: (evidenceIds: string[]) => void;
-  onWriteToReject?: (evidenceIds: string[]) => void;
 }
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -78,7 +77,6 @@ export const TasteDiffPanel: React.FC<TasteDiffPanelProps> = ({
   report,
   onConfirmWrite,
   onIgnore,
-  onWriteToReject,
 }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAllState] = useState(true);
@@ -122,17 +120,6 @@ export const TasteDiffPanel: React.FC<TasteDiffPanelProps> = ({
     [onIgnore]
   );
 
-  const handleReject = useCallback(
-    (id: string) => {
-      onWriteToReject?.([id]);
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    },
-    [onWriteToReject]
-  );
 
   if (!report) {
     return (
@@ -253,15 +240,10 @@ export const TasteDiffPanel: React.FC<TasteDiffPanelProps> = ({
                         <div className={styles.diffActions}>
                           <button
                             className={`${styles.diffActionBtn} ${styles.diffActionConfirm}`}
+                            data-testid={`taste-diff-select-${item.paramKey}`}
                             onClick={() => toggleItem(item.paramKey)}
                           >
-                            确认写入
-                          </button>
-                          <button
-                            className={`${styles.diffActionBtn} ${styles.diffActionReject}`}
-                            onClick={() => handleReject(item.paramKey)}
-                          >
-                            加入排除
+                            {selectedIds.has(item.paramKey) ? "已选" : "选择"}
                           </button>
                           <button
                             className={styles.diffActionBtn}

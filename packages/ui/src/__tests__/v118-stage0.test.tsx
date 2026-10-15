@@ -6,6 +6,7 @@ import { I18nProvider } from "../providers/I18nProvider";
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { ThemeProvider } from "../providers/ThemeProvider";
 import { ProjectProvider } from "../providers/ProjectProvider";
+import { makeLegacySeedDiffs } from "../test-utils/fixture-diffs";
 import { TeachingAgent } from "@collinx/agent";
 
 // ---------------------------------------------------------------------------
@@ -61,7 +62,7 @@ function renderApp() {
       <I18nProvider>
         <SettingsProvider>
           <ThemeProvider>
-            <ProjectProvider>
+            <ProjectProvider pendingDiffs={makeLegacySeedDiffs()}>
               <App />
             </ProjectProvider>
           </ThemeProvider>

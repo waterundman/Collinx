@@ -25,6 +25,7 @@ import {
 } from "@collinx/core";
 import { createDemoMixer, createTasteStore } from "../data/demoData";
 import { createBrowserTasteFsAdapter } from "../services/tasteFsAdapter";
+import type { AgentToolDefinitionLike, AgentToolOutcome } from "../services/llm";
 
 // ---------------------------------------------------------------------------
 // Stage 0 (v2.1.0): tempo / meter map types
@@ -629,6 +630,19 @@ export interface ProjectStoreActions {
    * (ToolRegistry.call surfaces handler failures as status: "error").
    */
   runArranger: (config: ArrangerConfigInput) => Promise<ArrangerRunResult>;
+  /**
+   * v2.4.0 S4: 列出可供 LLM 调用的工具（OpenAI tools schema 的原料）。
+   */
+  listAgentTools: () => AgentToolDefinitionLike[];
+  /**
+   * v2.4.0 S4: AI 工具闭环入口。AgentChat 的 LLM 产出 tool_calls 后经此执行
+   * 真实工具；提案 DiffEnvelope 入队 pendingDiffs，用户审批后才写入工程。
+   * Resolves to an AgentToolOutcome, never throws.
+   */
+  runAgentTool: (
+    toolName: string,
+    args: Record<string, unknown>,
+  ) => Promise<AgentToolOutcome>;
   /**
    * Stage 0 (v1.14): run the real Engraving agent through the ToolRegistry
    * (engraving.reportCollisions). Agent-side collisions are converted to the

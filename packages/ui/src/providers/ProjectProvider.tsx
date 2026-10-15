@@ -28,13 +28,12 @@ import {
   type TasteStore,
   type TasteGenomeData,
   type GenomeVersionEntry,
-  createDiffEnvelope,
-  createNoteEvent,
   createToolCallRecord,
   mixerToDiff,
   type NewToolCallRecord,
   type HarmonyEntry,
 } from "@collinx/core";
+import type { AgentToolDefinitionLike, AgentToolOutcome } from "../services/llm";
 import {
   collectAgentMusicData,
   restoreFromAgentMusicData,
@@ -269,44 +268,9 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
     diffEngine.importSnapshots(persisted.rollbackSnapshots);
   }
 
-  // Initial project graph + demo notes + a small set of demo proposals.
-  // When a persisted project is restored, its own proposal queue wins and the
-  // demo proposals (which reference a fresh graph's revision) are skipped.
-  const initialPendingDiffs = useMemo<DiffEnvelope[]>(() => {
-    if (persisted) return [];
-    // Build proposals against a fresh graph so baseRevision matches.
-    const probe = createInitialState({ title });
-    return [
-      createDiffEnvelope({
-        baseRevision: probe.graph.getRevisionId(),
-        actor: { type: "agent", name: "HarmonyBot", model: "gpt-4o" },
-        permissionScope: "proposal_only",
-        summary: "Add a chorus phrase to the arrangement",
-        ops: [
-          {
-            op: "add_node",
-            path: "/",
-            nodeType: "Phrase",
-            data: { name: "Chorus", formRole: "chorus", startBar: 4, endBar: 5, motifIds: [] },
-          },
-        ],
-      }),
-      createDiffEnvelope({
-        baseRevision: probe.graph.getRevisionId(),
-        actor: { type: "agent", name: "BassAgent", model: "claude-3" },
-        permissionScope: "proposal_only",
-        summary: "Add a bass fill in bar 2",
-        ops: [
-          {
-            op: "add_note_group",
-            path: "/",
-            notes: [createNoteEvent({ trackId: "bass", bar: 2, beat: 1, durQn: 0.5, pitchMidi: 43 })],
-          },
-        ],
-      }),
-    ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // v2.4.0 S5: 原先这里有两条**预置假提案**（actor 硬编码标 gpt-4o / claude-3），
+  // 会让用户误以为 AI 已经参与。已删除：待审批队列现在只能由真实路径产生
+  // （AI 工具调用 runAgentTool，或各面板的真实 Agent 按钮）。
 
   const [state, dispatch] = useReducer(
     useMemo(() => createProjectReducer(diffEngine), [diffEngine]),
@@ -326,13 +290,24 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           tasteStore,
         });
       }
-      return createInitialState({
+      const restored = createInitialState({
         title,
         initialNotes: initialNotes ?? createDemoNotes(),
-        pendingDiffs: [...initialPendingDiffs, ...(pendingDiffs ?? [])],
         mixer: initialMixer,
         tasteStore,
       });
+      // v2.4.0 S5：通过 prop 注入的初始提案是针对"初始图"的，而初始图的
+      // revisionId 由 ProjectGraph.create 随机生成，调用方无法预先得知。
+      // 在这里把注入提案的 baseRevision 对齐到真实图 revision，使它们仍可被
+      // 正常审批应用（DiffEngine 会校验 baseRevision）。面板/真实 Agent 路径
+      // 产生的提案不经过这里，其 baseRevision 由生成端保证。
+      return {
+        ...restored,
+        pendingDiffs: (pendingDiffs ?? []).map((diff) => ({
+          ...diff,
+          baseRevision: restored.graph.getRevisionId(),
+        })),
+      };
     }
   );
 
@@ -471,27 +446,9 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
     };
   }, [effectivePersistenceKey, collectAgentMusicSnapshot]);
 
-  // Register a minimal "compose" agent for Stage 1 groundwork.
-  useEffect(() => {
-    agentBus.registerAgent("compose", async (msg) => {
-      if (msg.type === "request") {
-        const prompt = (msg.payload as { prompt?: string } | undefined)?.prompt ?? "";
-        await agentBus.send(
-          "compose",
-          msg.from,
-          "response",
-          {
-            kind: "text",
-            text: `[compose] Rule-based response for "${prompt}": suggested progression C-Am-F-G`,
-          },
-          msg.correlationId
-        );
-      }
-    });
-    return () => {
-      agentBus.unregisterAgent("compose");
-    };
-  }, [agentBus]);
+  // v2.4.0 S3: 原先这里注册了一个"compose" agent，对任何输入返回硬编码字符串
+  // （`[compose] Rule-based response for "<prompt>"`）。已删除——AI 对话现在由
+  // AgentChat 直接调用真实 LLM（services/llm），工具执行走 actions.runAgentTool。
 
   // v1.17.0 Stage 1: the restore API shared by the .agentmusic file load
   // path (loadProjectFromAgentMusic) and the autosave crash-recovery path
@@ -534,6 +491,18 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       },
     };
   }, [tasteStore, diffEngine]);
+
+  // v2.4.0 S4：所有待审批提案在入队前把 baseRevision 对齐到当前图 revision。
+  // 工具层拿不到 ProjectGraph（engraving 硬编码 "HEAD"、arranger 由调用方传参、
+  // composer 无图上下文），而 DiffEngine.apply 会严格校验 baseRevision ——
+  // 不修正的话，用户能点「应用」但会被拒绝（表现为"点了没反应"）。
+  const alignRevision = useCallback(
+    (diffs: DiffEnvelope[]): DiffEnvelope[] => {
+      const revision = stateRef.current.graph.getRevisionId();
+      return diffs.map((d) => ({ ...d, baseRevision: revision }));
+    },
+    [],
+  );
 
   const actions = useMemo(
     () => ({
@@ -687,7 +656,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           };
           dispatch({
             type: "ADD_PENDING_DIFFS",
-            diffs: [envelope],
+            diffs: alignRevision([envelope]),
           } satisfies ProjectStoreAction);
           // Stage 1: route the real mixing.suggestChain tool call through the
           // ToolRegistry (fire-and-forget) so the single-track suggestion is
@@ -704,7 +673,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         const envelope = mixing.toDiffEnvelope(analysis, currentMixer);
         dispatch({
           type: "ADD_PENDING_DIFFS",
-          diffs: [envelope],
+          diffs: alignRevision([envelope]),
         } satisfies ProjectStoreAction);
         // Stage 1: route the real mixing.suggestChain tool call through the
         // ToolRegistry so it shows up in the tool-call timeline. The proposal
@@ -762,7 +731,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         if (result.status === "ok" && diffs.length > 0) {
           dispatch({
             type: "ADD_PENDING_DIFFS",
-            diffs,
+            diffs: alignRevision(diffs),
           } satisfies ProjectStoreAction);
         }
         return {
@@ -807,7 +776,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         if (result.status === "ok" && diffs.length > 0) {
           dispatch({
             type: "ADD_PENDING_DIFFS",
-            diffs,
+            diffs: alignRevision(diffs),
           } satisfies ProjectStoreAction);
         }
         return {
@@ -825,6 +794,53 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
             typeof result.confidence === "number" ? result.confidence : undefined,
           diffs,
         };
+      },
+      // v2.4.0 S4: AI 工具闭环。AgentChat 的 LLM 决定调用工具时统一经此执行：
+      // 走真实 ToolRegistry（工具调用时间线可见），产出的提案 DiffEnvelope
+      // 入队 pendingDiffs，用户审批后才写入工程。
+      listAgentTools: (): AgentToolDefinitionLike[] =>
+        toolRegistry.listTools().map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters.map((p) => ({
+            name: p.name,
+            type: p.type,
+            required: p.required,
+            description: p.description,
+          })),
+        })),
+      runAgentTool: async (
+        toolName: string,
+        args: Record<string, unknown>,
+      ): Promise<AgentToolOutcome> => {
+        try {
+          const result = await toolRegistry.call(toolName, args, {
+            type: "agent",
+            name: "HarmonyBot",
+          });
+          // 工具约定把 DiffEnvelope[] 挂在 ToolResult.diffs 上（ToolResult 只
+          // 类型化了单数 diff），这里两者都取，避免漏掉提案。
+          const carried = (result as { diffs?: unknown }).diffs;
+          const diffs = Array.isArray(carried)
+            ? (carried as DiffEnvelope[])
+            : result.diff
+              ? [result.diff]
+              : [];
+          if (result.status === "ok" && diffs.length > 0) {
+            dispatch({ type: "ADD_PENDING_DIFFS", diffs: alignRevision(diffs) } satisfies ProjectStoreAction);
+          }
+          return {
+            ok: result.status === "ok",
+            data: result.data,
+            diffCount: result.status === "ok" ? diffs.length : 0,
+          };
+        } catch (err) {
+          return {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+            diffCount: 0,
+          };
+        }
       },
       // Stage 0 (v1.14): Score panel closed loop. Routes the auto-layout
       // request through the real engraving.reportCollisions tool on the shared
@@ -888,7 +904,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         if (result.status === "ok" && diffs.length > 0) {
           dispatch({
             type: "ADD_PENDING_DIFFS",
-            diffs,
+            diffs: alignRevision(diffs),
           } satisfies ProjectStoreAction);
         }
         return {

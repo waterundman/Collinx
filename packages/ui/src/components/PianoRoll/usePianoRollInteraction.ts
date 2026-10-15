@@ -43,6 +43,12 @@ export interface UsePianoRollInteractionParams {
    */
   tempoMap?: TempoMap;
   selectedNoteIds: string[];
+  /**
+   * v2.4.0 S5：工具模式。默认 "draw" 与改动前行为逐值一致（双击即新增音符）；
+   * "select" 时双击不再新增，只做选择。这样工具栏的「选择/绘制」真正影响交互，
+   * 而不是只换高亮。
+   */
+  toolMode?: "select" | "draw";
 }
 
 export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
@@ -60,6 +66,7 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
     onNoteAudition,
     selectedNoteIds,
     tempoMap,
+    toolMode = "draw",
   } = params;
 
   // v2.3.0 Stage 3b（S3 收口）：与 PianoRollView 同源的时间线——一次 O(N) 建前缀表，
@@ -266,6 +273,8 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
 
   const handleDoubleClick = useCallback(
     (canvasX: number, canvasY: number) => {
+      // v2.4.0 S5: 选择工具下双击不新增音符（绘制工具下保持既有行为）。
+      if (toolMode === "select") return;
       const hit = hitTest(canvasX, canvasY);
       if (!hit) {
         const { bar, beat, pitch } = pixelToBarBeat(canvasX, canvasY);
@@ -283,7 +292,7 @@ export function usePianoRollInteraction(params: UsePianoRollInteractionParams) {
         });
       }
     },
-    [hitTest, pixelToBarBeat, onNoteAdd]
+    [hitTest, pixelToBarBeat, onNoteAdd, toolMode]
   );
 
   const handleKeyDown = useCallback(
