@@ -1,0 +1,74 @@
+name: CI (Audio Engine)
+
+# packages/audio 是一个基于 JUCE 的 C++ 音频引擎（DSP / VST3 / CLAP / MIDI /
+# presets / sandbox / perf，约 18k 行）。它从 initial commit 起就在仓库里，但此前的
+# CI 从未构建过它 —— 因此这段代码既没有被验证过，也无法安全地迭代优化。
+#
+# 本 workflow 的职责：给它一条能构建、能跑测试的基线。首次运行大概率会暴露
+# 真实问题（依赖缺失、平台差异、测试与实现漂移），这正是它的价值：
+# 把"看不见的风险"变成"CI 里可见的红灯"。
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'packages/audio/**'
+      - '.github/workflows/ci-audio.yml'
+  pull_request:
+    paths:
+      - 'packages/audio/**'
+      - '.github/workflows/ci-audio.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-audio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    # JUCE 8.0.1 由 CMake 的 FetchContent 拉取并全量编译，约 10–20 分钟。
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install JUCE Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libasound2-dev libjack-jackd2-dev \
+            libcurl4-openssl-dev libfreetype6-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libgl1-mesa-dev libwebkit2gtk-4.1-dev \
+            xvfb
+
+      - name: Cache JUCE checkout
+        uses: actions/cache@v4
+        with:
+          path: packages/audio/build/_deps
+          key: juce-8.0.1-${{ runner.os }}
+
+      - name: Configure
+        working-directory: packages/audio
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        working-directory: packages/audio
+        # 首轮可能因机器资源紧张失败，降到 2 并行并在日志里保留完整报错
+        run: cmake --build build --parallel 2
+
+      - name: Test
+        working-directory: packages/audio
+        # JUCE 的 GUI/host 模块在无显示环境下需要虚拟显示
+        run: xvfb-run -a ctest --test-dir build --output-on-failure
+
+      - name: Upload CTest log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-log
+          path: packages/audio/build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
