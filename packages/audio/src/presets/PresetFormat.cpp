@@ -124,23 +124,25 @@ std::optional<PresetFormat> PresetFormat::fromJson(const juce::String& json)
     PresetFormat preset;
 
     // Metadata
-    preset.name = obj->getProperty("name", "");
-    preset.description = obj->getProperty("description", "");
-    preset.author = obj->getProperty("author", "");
-    preset.category = obj->getProperty("category", "");
-    preset.pluginName = obj->getProperty("pluginName", "");
-    preset.pluginIdentifier = obj->getProperty("pluginIdentifier", "");
-    preset.pluginFormat = obj->getProperty("pluginFormat", "");
+    // 两参 getProperty(键, 默认值) 是 juce::var 的 API；DynamicObject 只有单参
+    // 版本（上面的 obj 仅用于判空）。接收者改用 parsed。
+    preset.name = parsed.getProperty("name", "");
+    preset.description = parsed.getProperty("description", "");
+    preset.author = parsed.getProperty("author", "");
+    preset.category = parsed.getProperty("category", "");
+    preset.pluginName = parsed.getProperty("pluginName", "");
+    preset.pluginIdentifier = parsed.getProperty("pluginIdentifier", "");
+    preset.pluginFormat = parsed.getProperty("pluginFormat", "");
 
     // Version
-    preset.version = static_cast<int>(obj->getProperty(FORMAT_VERSION_KEY, 1));
+    preset.version = static_cast<int>(parsed.getProperty(FORMAT_VERSION_KEY, 1));
 
     // Timestamps
-    preset.createdTime = obj->getProperty("createdTime", "");
-    preset.modifiedTime = obj->getProperty("modifiedTime", "");
+    preset.createdTime = parsed.getProperty("createdTime", "");
+    preset.modifiedTime = parsed.getProperty("modifiedTime", "");
 
     // Tags
-    auto tagsVar = obj->getProperty("tags", juce::var());
+    auto tagsVar = parsed.getProperty("tags", juce::var());
     if (tagsVar.isArray())
     {
         auto* tagsArray = tagsVar.getArray();
@@ -152,7 +154,7 @@ std::optional<PresetFormat> PresetFormat::fromJson(const juce::String& json)
     }
 
     // State from XML
-    auto stateXml = obj->getProperty("stateXml", "").toString();
+    auto stateXml = parsed.getProperty("stateXml", "").toString();
     if (stateXml.isNotEmpty())
     {
         auto xml = juce::XmlDocument::parse(stateXml);

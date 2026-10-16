@@ -469,7 +469,7 @@ bool ScanCache::loadFromJson(const juce::String& json)
     if (!obj)
         return false;
 
-    auto entriesVar = obj->getProperty("entries", {});
+    auto entriesVar = parsed.getProperty("entries", {});
     if (!entriesVar.isArray())
         return false;
 
@@ -478,7 +478,15 @@ bool ScanCache::loadFromJson(const juce::String& json)
     if (!root)
         return false;
 
-    auto entriesArray = root->getProperty("entries", juce::Array<juce::var>());
+    // 两参 getProperty(键, 默认值) 是 juce::var 的 API，DynamicObject 只有单参
+    // 版本；且它返回 var 而不是 Array<var>，不能直接 range-for。原语义是
+    // 「缺 entries 即空数组 → 不遍历，但仍继续执行并返回 true」，故显式取
+    // 数组指针并回退到一张空表，而不是提前 return false（那会改变返回值）。
+    static const juce::Array<juce::var> kEmptyEntries;
+    auto entriesArrayVar = entries.getProperty("entries", juce::var());
+    auto* entriesArrayPtr = entriesArrayVar.getArray();
+    const juce::Array<juce::var>& entriesArray =
+        entriesArrayPtr != nullptr ? *entriesArrayPtr : kEmptyEntries;
 
     std::lock_guard<std::mutex> lock(cacheMutex);
     cache.clear();
@@ -493,26 +501,28 @@ bool ScanCache::loadFromJson(const juce::String& json)
             continue;
 
         CacheEntry entry;
-        entry.filePath = entryObj->getProperty("filePath", "").toString();
-        entry.isValid = entryObj->getProperty("isValid", true);
+        // 两参 getProperty 是 juce::var 的 API，接收者用 entryVar
+        // （entryObj 仅用于上面的判空）。
+        entry.filePath = entryVar.getProperty("filePath", "").toString();
+        entry.isValid = entryVar.getProperty("isValid", true);
 
         auto scanTimeInt = static_cast<juce::int64>(
-            entryObj->getProperty("scanTime", 0));
+            entryVar.getProperty("scanTime", 0));
         entry.scanTime = std::chrono::system_clock::from_time_t(
             static_cast<std::time_t>(scanTimeInt));
 
         auto accessTimeInt = static_cast<juce::int64>(
-            entryObj->getProperty("lastAccessTime", 0));
+            entryVar.getProperty("lastAccessTime", 0));
         entry.lastAccessTime = std::chrono::system_clock::from_time_t(
             static_cast<std::time_t>(accessTimeInt));
 
         entry.fileSize = static_cast<juce::int64>(
-            entryObj->getProperty("fileSize", 0));
+            entryVar.getProperty("fileSize", 0));
         entry.fileModificationTime = static_cast<juce::int64>(
-            entryObj->getProperty("fileModificationTime", 0));
+            entryVar.getProperty("fileModificationTime", 0));
 
         // Load descriptions
-        auto descsVar = entryObj->getProperty("descriptions", {});
+        auto descsVar = entryVar.getProperty("descriptions", {});
         if (descsVar.isArray())
         {
             for (const auto& descVar : *descsVar.getArray())
@@ -523,14 +533,14 @@ bool ScanCache::loadFromJson(const juce::String& json)
                     if (descObj)
                     {
                         juce::PluginDescription desc;
-                        desc.name = descObj->getProperty("name", "").toString();
-                        desc.pluginFormatName = descObj->getProperty("formatName", "").toString();
-                        desc.category = descObj->getProperty("category", "").toString();
-                        desc.manufacturerName = descObj->getProperty("manufacturer", "").toString();
-                        desc.version = descObj->getProperty("version", "").toString();
-                        desc.fileOrIdentifier = descObj->getProperty("fileOrIdentifier", "").toString();
+                        desc.name = descVar.getProperty("name", "").toString();
+                        desc.pluginFormatName = descVar.getProperty("formatName", "").toString();
+                        desc.category = descVar.getProperty("category", "").toString();
+                        desc.manufacturerName = descVar.getProperty("manufacturer", "").toString();
+                        desc.version = descVar.getProperty("version", "").toString();
+                        desc.fileOrIdentifier = descVar.getProperty("fileOrIdentifier", "").toString();
                         desc.isInstrument = static_cast<bool>(
-                            descObj->getProperty("isInstrument", false));
+                            descVar.getProperty("isInstrument", false));
                         entry.descriptions.push_back(desc);
                     }
                 }

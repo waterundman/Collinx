@@ -407,7 +407,7 @@ bool PresetStorage::loadIndex()
     if (obj == nullptr)
         return false;
 
-    auto entriesVar = obj->getProperty("entries", juce::var());
+    auto entriesVar = parsed.getProperty("entries", juce::var());
     if (!entriesVar.isArray())
         return false;
 
@@ -423,15 +423,17 @@ bool PresetStorage::loadIndex()
             continue;
 
         IndexEntry entry;
-        entry.id = entryObj->getProperty("id", "");
-        entry.name = entryObj->getProperty("name", "");
-        entry.category = entryObj->getProperty("category", "");
-        entry.filePath = entryObj->getProperty("filePath", "");
-        entry.pluginName = entryObj->getProperty("pluginName", "");
-        entry.pluginFormat = entryObj->getProperty("pluginFormat", "");
-        entry.modifiedTime = entryObj->getProperty("modifiedTime", "");
+        // 两参 getProperty 是 juce::var 的 API，接收者用 entryVar
+        // （entryObj 仅用于上面的判空）。
+        entry.id = entryVar.getProperty("id", "");
+        entry.name = entryVar.getProperty("name", "");
+        entry.category = entryVar.getProperty("category", "");
+        entry.filePath = entryVar.getProperty("filePath", "");
+        entry.pluginName = entryVar.getProperty("pluginName", "");
+        entry.pluginFormat = entryVar.getProperty("pluginFormat", "");
+        entry.modifiedTime = entryVar.getProperty("modifiedTime", "");
 
-        auto tagsVar = entryObj->getProperty("tags", juce::var());
+        auto tagsVar = entryVar.getProperty("tags", juce::var());
         if (tagsVar.isArray())
         {
             auto* tagsArray = tagsVar.getArray();

@@ -291,7 +291,11 @@ int CrashRecoveryManager::deserializeStates(const juce::MemoryBlock& data)
     if (rootObj == nullptr)
         return 0;
 
-    auto statesVar = rootObj->getProperty("states", juce::var());
+    // 「键 + 默认值」的两参 getProperty 属于 juce::var（juce_Variant.h:
+    //   var getProperty (const Identifier&, const var& defaultReturnValue) const;
+    // ），DynamicObject 只有单参版本。故接收者必须是 var 本身，而非
+    // getDynamicObject() 拿到的 DynamicObject*（上面的 rootObj 只用于判空）。
+    auto statesVar = root.getProperty("states", juce::var());
     if (!statesVar.isArray())
         return 0;
 
@@ -312,18 +316,20 @@ int CrashRecoveryManager::deserializeStates(const juce::MemoryBlock& data)
             continue;
 
         PluginStateSnapshot snapshot;
-        snapshot.originalIndex = obj->getProperty("index", -1);
-        snapshot.pluginName = obj->getProperty("name", "").toString();
-        snapshot.pluginIdentifier = obj->getProperty("identifier", "").toString();
-        snapshot.formatName = obj->getProperty("format", "").toString();
-        snapshot.sampleRate = obj->getProperty("sampleRate", 44100.0);
-        snapshot.blockSize = obj->getProperty("blockSize", 512);
-        snapshot.wasActive = obj->getProperty("wasActive", false);
-        snapshot.wasPrepared = obj->getProperty("wasPrepared", false);
-        snapshot.timestamp = static_cast<int64_t>(obj->getProperty("timestamp", 0));
+        // 两参 getProperty 是 juce::var 的 API，DynamicObject 只有单参版本，
+        // 故接收者用 stateVar（obj 只用于上面的判空）。
+        snapshot.originalIndex = stateVar.getProperty("index", -1);
+        snapshot.pluginName = stateVar.getProperty("name", "").toString();
+        snapshot.pluginIdentifier = stateVar.getProperty("identifier", "").toString();
+        snapshot.formatName = stateVar.getProperty("format", "").toString();
+        snapshot.sampleRate = stateVar.getProperty("sampleRate", 44100.0);
+        snapshot.blockSize = stateVar.getProperty("blockSize", 512);
+        snapshot.wasActive = stateVar.getProperty("wasActive", false);
+        snapshot.wasPrepared = stateVar.getProperty("wasPrepared", false);
+        snapshot.timestamp = static_cast<int64_t>(stateVar.getProperty("timestamp", 0));
 
         // Decode base64 binary state
-        juce::String b64 = obj->getProperty("state", "").toString();
+        juce::String b64 = stateVar.getProperty("state", "").toString();
         if (b64.isNotEmpty())
         {
             juce::MemoryOutputStream stream;
@@ -511,17 +517,17 @@ CrashRecoveryManager::snapshotFromJson(const juce::String& json) const
     if (obj == nullptr)
         return snapshot;
 
-    snapshot.originalIndex = obj->getProperty("index", -1);
-    snapshot.pluginName = obj->getProperty("name", "").toString();
-    snapshot.pluginIdentifier = obj->getProperty("identifier", "").toString();
-    snapshot.formatName = obj->getProperty("format", "").toString();
-    snapshot.sampleRate = obj->getProperty("sampleRate", 44100.0);
-    snapshot.blockSize = obj->getProperty("blockSize", 512);
-    snapshot.wasActive = obj->getProperty("wasActive", false);
-    snapshot.wasPrepared = obj->getProperty("wasPrepared", false);
-    snapshot.timestamp = static_cast<int64_t>(obj->getProperty("timestamp", 0));
+    snapshot.originalIndex = parsed.getProperty("index", -1);
+    snapshot.pluginName = parsed.getProperty("name", "").toString();
+    snapshot.pluginIdentifier = parsed.getProperty("identifier", "").toString();
+    snapshot.formatName = parsed.getProperty("format", "").toString();
+    snapshot.sampleRate = parsed.getProperty("sampleRate", 44100.0);
+    snapshot.blockSize = parsed.getProperty("blockSize", 512);
+    snapshot.wasActive = parsed.getProperty("wasActive", false);
+    snapshot.wasPrepared = parsed.getProperty("wasPrepared", false);
+    snapshot.timestamp = static_cast<int64_t>(parsed.getProperty("timestamp", 0));
 
-    juce::String b64 = obj->getProperty("state", "").toString();
+    juce::String b64 = parsed.getProperty("state", "").toString();
     if (b64.isNotEmpty())
     {
         juce::MemoryOutputStream stream;
