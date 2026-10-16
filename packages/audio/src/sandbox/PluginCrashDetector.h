@@ -83,6 +83,22 @@ public:
      */
     bool isInitialized() const { return initialized.load(); }
 
+    /**
+     * Internal crash report — called from the platform handler.
+     *
+     * 必须是 public：Unix 侧的处理器是 .cpp 中的 static 自由函数
+     * crashSignalHandler()（PluginCrashDetector.cpp:220），它不属于本类，无权
+     * 访问私有成员。也不能改用 friend：
+     *   1) friend 声明会把这个名字引入命名空间作用域并赋予外部链接，与 .cpp 里
+     *      的 `static` 定义冲突（static declaration follows non-static declaration）；
+     *   2) friend 声明需要写出完整签名，其中 siginfo_t 依赖 <signal.h>，会破坏本
+     *      头文件「std-only、不引入 JUCE/平台头」的约定。
+     * 另一个调用点 safeExecute() 的 Windows SEH 分支（.cpp:131）是成员函数，
+     * 不受本改动影响；本方法仍属内部实现，外部调用方请使用 safeExecute()。
+     */
+    void reportCrash(int pluginIndex, const std::string& signalName,
+                     const std::string& description, const std::string& address);
+
 private:
     CrashCallback crashCallback;
     mutable std::mutex callbackMutex;
@@ -102,12 +118,6 @@ private:
     struct PreviousHandlers;
     PreviousHandlers* prevHandlers = nullptr;
 #endif
-
-    /**
-     * Internal crash report — called from platform handler.
-     */
-    void reportCrash(int pluginIndex, const std::string& signalName,
-                     const std::string& description, const std::string& address);
 
     /**
      * Platform-specific initialization.
