@@ -97,7 +97,12 @@ target_link_libraries(collinx-audio-engine PRIVATE
   juce::juce_dsp
 )
 
-juce_generate_juce_header(collinx-audio-engine)
+# v2.8.0：原此处调用了 juce_generate_juce_header(collinx-audio-engine)，但
+#   1) 目标是普通 add_executable，JUCE 要求目标由 juce_add_* 创建才带 sources 目录
+#      → CMake 直接报 "Target ... does not have a generated sources directory"；
+#   2) 全仓 0 个文件 include <JuceHeader.h>，这个头文件从未被用到。
+#   故移除。若将来真的要用 JuceHeader，应改用 juce_add_console_app/juce_add_gui_app。
+
 
 # Tests
 option(BUILD_TESTS "Build tests" ON)
@@ -158,7 +163,8 @@ if(BUILD_TESTS)
     juce::juce_audio_plugin_client
   )
 
-  juce_generate_juce_header(collinx-audio-tests)
+  # v2.8.0：同上，移除对未使用 JuceHeader.h 的生成调用（详见主目标处的说明）。
+
 
   add_test(NAME Vst3Tests COMMAND collinx-audio-tests)
   add_test(NAME ClapTests COMMAND collinx-audio-tests)
