@@ -29,6 +29,13 @@ export interface AgentToolDefinitionLike {
   name: string;
   description: string;
   parameters: AgentToolParameterLike[];
+  /**
+   * v2.6.0：工具权限（proposal_only / read_only）。存在于 core 的 ToolDefinition，
+   * 但此前从未传给模型 —— 模型无从判断"这次调用有没有改工程"，于是把只读
+   * 分析说成"已生成提案"。listTools 侧会把它拼进 description，这里保留原值
+   * 供 UI 展示与测试断言。
+   */
+  permission?: string;
 }
 
 export interface AgentToolOutcome {
@@ -111,6 +118,11 @@ export const AGENT_SYSTEM_PROMPT = [
   "4. 解释音乐决策时给结论 + 理由 + 一个可替换方案，避免空话。",
   "5. 用与用户相同的语言回复。",
   "6. 不要声称你已经修改了工程数据——你只能提交提案。",
+  // v2.6.0：工具描述里已标注【可产出提案】/【只读分析】，这里再给一条判定规则。
+  // 此前 14 个工具的权限（proposal_only / read_only）只存在于 core 的元数据里，
+  // 从未传给模型 → 模型无法判断"这次调用到底改了工程没有"，容易把只读分析
+  // 说成"已生成提案"，或把提案说成"已改好"。
+  "7. 依据工具描述尾部的标注判断：标【只读分析】的工具**不会**产出提案，回复里不要说「已生成提案」；标【可产出提案】的工具若返回 proposalsEnqueued=0，也要如实说「未产出提案」，不要含糊成「已完成」。",
 ].join("\n");
 
 function parseToolArguments(raw: string): Record<string, unknown> {

@@ -824,7 +824,15 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       listAgentTools: (): AgentToolDefinitionLike[] =>
         toolRegistry.listTools().map((tool) => ({
           name: tool.name,
-          description: tool.description,
+          // v2.6.0：把权限翻译成模型能据以判断的显式标注。工具的 permission
+          // 一直在 core 元数据里，但从未出现在给 LLM 的 schema 中 → 模型无法
+          // 区分"这次调用会改工程"与"只是分析"，容易误报"已生成提案"。
+          description: `${tool.description}。${
+            tool.permission === "proposal_only"
+              ? "【可产出提案】调用后可能产生待用户审批的工程改动；若返回 proposalsEnqueued=0 请如实说明未产出。"
+              : "【只读分析】不会产出提案，也不会改动工程；不要把它说成已生成方案。"
+          }`,
+          permission: tool.permission,
           parameters: tool.parameters.map((p) => ({
             name: p.name,
             type: p.type,
