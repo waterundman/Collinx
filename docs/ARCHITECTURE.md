@@ -213,9 +213,60 @@ TS 实现（`core/context.ts`、`voice/adsr.ts`）已写但**暂停**。
 为此补了运行时验证脚本（`.audit/i18n-runtime-audit.mjs`）——
 遍历所有界面检测 raw key，作为删除 i18n 前的安全网。
 
+### 5.4 ⭐ 最重要的一条：「零引用」不等于死代码
+
+v2.7.0 我按"当前零引用"删除了 9 个组件目录。用户在 Obsidian 规格库
+（`D:/obsidian分2/ai引用库/项目概况/Collinx`，258 个 md）里质疑后逐条核查，
+**它们全部是历次迭代 Stage 的明确交付物**：
+
+| 组件 | 规格依据 |
+|---|---|
+| CrashRecovery（Notification/Dialog） | `bayesian/v1.3.0/plan.md` Stage 3「崩溃恢复 UI」C_impl 0.85 |
+| PluginBrowser/PluginHealthIndicator | 同上 Stage 3 |
+| PluginBrowser/ScanProgressDialog | `spec/v1.5.0/main.md:110`（明确列出该文件路径） |
+| Performance/PerformanceDashboard | `spec/v1.5.0/main.md:118`（断言 CPU/内存/延迟） |
+| PluginEditor（5 组件） | 配套 PluginBrowser 的插件编辑能力 |
+| PresetBrowser（3 组件） | 配套 `packages/audio/src/presets`（2,063 行） |
+| ScoreView | `bayesian/v0.1.0/plan.md:199` `symbol: "ScoreView"` |
+| ABPlayerUI | `bayesian/v0.2.0/plan.md:158` `symbol: "ABPlayerUI"` |
+
+**本项目是 spec-driven：代码 = Stage 交付物。因此判据是「规格里有没有它」，
+而不是「当前有没有人 import」。** 已全部恢复，并在各目录 `index.ts` 顶部标注
+规格来源 / 存在理由 / 阻塞条件。
+
+审计脚本 `.audit/dead-code-investigation.mjs` 已把这条判据固化：
+它把代码的零引用导出与规格库的 **229 个 symbol / 290 个文件路径**声明交叉比对，
+**结论：本项目当前没有真正的死代码**。
+
+> 例外：i18n 的 133 个键确实删了（`common.*` 为主）。它们经过**运行时验证**
+> （遍历 9 tab + 设置页全部分类，界面 0 条 raw key）才删，与"零引用即删"是
+> 两回事。`settings.*` 869 个同理属于内容资产，**已保留**。
+
+
 ---
 
-## 六、结构重整建议（待执行）
+## 六、Electron 外壳（v2.8.0 已落地）
+
+```
+packages/desktop/          Electron 外壳
+├── src/main.ts            主进程：窗口 + 音频桥 + IPC（不做任何音乐逻辑）
+├── src/preload.ts         唯一通道：contextBridge 白名单 API（不暴露 ipcRenderer 本身）
+├── src/audio-bridge.ts    原生引擎桥：惰性加载 + 全异步 + 可降级
+└── README.md              运行方式、环境变量、代价与阻塞项
+```
+
+渲染侧对应 `packages/ui/src/services/desktop-bridge.ts`：通过 `globalThis.collinx`
+探测外壳是否存在，**浏览器中自动降级**（返回 `unavailable` 并说明原因，不静默失败）。
+
+**安全基线**：`contextIsolation: true` + `nodeIntegration: false`，渲染进程拿不到
+Node 能力；暴露的是收敛的领域 API（`audioEngine.*`），不是 `ipcRenderer` 本身。
+
+**当前阻塞**（两件，与引擎侧同一个瓶颈）：
+1. `packages/audio` 尚未编译通过（CI 迭代中）
+2. N-API 缺合成器接口 —— 需把 `AudioEngine::handleMidiMessage` / `Transport` /
+   `setMasterVolume` 包一层绑定（约 200 行 C++）
+
+## 七、结构重整建议
 
 | 优先级 | 建议 | 理由 |
 |---|---|---|

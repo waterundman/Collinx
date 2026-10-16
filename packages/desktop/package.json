@@ -1,0 +1,17 @@
+{
+  "name": "@collinx/desktop",
+  "version": "0.1.0",
+  "description": "Collinx 桌面版外壳 —— 承载 JUCE C++ 音频引擎（@collinx/audio-native）与 Web 界面",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json && electron dist/main.js",
+    "start": "electron dist/main.js"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}
