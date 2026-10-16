@@ -94,6 +94,10 @@ target_link_libraries(collinx-audio-engine PRIVATE
   juce::juce_audio_devices
   juce::juce_audio_formats
   juce::juce_audio_processors
+  # v2.8.0：AudioEngine 继承 juce::AudioAppComponent（audio-engine.h:11），
+  # 该类定义在 juce_audio_utils 模块。缺它会导致
+  # "expected class-name before ',' token"，并连带让所有 override 声明失败。
+  juce::juce_audio_utils
   juce::juce_dsp
 )
 
@@ -159,6 +163,8 @@ if(BUILD_TESTS)
     juce::juce_audio_devices
     juce::juce_audio_formats
     juce::juce_audio_processors
+    # v2.8.0：与主目标保持一致（测试链接 audio-utils 以覆盖 AudioAppComponent 用法）
+    juce::juce_audio_utils
     juce::juce_dsp
     juce::juce_audio_plugin_client
   )
