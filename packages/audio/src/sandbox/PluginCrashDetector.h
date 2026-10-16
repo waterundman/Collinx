@@ -119,5 +119,16 @@ private:
      */
     void shutdownPlatform();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginCrashDetector)
+    // 本头文件刻意不依赖 JUCE（sandbox 崩溃处理层保持 std-only，只有 .cpp 才
+    // include juce_core），所以这里的 JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR
+    // 从未被展开，被编译器当成无类型的成员声明：
+    //   error: ISO C++ forbids declaration of
+    //          'JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR' with no type
+    // 改为它展开后的 std 等价物。宏原文（juce_core/system/juce_PlatformDefs.h:240/254）：
+    //   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(x)
+    //     = JUCE_DECLARE_NON_COPYABLE(x) + JUCE_LEAK_DETECTOR(x)
+    //     = "x(const x&) = delete; x& operator=(const x&) = delete;" + 泄漏检测器
+    // 其中 LEAK_DETECTOR 依赖 juce::LeakedObjectDetector，本头文件不可用也不适用。
+    PluginCrashDetector(const PluginCrashDetector&) = delete;
+    PluginCrashDetector& operator=(const PluginCrashDetector&) = delete;
 };
