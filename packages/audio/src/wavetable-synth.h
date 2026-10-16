@@ -5,6 +5,19 @@
 #include <cmath>
 #include <array>
 
+/**
+ * v2.8.0：JUCE 的 juce::SynthesiserSound 是**抽象类**（appliesToNote /
+ * appliesToChannel 为纯虚），不能直接 new —— 原代码 new juce::SynthesiserSound()
+ * 会报 "invalid new-expression of abstract class type"。
+ * 这里提供一个最简派生：对任意音符与通道都说"能播"。
+ */
+class CollinxSynthSound : public juce::SynthesiserSound
+{
+public:
+    bool appliesToNote (int) override { return true; }
+    bool appliesToChannel (int) override { return true; }
+};
+
 enum class Waveform
 {
     Sine,

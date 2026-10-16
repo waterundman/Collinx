@@ -113,7 +113,7 @@ BuiltinSynth::BuiltinSynth()
 {
     for (int i = 0; i < 8; ++i)
         addVoice(new SineWaveVoice());
-    addSound(new juce::SynthesiserSound());
+    addSound(new CollinxSynthSound());
 }
 
 void BuiltinSynth::prepare(const juce::dsp::ProcessSpec& spec)
@@ -141,8 +141,10 @@ void BuiltinSynth::renderNextBlock(juce::AudioBuffer<float>& buffer,
 void BuiltinSynth::renderNextBlock(juce::AudioBuffer<float>& buffer,
                                      const juce::MidiBuffer& midiMessages,
                                      int startSample, int numSamples)
-{
-    processMidi(midiMessages, startSample, numSamples);
+{    // v2.8.0：juce::Synthesiser 没有 processMidi()。用基类的 handleMidiEvent
+    // 逐个分发 MIDI 事件，再自行 clear + renderVoices（保持原有渲染流程）。
+    for (const auto metadata : midiMessages)
+        handleMidiEvent(metadata.getMessage());
 
     buffer.clear(startSample, numSamples);
 
@@ -173,5 +175,5 @@ void BuiltinSynth::noteOn(int channel, int midiNote, float velocity)
 void BuiltinSynth::noteOff(int channel, int midiNote)
 {
     if (midiNote >= 0 && midiNote <= 127)
-        juce::Synthesiser::noteOff(channel, midiNote, true);
+        juce::Synthesiser::noteOff(channel, midiNote, 0.0f, true); // JUCE 8: (channel, note, velocity, allowTailOff)
 }
