@@ -134,6 +134,8 @@ export type ProjectStoreAction =
   | { type: "ADD_PENDING_DIFFS"; diffs: DiffEnvelope[] }
   | { type: "RECORD_DECISION_EVIDENCE"; diff: DiffEnvelope }
   | { type: "ADD_NOTE"; note: NoteEvent }
+  /** v2.6.0：从空编排的起点卡片创建乐段 */
+  | { type: "ADD_PHRASE"; name: string; formRole: string; startBar: number; endBar: number }
   | { type: "ADD_NOTES"; notes: NoteEvent[] }
   | { type: "MOVE_NOTE"; id: string; bar: number; beat: number; pitch: number }
   | { type: "RESIZE_NOTE"; id: string; durQn: number }
@@ -591,6 +593,13 @@ export interface ProjectStoreActions {
   rejectDiff: (diffId: string) => void;
   rollbackDiff: (rollbackToken: string) => void;
   addNote: (note: NoteEvent) => void;
+  /** v2.6.0：创建乐段（空编排的起点卡片 / 曲式模板都走它） */
+  addPhrase: (phrase: {
+    name: string;
+    formRole: string;
+    startBar: number;
+    endBar: number;
+  }) => void;
   /** v2.2.0 S1 (D22-4)：批量新增（录制 take 落盘；一条 undo 记录） */
   addNotes: (notes: NoteEvent[]) => void;
   /** v2.1.0 S3 (D13-1)：设置 bar 处速度（bpm）——TransportBar 的 BPM 控件消费 */
@@ -1323,6 +1332,20 @@ export function createProjectReducer(
             ? [...state.pendingDiffs, rolledBack]
             : state.pendingDiffs,
         };
+      }
+
+      case "ADD_PHRASE": {
+        // v2.6.0：支持从「空编排」卡片直接创建乐段，让空白区变成可操作起点。
+        // graph-native：写 Phrase 节点（不带音符），notes 投影不受影响。
+        const graph = state.graph.snapshot();
+        graph.addNode("Phrase", {
+          name: action.name,
+          formRole: action.formRole,
+          startBar: action.startBar,
+          endBar: action.endBar,
+          motifIds: [],
+        });
+        return withUndo(state, { graph });
       }
 
       case "ADD_NOTE": {

@@ -13,31 +13,24 @@
   --bg-error: #271515;
   --bg-warning: #1e1a10;
 
-  /* ---- xAI-style Surface Alias (00009 template) ---- */
-  --canvas: #0a0a0a;
+  /* ---- Surface Alias ----
+     v2.6.0：同一语义（"页面底色"）曾有 --bg-primary / --canvas / --canvas-bg
+     三个名字且值相同，改主题时极易漏改其一。现在一律引用语义源。 */
+  --canvas: var(--bg-primary);
   --canvas-soft: #1a1c20;
-  --canvas-card: #191919;
-  --canvas-mid: #363a3f;
-  --hairline: #212327;
   --ink: #ffffff;
-  --ink-hover: #fafaf7;
   --body: #dadbdf;
   --body-mid: #7d8187;
-  --mute: #7d8187;
 
-  /* ---- xAI-style Accent Alias (00009 template) ---- */
+  /* ---- Accent Alias ----
+     v2.6.0：删去零引用的 dusk/twilight/breeze/midnight/sunset-soft（未挂载组件
+     的历史遗留）；sunset-ink 归一到 sunset（浅色主题覆盖为更深的橙）。 */
   --accent-sunset: #ff7a17;
-  --accent-sunset-soft: #ffc285;
-  /* v2.5.0：sunset 的可读文字变体（浅色主题下需要更深的橙才达 4.5:1） */
-  --accent-sunset-ink: #ff7a17;
-  --accent-dusk: #7c3aed;
-  --accent-twilight: #c4b5fd;
-  --accent-breeze: #a0c3ec;
-  --accent-midnight: #0d1726;
+  --accent-sunset-ink: var(--accent-sunset);
 
   /* ---- Component ---- */
   --button-bg: #2a2a36;
-  --button-text: #e8e8ec;
+  --button-text: var(--text-primary);
 
   /* ---- Text ---- */
   /* v2.5.0：次级/弱化文字整体提亮，修正"暗底深灰字"（#44444e on #0a0a0a = 2.06:1）
@@ -49,7 +42,10 @@
   /* 强调色（亮色）背景上的文字色 —— 修复"白字 + 青色/绿色底"（1.45–1.86:1）。 */
   --text-on-accent: #06121a;
 
-  /* ---- Accent ---- */
+  /* ---- Accent ----
+     v2.6.0：--accent-primary 成为唯一品牌强调色入口（焦点环、链接、选中态
+     都引用它），--accent-cyan 作为其暗色实现保留。删去 10 个零引用色。 */
+  --accent-primary: var(--accent-cyan);
   --accent-cyan: #00d4ff;
   --accent-cyan-hover: #33ddff;
   --accent-cyan-dark: #006680;
@@ -58,7 +54,7 @@
   --accent-green-light: #2ecc71;
   --accent-red: #ef4444;
   --accent-red-light: #f87171;
-  --accent-red-pale: #f87171;
+  --accent-red-pale: var(--accent-red-light);
   --accent-yellow: #f59e0b;
   --accent-yellow-light: #f1c40f;
   --accent-purple: #a29bfe;
@@ -66,31 +62,22 @@
   --accent-purple-light: #7c6cf7;
   --accent-blue: #0984e3;
   --accent-blue-light: #3498db;
-  --accent-orange: #e17055;
-  --accent-orange-dark: #e67e22;
   --accent-amber: #f39c12;
-  --accent-pink: #fd79a8;
   --accent-gold: #fdcb6e;
-  --accent-peach: #fab1a0;
   --accent-mint: #55efc4;
-  --accent-teal: #00cec9;
   --accent-sky: #00b8e0;
-  --accent-sky-light: #74b9ff;
   --accent-lavender: #7c7cf7;
   --accent-lavender-light: #b8a9fe;
-  --accent-cyan-pale: #81ecec;
   --accent-hot-pink: #ff0040;
-  --accent-peach-light: #ff7675;
-  --accent-magenta: #fd79a8;
 
   /* ---- Semantic Colors (for canvas/charts) ---- */
-  --canvas-bg: #0a0a0a;
+  --canvas-bg: var(--bg-primary);
   --canvas-grid: #3a3a48;
-  --canvas-node-default: #8a8a96;
-  --canvas-highlight: #00d4ff;
+  --canvas-node-default: var(--text-muted);
+  --canvas-highlight: var(--accent-cyan);
   /* v2.5.0：乐谱墨色。VexFlow 默认把音乐字形的 fill/stroke 写成黑色，
      暗色主题下五线谱整体不可见（1.05:1）。 */
-  --score-ink: #e8e8ec;
+  --score-ink: var(--text-primary);
 
   /* ---- Section Colors (ArrangementView) ---- */
   --section-verse: #74b9ff;
@@ -148,12 +135,9 @@
 
   /* ---- ABPlayer States ---- */
   --ab-reference: #00b894;
-  --ab-compare: #7c7cf7;
   --ab-different: #e17055;
   --ab-same: #0984e3;
   --ab-unknown: #636e72;
-  --ab-reference-bg: rgba(0, 184, 148, 0.13);
-  --ab-compare-bg: rgba(124, 124, 247, 0.13);
   --ab-different-bg: rgba(225, 112, 85, 0.13);
   --ab-same-bg: rgba(9, 132, 227, 0.13);
   --ab-unknown-bg: rgba(99, 110, 114, 0.13);
@@ -169,10 +153,24 @@
   --mockup-surface-start: #2a3040;
   --mockup-surface-end: #1a1f2e;
 
-  /* ---- Border (xAI-style hairline chrome) ---- */
+  /* ---- Border ----
+     v2.6.0：焦点环此前是橙色（--accent-sunset #ff7a17），是全仓第三套强调色，
+     与青/蓝主色冲突。现在归位到品牌强调色。 */
   --border-primary: #212327;
   --border-secondary: #363a3f;
-  --border-focus: #ff7a17;
+  --border-focus: var(--accent-primary);
+
+  /* ---- Legacy Aliases ----
+     v2.6.0：这批名字此前**被 CSS 引用但从未定义**，浏览器把它们当无效值丢弃，
+     相关声明静默失效（如 .topBarButton:hover 的底色一直没生效）。此处按语义
+     归一，后续可随调用点改名后删除。 */
+  --border: var(--border-primary);
+  --border-subtle: var(--border-primary);
+  --surface-secondary: var(--bg-secondary);
+  --danger-primary: var(--accent-red);
+  --success-primary: var(--accent-green);
+  --bg-tertiary: var(--bg-overlay);
+  --text-tertiary: var(--text-muted);
 
   /* ---- Spacing ---- */
   --space-1: 4px;
@@ -183,7 +181,6 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-10: 40px;
-  --space-12: 48px;
 
   /* ---- Radius ---- */
   --radius-sm: 4px;
@@ -192,9 +189,8 @@
   --radius-xl: 12px;
   --radius-full: 9999px;
 
-  /* ---- Shadow (xAI: flat surfaces; hairline carries elevation) ---- */
+  /* ---- Shadow (flat surfaces; hairline carries elevation) ---- */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.24);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.3);
 
   /* ---- Transition ---- */
@@ -204,12 +200,10 @@
 
   /* ---- Easing ---- */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
-  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 
   /* ---- Font Families ---- */
   --font-display: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
   --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --font-body: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-body: var(--font-ui);
   --font-mono: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
 }

@@ -42,6 +42,8 @@ export interface TeachingPanelProps {
   /** Triggers the store's runTeachingHarmony action. Absent = block hidden
    *  (tests / minimal embeds render the panel without the harmony block). */
   onExplainHarmony?: () => void;
+  /** v2.6.0：空态的"下一步"入口（跳到对应标签页），把依赖型空态变成可操作起点 */
+  onNavigate?: (tab: "arrange" | "mixer" | "agent") => void;
   /** False when the chords track has no notes: the trigger button is
    *  disabled instead of letting the tool run on an empty progression. */
   canExplainHarmony?: boolean;
@@ -56,8 +58,18 @@ const LEVEL_LABELS: Record<UserLevel, string> = {
 
 const LEVELS: UserLevel[] = ["beginner", "intermediate", "advanced", "professional"];
 
-export const TeachingPanel: React.FC<TeachingPanelProps> = ({
-  activeDiff,
+/** v2.6.0：空态的"下一步"三入口 —— 把依赖型空态变成可操作起点 */
+const TEACHING_NEXT_STEPS: {
+  tab: "arrange" | "mixer" | "agent";
+  index: string;
+  label: string;
+}[] = [
+  { tab: "arrange", index: "1", label: "先生成一份曲式方案" },
+  { tab: "mixer", index: "2", label: "调整混音并应用方案" },
+  { tab: "agent", index: "3", label: "让 AI 讲解当前工程" },
+];
+
+export const TeachingPanel: React.FC<TeachingPanelProps> = ({  activeDiff,
   userLevel,
   onLevelChange,
   explanation,
@@ -70,6 +82,7 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({
   harmonyError = null,
   onExplainHarmony,
   canExplainHarmony = false,
+  onNavigate,
 }) => {
   const { t } = useI18n();
   const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
@@ -111,6 +124,8 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({
 
       <div className={styles.body}>
         {!activeDiff ? (
+          /* v2.6.0：此前是一段依赖型说明（"先应用方案才有内容"），
+             用户无从下手 → 改为给出三步可点击的下一步入口。 */
           <div className={styles.emptyState} data-testid="teaching-empty">
             <div className={styles.emptyIcon}>
               <Icon name="spark" size={26} strokeWidth={1.4} aria-hidden />
@@ -120,6 +135,23 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({
               应用编排、编曲或混音方案后，<br />
               教学面板将显示对应的解释和对比内容
             </div>
+            {onNavigate && (
+              <div className={styles.emptySteps} data-testid="teaching-empty-steps">
+                {TEACHING_NEXT_STEPS.map((step) => (
+                  <button
+                    key={step.tab}
+                    type="button"
+                    className={styles.emptyStep}
+                    data-testid={`teaching-step-${step.tab}`}
+                    onClick={() => onNavigate(step.tab)}
+                  >
+                    <span className={styles.emptyStepIndex}>{step.index}</span>
+                    <span className={styles.emptyStepLabel}>{step.label}</span>
+                    <Icon name="chevronRight" size={13} strokeWidth={2} aria-hidden />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : loading ? (
           <div className={styles.statusState} data-testid="teaching-loading">

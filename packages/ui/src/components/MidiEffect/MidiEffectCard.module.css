@@ -46,7 +46,7 @@
 }
 
 .channelBadge {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--accent-cyan);
   background: rgba(0, 200, 255, 0.1);
   border: 1px solid rgba(0, 200, 255, 0.3);

@@ -19,7 +19,19 @@ interface ArrangementViewProps {
    *  (no Phrase nodes in the graph). Text comes from i18n via the caller;
    *  the view never falls back to demo data. */
   emptyHint?: string;
+  /** v2.6.0：空编排时的「起点卡片」回调。传入后空态不再是一行提示，
+   *  而是可点击创建乐段的卡片网格（消除 90%+ 的死区）。 */
+  onCreatePhrase?: (role: string, bars: number) => void;
 }
+
+/** v2.6.0：起点卡片 —— 常见曲式段落，点了就真的建节点 */
+const STARTING_SECTIONS: { role: string; bars: number }[] = [
+  { role: "intro", bars: 4 },
+  { role: "verse", bars: 8 },
+  { role: "chorus", bars: 8 },
+  { role: "bridge", bars: 4 },
+  { role: "outro", bars: 4 },
+];
 
 function getCSSVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -103,6 +115,7 @@ export const ArrangementView: React.FC<ArrangementViewProps> = ({
   onSectionDoubleClick,
   totalBars,
   emptyHint,
+  onCreatePhrase,
 }) => {
   const maxBar =
     totalBars ?? phrases.reduce((max, p) => Math.max(max, p.endBar), 16);
@@ -227,8 +240,28 @@ export const ArrangementView: React.FC<ArrangementViewProps> = ({
       </div>
 
       {phrases.length === 0 && emptyHint && (
+        /* v2.6.0：此前这里只有一行提示文字，整个编排区 90%+ 是空白
+           （"像后台模板"的主因）。改为可操作的起点：点一下就真的建乐段。 */
         <div className={styles.emptyState} data-testid="arrangement-empty">
-          {emptyHint}
+          <p className={styles.emptyTitle}>{emptyHint}</p>
+          {onCreatePhrase && (
+            <div className={styles.startGrid} data-testid="arrangement-start-grid">
+              {STARTING_SECTIONS.map((section) => (
+                <button
+                  key={section.role}
+                  type="button"
+                  className={styles.startCard}
+                  data-testid={`arrangement-start-${section.role}`}
+                  onClick={() => onCreatePhrase(section.role, section.bars)}
+                >
+                  <span className={styles.startCardRole}>{section.role.toUpperCase()}</span>
+                  <span className={styles.startCardMeta}>
+                    {ROLE_LABELS[section.role] ?? section.role} · {section.bars} 小节
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

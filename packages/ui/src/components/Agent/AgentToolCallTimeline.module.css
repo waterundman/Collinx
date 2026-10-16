@@ -150,3 +150,40 @@
   word-break: break-word;
   overflow-x: auto;
 }
+
+/* v2.6.0：工具参数的键值表（取代整块 JSON 原文） */
+.paramsTable {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2) 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+}
+
+.paramRow {
+  display: grid;
+  grid-template-columns: minmax(72px, 34%) 1fr;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  align-items: baseline;
+}
+
+.paramRow:hover {
+  background: var(--bg-overlay);
+}
+
+.paramKey {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.paramValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}

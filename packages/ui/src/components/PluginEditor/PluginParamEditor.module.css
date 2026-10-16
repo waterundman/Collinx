@@ -181,7 +181,7 @@
 }
 
 .paramItemAuto {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--accent-green);
   background: rgba(0, 255, 136, 0.1);
@@ -289,7 +289,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
   padding: 2px var(--space-2);
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-primary);
   white-space: nowrap;
   opacity: 0;

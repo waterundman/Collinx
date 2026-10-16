@@ -100,12 +100,21 @@ export function ToolCallTimeline({ toolCalls }: ToolCallTimelineProps) {
                         : t("toolCalls.showParams")}
                     </button>
                     {expanded && (
-                      <pre
-                        className={styles.params}
+                      /* v2.6.0：原先是整块 JSON.stringify 原文，界面直接甩给
+                         用户 `{"bar":1,"beat":…}`。改为与提案卡一致的键值表。 */
+                      <div
+                        className={styles.paramsTable}
                         data-testid="tool-call-params"
                       >
-                        {JSON.stringify(call.params, null, 2)}
-                      </pre>
+                        {Object.entries(call.params).map(([key, value]) => (
+                          <div key={key} className={styles.paramRow}>
+                            <span className={styles.paramKey}>{key}</span>
+                            <span className={styles.paramValue}>
+                              {formatParamValue(value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </>
                 )}
@@ -116,6 +125,15 @@ export function ToolCallTimeline({ toolCalls }: ToolCallTimelineProps) {
       )}
     </div>
   );
+}
+
+/** v2.6.0：参数值的可读化 —— 标量直出、对象压成单行 JSON、超长截断。 */
+function formatParamValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  const text = JSON.stringify(value);
+  return text.length > 140 ? `${text.slice(0, 140)}…` : text;
 }
 
 export default ToolCallTimeline;

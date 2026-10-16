@@ -533,6 +533,21 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       addNote: (note: NoteEvent): void => {
         dispatch({ type: "ADD_NOTE", note } satisfies ProjectStoreAction);
       },
+      // v2.6.0：从「空编排」起点卡片创建乐段（graph-native，非平行字段）
+      addPhrase: (phrase: {
+        name: string;
+        formRole: string;
+        startBar: number;
+        endBar: number;
+      }): void => {
+        dispatch({
+          type: "ADD_PHRASE",
+          name: phrase.name,
+          formRole: phrase.formRole,
+          startBar: phrase.startBar,
+          endBar: phrase.endBar,
+        } satisfies ProjectStoreAction);
+      },
       // v2.2.0 S1 (D22-4)：批量新增（录制 take 落盘；一条 undo 记录）
       addNotes: (notes: NoteEvent[]): void => {
         dispatch({ type: "ADD_NOTES", notes } satisfies ProjectStoreAction);

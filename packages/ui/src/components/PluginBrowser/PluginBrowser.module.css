@@ -255,7 +255,7 @@
 }
 
 .editorBadge {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--accent-yellow);
   background: rgba(255, 200, 0, 0.1);

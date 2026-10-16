@@ -188,6 +188,28 @@ describe("v1.18.0 Stage 0: ArrangementView real phrases (no demo data)", () => {
 
     cleanup();
   });
+
+  // v2.6.0: the empty arrangement is no longer a dead zone — it renders
+  // clickable "starting section" cards that really create Phrase nodes.
+  // (Wiring-level guard: a card that renders but doesn't wire to the store
+  // would leave the whole zone dead while every other assertion stayed green.)
+  it("T02b: 空编排起点卡片点击后真的创建乐段 (critical)", () => {
+    const { container, cleanup } = renderApp();
+
+    click(container.querySelector('[data-testid="tab-compose"]'));
+    expect(container.querySelector('[data-testid="arrangement-start-grid"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="arrangement-empty"]')).not.toBeNull();
+
+    click(container.querySelector('[data-testid="arrangement-start-chorus"]'));
+
+    // Empty state replaced by a real section block derived from the graph.
+    expect(container.querySelector('[data-testid="arrangement-empty"]')).toBeNull();
+    const view = container.querySelector('[data-testid="arrangement-view"]');
+    expect(view?.textContent).toContain("Chorus");
+    expect(view?.textContent).toContain("副歌"); // ROLE_LABELS["chorus"]
+
+    cleanup();
+  });
 });
 
 // ---------------------------------------------------------------------------

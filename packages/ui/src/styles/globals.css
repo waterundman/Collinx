@@ -57,6 +57,25 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* v2.6.0：原生表单控件继承全局字体栈。
+   此前 <option> 落到浏览器默认的 Arial（实测拍号/风格下拉为 12px/Arial），
+   与全局 Inter 不一致；未显式设 font-size 的控件则停在 Chromium 默认的
+   13.33px —— 这也是"字号阶梯有 10 档"的来源之一。 */
+select,
+input,
+textarea,
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+select option {
+  font-family: var(--font-ui);
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
 a {
   /* v2.5.0：原为 --accent-breeze(#a0c3ec)，浅色主题下对白底仅 1.9:1，
      链接几乎读不出来。改用可按主题切换的强调色。 */
@@ -168,7 +187,7 @@ a:hover {
   gap: var(--space-3);
   padding: 3px 0;
   border-bottom: 1px solid var(--border-primary);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .cx-md-cell {

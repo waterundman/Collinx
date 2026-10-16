@@ -278,6 +278,62 @@
   justify-content: center;
 }
 
+/* v2.6.0：空态的下一步入口 */
+.emptySteps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  width: 100%;
+  max-width: 380px;
+}
+
+.emptyStep {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-secondary);
+  transition:
+    border-color var(--transition-fast) var(--ease-standard),
+    background var(--transition-fast) var(--ease-standard);
+}
+
+.emptyStep:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+.emptyStep:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+.emptyStepIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--bg-overlay);
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.emptyStepLabel {
+  font-size: 12px;
+}
+
 .emptyIcon {
   font-size: 40px;
   margin-bottom: var(--space-3);

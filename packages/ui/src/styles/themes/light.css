@@ -3,28 +3,27 @@
    ============================================================ */
 
 [data-theme="light"] {
-  /* ---- Background ---- */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f7;
+  /* ---- Background ----
+     v2.6.0：浅色主题此前 primary / surface / elevated 三者同为 #ffffff，
+     面板只能靠 1px 灰线区分，整页读起来"平"、像默认后台模板。
+     改为「浅灰页底 + 白色面板」（Notion / Figma / Linear 的做法），
+     overlay 留给 hover 与浮层。层级结构与暗色主题一一对应。 */
+  --bg-primary: #f5f6f8;
+  --bg-secondary: #ffffff;
   --bg-surface: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-overlay: #f3f4f6;
+  --bg-overlay: #eceef2;
   --bg-active: #e0f2fe;
   --bg-error: #fef2f2;
   --bg-warning: #fffbeb;
 
-  /* ---- xAI-style Surface Alias（v2.5.0 补齐：此前继承暗色值，
-         导致 --ink(#fff) 被用在白底上 → 顶栏品牌字"看不见"） ---- */
-  --canvas: #ffffff;
+  /* ---- Surface Alias（v2.5.0 补齐：此前继承暗色值，导致 --ink(#fff)
+         被用在白底上 → 顶栏品牌字"看不见"；v2.6.0 再收敛掉 3 个零引用名） ---- */
+  --canvas: var(--bg-primary);
   --canvas-soft: #f8fafc;
-  --canvas-card: #ffffff;
-  --canvas-mid: #e2e8f0;
-  --hairline: #e5e7eb;
   --ink: #0f172a;
-  --ink-hover: #1e293b;
   --body: #334155;
   --body-mid: #5f6673;
-  --mute: #7c8798;
 
   /* ---- Text ---- */
   --text-primary: #16161e;  --text-secondary: #4b5563;
@@ -52,7 +51,7 @@
 
   /* ---- Component ---- */
   --button-bg: #f3f4f6;
-  --button-text: #16161e;
+  --button-text: var(--text-primary);
   --input-bg: #ffffff;
   --input-border: #d1d5db;
   --card-bg: #ffffff;
@@ -102,29 +101,20 @@
   --accent-cyan-light: #38bdf8;
   --accent-green-light: #15803d;
   --accent-red-light: #b91c1c;
-  --accent-red-pale: #b91c1c;
+  --accent-red-pale: var(--accent-red-light);
   --accent-yellow-light: #a16207;
   --accent-purple: #6d28d9;
   --accent-purple-dark: #5b21b6;
   --accent-purple-light: #7c3aed;
   --accent-blue: #2563eb;
   --accent-blue-light: #1d4ed8;
-  --accent-orange: #c2410c;
-  --accent-orange-dark: #9a3412;
   --accent-amber: #b45309;
-  --accent-pink: #be185d;
   --accent-gold: #a16207;
-  --accent-peach: #c2410c;
   --accent-mint: #047857;
-  --accent-teal: #0f766e;
   --accent-sky: #0369a1;
-  --accent-sky-light: #0284c7;
   --accent-lavender: #6d28d9;
   --accent-lavender-light: #7c3aed;
-  --accent-cyan-pale: #0e7490;
   --accent-hot-pink: #be123c;
-  --accent-peach-light: #b91c1c;
-  --accent-magenta: #a21caf;
 
   /* ---- Gradient Stops ---- */
   --gradient-blue-start: #60a5fa;

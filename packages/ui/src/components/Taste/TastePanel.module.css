@@ -382,7 +382,7 @@
 }
 
 .compareBarLabel {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   width: 42px;
   text-align: right;
@@ -649,7 +649,7 @@
 .evidenceItemTimestamp {
   margin-left: auto;
   color: var(--text-disabled);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .deleteEvidenceBtn {

@@ -80,8 +80,30 @@ const ANIMATION_DURATION = 500;
 const PULSE_SPEED = 2;
 const EDGE_FLOW_SPEED = 0.5;
 
-function getColor(type: string): string {
-  return getNodeColor(type);
+/** v2.6.0：音高 → 音名（C4 记法，MIDI 60 = C4）。 */
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+function pitchLabel(pitch: number): string {
+  const p = Math.round(pitch);
+  return `${NOTE_NAMES[((p % 12) + 12) % 12]}${Math.floor(p / 12) - 1}`;
+}
+
+/**
+ * v2.6.0：NoteSpan 按音高分档着色（低音暖 → 高音冷）。
+ * 此前所有 NoteSpan 都落到 --canvas-node-default 的同一灰色，图谱看起来
+ * 像是"21 个一样的点"，读不出任何音乐信息。
+ */
+const PITCH_TINTS = ["#fb7185", "#f59e0b", "#22c55e", "#00d4ff", "#818cf8", "#e879f9"];
+function pitchTint(pitch: number): string {
+  const clamped = Math.max(24, Math.min(96, pitch));
+  return PITCH_TINTS[Math.max(0, Math.min(PITCH_TINTS.length - 1, Math.floor((clamped - 36) / 10)))];
+}
+
+function getColor(node: { type: string; data?: Record<string, unknown> }): string {
+  if (node.type === "NoteSpan") {
+    const pitch = Number(node.data?.pitch);
+    if (Number.isFinite(pitch)) return pitchTint(pitch);
+  }
+  return getNodeColor(node.type);
 }
 
 function runForceLayout(graph: GraphData, w: number, h: number): LayoutNode[] {
@@ -264,6 +286,43 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
     return false;
   }, []);
 
+  /**
+   * v2.6.0：把节点包围盒缩放 + 平移到画布内（含边距）。
+   * 此前 transform 固定 {0,0,1}，力导向把节点簇推到画布下缘之外 → 底行节点
+   * 被裁掉（实测底边有 600px 非背景像素、顶边 0）。canvas 的绘制尺寸本身已经
+   * 是 clientWidth/Height（不是 props），所以只需修正视口变换。
+   */
+  const applyFitView = useCallback((nodes: LayoutNode[], w: number, h: number) => {
+    const PAD = 56;
+    if (nodes.length === 0 || w <= 0 || h <= 0) {
+      transformRef.current = { panX: 0, panY: 0, zoom: 1 };
+      return;
+    }
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const n of nodes) {
+      if (n.x < minX) minX = n.x;
+      if (n.x > maxX) maxX = n.x;
+      if (n.y < minY) minY = n.y;
+      if (n.y > maxY) maxY = n.y;
+    }
+    const spanX = Math.max(1, maxX - minX);
+    const spanY = Math.max(1, maxY - minY);
+    const zoom = Math.max(
+      0.15,
+      Math.min(1.5, Math.min((w - PAD * 2) / spanX, (h - PAD * 2) / spanY)),
+    );
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    transformRef.current = {
+      zoom,
+      panX: w / 2 - cx * zoom,
+      panY: h / 2 - cy * zoom,
+    };
+  }, []);
+
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -315,7 +374,8 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
       
-      const baseColor = getCSSVar("--canvas-grid");
+      // v2.6.0：原为 --canvas-grid（暗底上 #3a3a48，对比极低 → 连线几乎不可见）
+      const baseColor = getCSSVar("--canvas-node-default");
       const highlightColor = getCSSVar("--canvas-highlight");
       
       if (isHighlighted && highlightIntensity > 0) {
@@ -325,7 +385,7 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
       } else {
         ctx.strokeStyle = baseColor;
         ctx.lineWidth = 1;
-        ctx.globalAlpha = 0.6;
+        ctx.globalAlpha = 0.38;
       }
       ctx.stroke();
       ctx.globalAlpha = 1;
@@ -357,7 +417,7 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
     for (const node of nodes) {
       const isSelected = node.id === selectedId;
       const isHovered = node.id === hoveredId;
-      const color = getColor(node.type);
+      const color = getColor(node);
       const anim = animationRef.current.nodeAnimations.get(node.id);
       
       if (!anim || node.opacity <= 0) continue;
@@ -411,7 +471,11 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
       ctx.fillStyle = getCSSVar("--text-primary");
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      const label = node.data?.name ?? node.type;
+      // v2.6.0：NoteSpan 显示音高（C4）而不是类型名 "NoteSpan"
+      const pitch = Number(node.data?.pitch);
+      const label =
+        node.data?.name ??
+        (node.type === "NoteSpan" && Number.isFinite(pitch) ? pitchLabel(pitch) : node.type);
       
       const labelY = NODE_RADIUS + 4;
       
@@ -433,8 +497,12 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
     if (!canvas) return;
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
-    layoutRef.current = runForceLayout(graph, w, h);
-    transformRef.current = { panX: 0, panY: 0, zoom: 1 };
+    const nodes = runForceLayout(graph, w, h);
+    layoutRef.current = nodes;
+    // v2.6.0：布局跑完后自动 fit-to-view。此前 transform 固定为 {0,0,1}，
+    // 力导向把节点簇推到画布下缘之外 → 底行节点被裁掉一半（实测底边有 600px
+    // 非背景像素、顶边 0）。
+    applyFitView(nodes, w, h);
     
     initializeAnimations();
     isAnimatingRef.current = true;

@@ -689,6 +689,20 @@ export function App() {
     }
   }, [storePhrases]);
 
+  // v2.6.0：从空编排的起点卡片创建乐段（顺接在最后一个乐段之后）
+  const handleCreatePhrase = useCallback(
+    (role: string, bars: number) => {
+      const startBar = storePhrases.reduce((max, p) => Math.max(max, p.endBar), 0);
+      actions.addPhrase({
+        name: role.charAt(0).toUpperCase() + role.slice(1),
+        formRole: role,
+        startBar,
+        endBar: startBar + bars,
+      });
+    },
+    [storePhrases, actions],
+  );
+
   const handleMixerTrackChange = useCallback(
     (trackId: string, changes: Partial<MixerTrack>) => {
       actions.updateMixerTrack(trackId, changes);
@@ -1086,6 +1100,7 @@ export function App() {
               totalBars={totalBars}
               emptyHint={t("app.arrange.emptyPhrases")}
               onSectionDoubleClick={handleSectionDoubleClick}
+              onCreatePhrase={handleCreatePhrase}
             />
           </div>
 
@@ -1167,6 +1182,7 @@ export function App() {
                 totalBars={totalBars}
                 emptyHint={t("app.arrange.emptyPhrases")}
                 onSectionDoubleClick={handleSectionDoubleClick}
+                onCreatePhrase={handleCreatePhrase}
               />
             </div>
 
@@ -1201,6 +1217,7 @@ export function App() {
                 totalBars={totalBars}
                 emptyHint={t("app.arrange.emptyPhrases")}
                 onSectionDoubleClick={handleSectionDoubleClick}
+                onCreatePhrase={handleCreatePhrase}
               />
             </div>
 
@@ -1317,6 +1334,7 @@ export function App() {
             harmonyError={harmonyError}
             onExplainHarmony={handleExplainHarmony}
             canExplainHarmony={canExplainHarmony}
+            onNavigate={setActiveTab}
           />
         </div>
       )}

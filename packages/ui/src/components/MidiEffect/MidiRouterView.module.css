@@ -186,7 +186,7 @@
 }
 
 .ccLabel {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   text-transform: uppercase;
 }
@@ -208,7 +208,7 @@
 }
 
 .ccName {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   white-space: nowrap;
   min-width: 40px;

@@ -98,7 +98,7 @@
 }
 
 .metricLabel {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -223,7 +223,7 @@
 }
 
 .tooltipStatus {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   padding: 1px var(--space-1);
   border-radius: var(--radius-sm);
