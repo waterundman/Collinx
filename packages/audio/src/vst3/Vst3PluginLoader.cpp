@@ -125,7 +125,7 @@ void Vst3PluginLoader::unloadPlugin(int index)
 
     if (plugin->isActive)
     {
-        plugin->instance->disableAllBuses(); // v2.8.0：同上，setActive(false) → 关闭全部总线
+        plugin->instance->disableNonMainBuses(); // v2.8.0：同上，setActive(false) → 只保留主总线
     }
 
     DBG("Vst3PluginLoader: Unloaded " << plugin->description.name);
@@ -144,7 +144,7 @@ void Vst3PluginLoader::unloadAll()
                 plugin->instance->releaseResources();
 
             if (plugin->isActive)
-                plugin->instance->disableAllBuses(); // v2.8.0：同上，setActive(false) → 关闭全部总线
+                plugin->instance->disableNonMainBuses(); // v2.8.0：同上，setActive(false) → 只保留主总线
         }
     }
 
@@ -181,7 +181,7 @@ void Vst3PluginLoader::deactivatePlugin(int index)
     if (plugin == nullptr || !plugin->isActive)
         return;
 
-    plugin->instance->disableAllBuses(); // v2.8.0：同上，setActive(false) → 关闭全部总线
+    plugin->instance->disableNonMainBuses(); // v2.8.0：同上，setActive(false) → 只保留主总线
     plugin->isActive = false;
     DBG("Vst3PluginLoader: Deactivated " << plugin->description.name);
 }

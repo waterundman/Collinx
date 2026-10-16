@@ -215,11 +215,13 @@ private:
 
     /**
      * Update health state for a plugin.
+     * Acquires statusMutex internally. Returns true if recovery should be attempted.
      */
-    void updatePluginState(int pluginIndex, HealthState newState);
+    bool updatePluginState(int pluginIndex, HealthState newState);
 
     /**
      * Attempt automatic recovery of a crashed/unresponsive plugin.
+     * Must be called WITHOUT statusMutex held.
      */
     bool attemptRecovery(int pluginIndex);
 

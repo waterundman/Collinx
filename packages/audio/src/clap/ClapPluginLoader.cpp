@@ -146,7 +146,7 @@ void ClapPluginLoader::unloadPlugin(int index)
         plugin->instance->releaseResources();
 
     if (plugin->isActive)
-        plugin->instance->disableAllBuses(); // v2.8.0：setActive(false) → 关闭全部总线
+        plugin->instance->disableNonMainBuses(); // v2.8.0：setActive(false) → 只保留主总线
 
     DBG("ClapPluginLoader: Unloaded " << plugin->description.name);
     plugin.reset();
@@ -164,7 +164,7 @@ void ClapPluginLoader::unloadAll()
                 plugin->instance->releaseResources();
 
             if (plugin->isActive)
-                plugin->instance->disableAllBuses(); // v2.8.0：setActive(false) → 关闭全部总线
+                plugin->instance->disableNonMainBuses(); // v2.8.0：setActive(false) → 只保留主总线
         }
     }
 
@@ -201,7 +201,7 @@ void ClapPluginLoader::deactivatePlugin(int index)
     if (plugin == nullptr || !plugin->isActive)
         return;
 
-    plugin->instance->disableAllBuses(); // v2.8.0：setActive(false) → 关闭全部总线
+    plugin->instance->disableNonMainBuses(); // v2.8.0：setActive(false) → 只保留主总线
     plugin->isActive = false;
     DBG("ClapPluginLoader: Deactivated " << plugin->description.name);
 }

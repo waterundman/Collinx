@@ -99,14 +99,16 @@ bool PluginHealthMonitor::checkPluginHealth(int pluginIndex)
     // Verify the plugin is still loaded
     if (!pluginManager.isPluginLoaded(pluginIndex))
     {
-        updatePluginState(pluginIndex, HealthState::Disabled);
+        if (updatePluginState(pluginIndex, HealthState::Disabled))
+            attemptRecovery(pluginIndex);
         return false;
     }
 
     auto* plugin = pluginManager.getPlugin(pluginIndex);
     if (plugin == nullptr || plugin->instance == nullptr)
     {
-        updatePluginState(pluginIndex, HealthState::Disabled);
+        if (updatePluginState(pluginIndex, HealthState::Disabled))
+            attemptRecovery(pluginIndex);
         return false;
     }
 
@@ -123,7 +125,11 @@ bool PluginHealthMonitor::checkPluginHealth(int pluginIndex)
 
     crashed = crashDetector.didCrash();
 
-    // Update status
+    // Determine new state under lock, then apply state change outside lock
+    // to avoid deadlock (updatePluginState fires callbacks and may trigger recovery)
+    bool needsRecovery = false;
+    bool result = healthy;
+
     {
         std::lock_guard<std::mutex> lock(statusMutex);
         auto it = pluginStatuses.find(pluginIndex);
@@ -138,15 +144,18 @@ bool PluginHealthMonitor::checkPluginHealth(int pluginIndex)
             status.consecutiveFailures++;
             if (status.consecutiveFailures >= maxConsecutiveFailures)
             {
-                updatePluginState(pluginIndex, HealthState::Crashed);
-                DBG("PluginHealthMonitor: Plugin '" + status.pluginName + "' crashed");
-                return false;
+                status.state = HealthState::Crashed;
+                needsRecovery = status.autoRecoveryEnabled;
+                result = false;
             }
-            updatePluginState(pluginIndex, HealthState::Unresponsive);
-            return false;
+            else
+            {
+                status.state = HealthState::Unresponsive;
+                needsRecovery = status.autoRecoveryEnabled;
+                result = false;
+            }
         }
-
-        if (!healthy)
+        else if (!healthy)
         {
             // Check if timed out
             auto elapsed = currentTimeMs() - status.lastSuccessfulCheck;
@@ -155,23 +164,52 @@ bool PluginHealthMonitor::checkPluginHealth(int pluginIndex)
                 status.consecutiveFailures++;
                 if (status.consecutiveFailures >= maxConsecutiveFailures)
                 {
-                    updatePluginState(pluginIndex, HealthState::Crashed);
-                    return false;
+                    status.state = HealthState::Crashed;
+                    needsRecovery = status.autoRecoveryEnabled;
                 }
-                updatePluginState(pluginIndex, HealthState::Unresponsive);
-                return false;
+                else
+                {
+                    status.state = HealthState::Unresponsive;
+                    needsRecovery = status.autoRecoveryEnabled;
+                }
+                result = false;
             }
         }
         else
         {
             status.consecutiveFailures = 0;
             status.lastSuccessfulCheck = currentTimeMs();
-            if (status.state != HealthState::Healthy)
-                updatePluginState(pluginIndex, HealthState::Healthy);
+            status.state = HealthState::Healthy;
+            result = true;
         }
     }
 
-    return healthy;
+    // Fire callbacks and attempt recovery outside the lock to prevent deadlock
+    if (needsRecovery)
+    {
+        // Notify state change via callback
+        if (healthStateCallback)
+        {
+            HealthState currentState = HealthState::Healthy;
+            juce::String name;
+            {
+                std::lock_guard<std::mutex> lock(statusMutex);
+                auto it = pluginStatuses.find(pluginIndex);
+                if (it != pluginStatuses.end())
+                {
+                    currentState = it->second.state;
+                    name = it->second.pluginName;
+                }
+            }
+            DBG("PluginHealthMonitor: Plugin '" + name + "' state changed to "
+                + juce::String(static_cast<int>(currentState)));
+            healthStateCallback(pluginIndex, HealthState::Healthy, currentState);
+        }
+
+        attemptRecovery(pluginIndex);
+    }
+
+    return result;
 }
 
 int PluginHealthMonitor::checkAllPlugins()
@@ -277,31 +315,38 @@ void PluginHealthMonitor::monitoringLoop()
     DBG("PluginHealthMonitor: Monitor thread stopped");
 }
 
-void PluginHealthMonitor::updatePluginState(int pluginIndex, HealthState newState)
+bool PluginHealthMonitor::updatePluginState(int pluginIndex, HealthState newState)
 {
-    // Caller must hold statusMutex
-    auto it = pluginStatuses.find(pluginIndex);
-    if (it == pluginStatuses.end())
-        return;
-
-    auto& status = it->second;
-    HealthState oldState = status.state;
-
-    if (oldState == newState)
-        return;
-
-    status.state = newState;
-
-    // Notify callbacks outside the lock if possible
+    // Acquires statusMutex internally. Returns true if recovery should be attempted.
+    HealthState oldState;
+    juce::String pluginName;
+    bool shouldRecover = false;
     HealthStateCallback stateCb;
     UnresponsiveCallback unrespCb;
+
     {
-        // Callbacks are already set, safe to copy
+        std::lock_guard<std::mutex> lock(statusMutex);
+        auto it = pluginStatuses.find(pluginIndex);
+        if (it == pluginStatuses.end())
+            return false;
+
+        auto& status = it->second;
+        oldState = status.state;
+
+        if (oldState == newState)
+            return false;
+
+        status.state = newState;
+        pluginName = status.pluginName;
+        shouldRecover = (newState == HealthState::Unresponsive || newState == HealthState::Crashed)
+                        && status.autoRecoveryEnabled;
+
         stateCb = healthStateCallback;
         unrespCb = unresponsiveCallback;
     }
 
-    DBG("PluginHealthMonitor: Plugin '" + status.pluginName + "' state changed: "
+    // Fire callbacks outside the lock
+    DBG("PluginHealthMonitor: Plugin '" + pluginName + "' state changed: "
         + juce::String(static_cast<int>(oldState)) + " -> "
         + juce::String(static_cast<int>(newState)));
 
@@ -309,27 +354,25 @@ void PluginHealthMonitor::updatePluginState(int pluginIndex, HealthState newStat
         stateCb(pluginIndex, oldState, newState);
 
     if (newState == HealthState::Unresponsive && unrespCb)
-        unrespCb(pluginIndex, status.pluginName);
+        unrespCb(pluginIndex, pluginName);
 
-    // Attempt auto-recovery if enabled
-    if ((newState == HealthState::Unresponsive || newState == HealthState::Crashed)
-        && status.autoRecoveryEnabled)
-    {
-        attemptRecovery(pluginIndex);
-    }
+    return shouldRecover;
 }
 
 bool PluginHealthMonitor::attemptRecovery(int pluginIndex)
 {
-    // Caller must hold statusMutex
-    auto it = pluginStatuses.find(pluginIndex);
-    if (it == pluginStatuses.end())
-        return false;
+    // Called WITHOUT statusMutex held. Acquires the lock only briefly for map access.
+    juce::String pluginName;
+    {
+        std::lock_guard<std::mutex> lock(statusMutex);
+        auto it = pluginStatuses.find(pluginIndex);
+        if (it == pluginStatuses.end())
+            return false;
+        pluginName = it->second.pluginName;
+        it->second.state = HealthState::Recovering;
+    }
 
-    auto& status = it->second;
-    DBG("PluginHealthMonitor: Attempting recovery for '" + status.pluginName + "'");
-
-    updatePluginState(pluginIndex, HealthState::Recovering);
+    DBG("PluginHealthMonitor: Attempting recovery for '" + pluginName + "'");
 
     // Attempt to unload and reload the plugin
     auto* plugin = pluginManager.getPlugin(pluginIndex);
@@ -351,18 +394,31 @@ bool PluginHealthMonitor::attemptRecovery(int pluginIndex)
     int newIndex = pluginManager.loadPlugin(desc, sampleRate, blockSize);
     if (newIndex >= 0)
     {
-        DBG("PluginHealthMonitor: Recovery succeeded for '" + status.pluginName
+        DBG("PluginHealthMonitor: Recovery succeeded for '" + pluginName
             + "' (new index: " + juce::String(newIndex) + ")");
 
-        // Update registration
-        unregisterPlugin(pluginIndex);
-        registerPlugin(newIndex, status.pluginName);
-        pluginManager.activatePlugin(newIndex);
+        // Update registration directly under lock (avoid calling
+        // unregisterPlugin/registerPlugin which each acquire the lock)
+        {
+            std::lock_guard<std::mutex> lock(statusMutex);
+            pluginStatuses.erase(pluginIndex);
 
+            PluginHealthStatus newStatus;
+            newStatus.pluginIndex = newIndex;
+            newStatus.pluginName = pluginName;
+            newStatus.state = HealthState::Healthy;
+            newStatus.consecutiveFailures = 0;
+            newStatus.lastSuccessfulCheck = currentTimeMs();
+            newStatus.lastCheckTime = currentTimeMs();
+            newStatus.autoRecoveryEnabled = true;
+            pluginStatuses[newIndex] = newStatus;
+        }
+
+        pluginManager.activatePlugin(newIndex);
         return true;
     }
 
-    DBG("PluginHealthMonitor: Recovery failed for '" + status.pluginName + "'");
+    DBG("PluginHealthMonitor: Recovery failed for '" + pluginName + "'");
     updatePluginState(pluginIndex, HealthState::Disabled);
     return false;
 }

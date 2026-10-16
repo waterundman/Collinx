@@ -77,7 +77,7 @@ void PluginProcessor::deactivate()
         return;
 
     if (instance != nullptr)
-        instance->disableAllBuses(); // v2.8.0：同上，setActive(false) → 关闭全部总线
+        instance->disableNonMainBuses(); // v2.8.0：同上，setActive(false) → 只保留主总线
 
     active.store(false);
     DBG("PluginProcessor: Deactivated " << getName());
