@@ -90,12 +90,11 @@ juce::String PresetFormat::toJson() const
     if (state.isValid())
     {
         juce::String stateXml;
-        auto* xml = state.createXml();
-        if (xml != nullptr)
-        {
+        // JUCE 8 起 ValueTree::createXml() 返回 std::unique_ptr<juce::XmlElement>，
+        // 不再是需要调用方 delete 的裸指针（编译器提示原文：
+        //   mismatched types 'auto*' and 'std::unique_ptr<juce::XmlElement>'）。
+        if (auto xml = state.createXml())
             stateXml = xml->toString();
-            delete xml;
-        }
         root->setProperty("stateXml", stateXml);
     }
 
