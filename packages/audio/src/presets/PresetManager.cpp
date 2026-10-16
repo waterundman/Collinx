@@ -173,7 +173,10 @@ bool PresetManager::updatePreset(const juce::String& id,
         return false;
 
     // Update state
-    existing->state = processor.copyState();
+    // AudioProcessor 没有 copyState()（那是 AudioProcessorValueTreeState 的 API）。
+    // createFromProcessor 就是本仓既有「从处理器抓状态」的实现，直接复用，
+    // 不再另起一条平行路径。
+    existing->state = PresetFormat::createFromProcessor(processor, existing->name).state;
 
     // Update metadata if provided
     if (name.isNotEmpty())

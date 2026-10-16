@@ -11,7 +11,35 @@ PresetFormat PresetFormat::createFromProcessor(juce::AudioProcessor& processor,
 {
     PresetFormat preset;
     preset.name = name;
-    preset.state = processor.copyState();
+
+    // juce::AudioProcessor 没有 copyState()/replaceState() —— 那是
+    // juce::AudioProcessorValueTreeState 的 API。AudioProcessor 只有这一对：
+    //   virtual void getStateInformation (juce::MemoryBlock&)
+    //   virtual void setStateInformation (const void*, int sizeInBytes)
+    // 本类的 state 字段是 juce::ValueTree，故按 JUCE 常规把状态块解回 XML 后建树
+    // （JUCE 8.0.1：static std::unique_ptr<XmlElement> getXmlFromBinary(...)，
+    // 同时接受 XML 文本与 copyXmlToBinary 产生的带魔数二进制）。
+    // 对完全不产生 XML 的处理器，退化为把原始字节装进 PlugState 树 —— 因为
+    // createFromProcessor 的契约是「返回的 state 有效」（tests/preset_tests.cpp:81
+    // 就是这么断言的，而那里的 TestProcessor 只吐 4 字节二进制）。
+    juce::MemoryBlock stateBlock;
+    processor.getStateInformation(stateBlock);
+
+    if (auto xml = juce::AudioProcessor::getXmlFromBinary(stateBlock.getData(),
+                                                          (int) stateBlock.getSize()))
+    {
+        preset.state = juce::ValueTree::fromXml(*xml);
+    }
+    else
+    {
+        juce::ValueTree binaryTree("PlugState");
+        binaryTree.setProperty("pluginName", processor.getName(), nullptr);
+        binaryTree.setProperty("data",
+                               juce::var(stateBlock.getData(), stateBlock.getSize()),
+                               nullptr);
+        preset.state = binaryTree;
+    }
+
     preset.createdTime = getCurrentTimestamp();
     preset.modifiedTime = preset.createdTime;
     preset.version = CURRENT_VERSION;
@@ -222,7 +250,26 @@ bool PresetFormat::applyToProcessor(juce::AudioProcessor& processor) const
     if (!state.isValid())
         return false;
 
-    processor.replaceState(state);
+    // 与 createFromProcessor 对称：AudioProcessor 只有 setStateInformation()，
+    // 没有 replaceState()（属 AudioProcessorValueTreeState）。
+    if (state.hasType("PlugState"))
+    {
+        auto data = state.getProperty("data");
+        if (auto* block = data.getBinaryData())
+        {
+            processor.setStateInformation(block->getData(), (int) block->getSize());
+            return true;
+        }
+        return false;
+    }
+
+    // 其余情况按 XML 状态回写；copyXmlToBinary 会加 JUCE 魔数头，与真实插件
+    // getStateInformation() 的输出格式一致，setStateInformation 才能读回。
+    juce::MemoryBlock stateBlock;
+    if (auto xml = state.createXml())
+        juce::AudioProcessor::copyXmlToBinary(*xml, stateBlock);
+
+    processor.setStateInformation(stateBlock.getData(), (int) stateBlock.getSize());
     return true;
 }
 

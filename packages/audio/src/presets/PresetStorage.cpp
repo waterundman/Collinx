@@ -381,7 +381,10 @@ bool PresetStorage::saveIndex()
             tagsArray.add(juce::var(tag));
         obj->setProperty("tags", tagsArray);
 
-        entries.add(juce::var(obj.release()));
+        // juce::DynamicObject::Ptr 是 ReferenceCountedObjectPtr，没有 release()。
+        // juce::var(ReferenceCountedObject*) 会自持一份引用，所以传 get() 即可：
+        // obj 离开作用域只是收回它自己那份，对象由 var 继续持有，不会被析构。
+        entries.add(juce::var(obj.get()));
     }
 
     root->setProperty("entries", entries);
