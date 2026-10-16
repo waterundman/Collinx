@@ -146,7 +146,7 @@ void ClapPluginLoader::unloadPlugin(int index)
         plugin->instance->releaseResources();
 
     if (plugin->isActive)
-        plugin->instance->setActive(false);
+        plugin->instance->disableAllBuses(); // v2.8.0：setActive(false) → 关闭全部总线
 
     DBG("ClapPluginLoader: Unloaded " << plugin->description.name);
     plugin.reset();
@@ -164,7 +164,7 @@ void ClapPluginLoader::unloadAll()
                 plugin->instance->releaseResources();
 
             if (plugin->isActive)
-                plugin->instance->setActive(false);
+                plugin->instance->disableAllBuses(); // v2.8.0：setActive(false) → 关闭全部总线
         }
     }
 
@@ -183,7 +183,9 @@ void ClapPluginLoader::activatePlugin(int index)
     if (plugin == nullptr || plugin->isActive)
         return;
 
-    plugin->instance->setActive(true);
+    // v2.8.0：AudioPluginInstance 没有 setActive()（臆造 API）。
+    // JUCE 里用总线开关控制插件激活。
+    plugin->instance->enableAllBuses();
     plugin->isActive = true;
     DBG("ClapPluginLoader: Activated " << plugin->description.name);
 }
@@ -199,7 +201,7 @@ void ClapPluginLoader::deactivatePlugin(int index)
     if (plugin == nullptr || !plugin->isActive)
         return;
 
-    plugin->instance->setActive(false);
+    plugin->instance->disableAllBuses(); // v2.8.0：setActive(false) → 关闭全部总线
     plugin->isActive = false;
     DBG("ClapPluginLoader: Deactivated " << plugin->description.name);
 }
