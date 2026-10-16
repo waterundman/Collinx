@@ -278,5 +278,8 @@ void ClapPluginLoader::processPlugin(int index,
     if (plugin == nullptr || !plugin->isActive || !plugin->isPrepared)
         return;
 
-    plugin->instance->processBlock(buffer, midiBuffer);
+    // v2.8.0：processBlock 需要非 const 的 MidiBuffer&，而本函数参数是 const。
+    // 拷贝一份再传入（与 Vst3PluginLoader 同族修法；插件处理会就地消费 MIDI 事件）。
+    juce::MidiBuffer midiCopy(midiBuffer);
+    plugin->instance->processBlock(buffer, midiCopy);
 }
