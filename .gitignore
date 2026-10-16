@@ -27,7 +27,13 @@ _tmp_*/
 !icon.png
 
 # Docs
-docs/
+# v2.8.0：原为 `docs/` 整目录忽略 —— 结果架构书、上下文与各版本迭代报告
+# 全部游离在版本库之外，新人 clone 看不到任何设计依据。改为：忽略默认、
+# 例外放行长期资产（架构书 / 上下文 / 版本报告），过程材料仍不入库。
+docs/*
+!docs/ARCHITECTURE.md
+!docs/CONTEXT.md
+!docs/v2.*.md
 
 # Agent workspace memory
 .workbuddy/
