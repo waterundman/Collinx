@@ -258,7 +258,7 @@ juce::MemoryBlock CrashRecoveryManager::serializeStates() const
         obj->setProperty("blockSize", snapshot.blockSize);
         obj->setProperty("wasActive", snapshot.wasActive);
         obj->setProperty("wasPrepared", snapshot.wasPrepared);
-        obj->setProperty("timestamp", static_cast<int64_t>(snapshot.timestamp));
+        obj->setProperty("timestamp", static_cast<juce::int64>(snapshot.timestamp));
 
         // Encode binary state as base64
         juce::String b64 = juce::Base64::toBase64(
@@ -268,7 +268,10 @@ juce::MemoryBlock CrashRecoveryManager::serializeStates() const
         statesArray->add(juce::var(obj));
     }
 
-    root->setProperty("states", juce::var(statesArray.release()));
+    // juce::var 没有可用的「指针」构造：Array<var>* 只会匹配到被显式删除的
+    // var(const void*)。这里要的是数组内容本身，故解引用后走
+    // var(const Array<var>&)（statesArray 是 unique_ptr，var 自带一份拷贝）。
+    root->setProperty("states", juce::var(*statesArray));
     juce::String json = juce::JSON::toString(juce::var(root.get()));
 
     juce::MemoryBlock block;
@@ -326,7 +329,11 @@ int CrashRecoveryManager::deserializeStates(const juce::MemoryBlock& data)
         snapshot.blockSize = stateVar.getProperty("blockSize", 512);
         snapshot.wasActive = stateVar.getProperty("wasActive", false);
         snapshot.wasPrepared = stateVar.getProperty("wasPrepared", false);
-        snapshot.timestamp = static_cast<int64_t>(stateVar.getProperty("timestamp", 0));
+        // int64_t 在 Linux 上就是 long，对 juce::var 的 operator int /
+        // operator int64 等多个数值转换函数构成同 rank 歧义（Windows 上
+        // int64_t == long long 恰好命中 operator int64，故此前只在 Linux 报错）。
+        // 统一显式转成 juce::int64（精确命中 operator int64），再隐式收回 int64_t。
+        snapshot.timestamp = static_cast<juce::int64>(stateVar.getProperty("timestamp", 0));
 
         // Decode base64 binary state
         juce::String b64 = stateVar.getProperty("state", "").toString();
@@ -495,7 +502,7 @@ juce::String CrashRecoveryManager::snapshotToJson(const PluginStateSnapshot& sna
     obj->setProperty("blockSize", snapshot.blockSize);
     obj->setProperty("wasActive", snapshot.wasActive);
     obj->setProperty("wasPrepared", snapshot.wasPrepared);
-    obj->setProperty("timestamp", static_cast<int64_t>(snapshot.timestamp));
+    obj->setProperty("timestamp", static_cast<juce::int64>(snapshot.timestamp));
 
     juce::String b64 = juce::Base64::toBase64(
         snapshot.binaryState.getData(), snapshot.binaryState.getSize());
@@ -525,7 +532,7 @@ CrashRecoveryManager::snapshotFromJson(const juce::String& json) const
     snapshot.blockSize = parsed.getProperty("blockSize", 512);
     snapshot.wasActive = parsed.getProperty("wasActive", false);
     snapshot.wasPrepared = parsed.getProperty("wasPrepared", false);
-    snapshot.timestamp = static_cast<int64_t>(parsed.getProperty("timestamp", 0));
+    snapshot.timestamp = static_cast<juce::int64>(parsed.getProperty("timestamp", 0));
 
     juce::String b64 = parsed.getProperty("state", "").toString();
     if (b64.isNotEmpty())
