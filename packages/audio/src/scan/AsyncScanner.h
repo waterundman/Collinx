@@ -305,7 +305,14 @@ private:
     std::atomic<ScanState> state{ScanState::Idle};
     std::atomic<bool> shouldCancel{false};
     std::atomic<bool> shouldPause{false};
-    std::atomic<bool> isInitialized{false};
+    // 成员名必须是 initialized，不能叫 isInitialized：本类已有同名的访问器
+    // isInitialized()（第 221 行），重名会报
+    //   error: 'std::atomic<bool> AsyncScanner::isInitialized' conflicts with
+    //          a previous declaration
+    // 且 .cpp 与访问器用的都是 initialized（见 AsyncScanner.cpp:27/37/44/...）。
+    // 全仓其余类（PresetManager/ScanCache/Vst3HostManager/...）也都是
+    // 「方法 isInitialized() + 成员 initialized」这一组合。
+    std::atomic<bool> initialized{false};
     
     // Synchronization
     mutable std::mutex resultsMutex;
