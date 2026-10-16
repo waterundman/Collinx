@@ -2,6 +2,11 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+// v2.8.0：AudioEngine 继承 juce::AudioAppComponent（下方类声明），
+// 该类定义在 juce_audio_utils。只在 CMake 里链接模块不够 ——
+// 头文件也必须显式包含，否则基类不可见，报
+// "‘setAudioChannels’ was not declared in this scope"。
+#include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_dsp/juce_dsp.h>
 #include "builtin-synth.h"
 #include "transport.h"

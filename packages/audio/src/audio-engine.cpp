@@ -93,7 +93,9 @@ void AudioEngine::prepareToPlay(int samplesPerBlock, double sampleRate)
 
 void AudioEngine::releaseResources()
 {
-    synth->allNotesOff(0);
+    // v2.8.0：JUCE 8 的 juce::Synthesiser::allNotesOff 签名是
+    // allNotesOff(int midiChannel, bool allowImmediateOff)，两参数都必填。
+    synth->allNotesOff(0, true);
     pluginChain->deactivateAll();
     pluginChain->release();
 }
