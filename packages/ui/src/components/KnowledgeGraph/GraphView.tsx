@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
+import { Icon } from "../Icon/Icon";
 import styles from "./GraphView.module.css";
 
 function getCSSVar(name: string): string {
@@ -686,6 +687,40 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
     [render],
   );
 
+  // v2.6.0：以画布中心为锚点缩放（此前图谱没有任何本地控件，只能靠滚轮）
+  const zoomBy = useCallback(
+    (factor: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const { zoom, panX, panY } = transformRef.current;
+      const next = Math.max(0.2, Math.min(4, zoom * factor));
+      if (next === zoom) return;
+      const cx = canvas.clientWidth / 2;
+      const cy = canvas.clientHeight / 2;
+      transformRef.current = {
+        zoom: next,
+        panX: cx - (cx - panX) * (next / zoom),
+        panY: cy - (cy - panY) * (next / zoom),
+      };
+      render();
+    },
+    [render],
+  );
+
+  // v2.6.0：重新布局（力导向每次都从环形初值出发，重排可换一张网）
+  const relayout = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const nodes = runForceLayout(graph, w, h);
+    layoutRef.current = nodes;
+    initializeAnimations();
+    isAnimatingRef.current = true;
+    applyFitView(nodes, w, h);
+    render();
+  }, [graph, initializeAnimations, render, applyFitView]);
+
   // v2.5.0：此前画布硬编码 800×600 显示尺寸，在 1600px 宽的窗口里
   // 图谱只占左上角一小块（画布已按 clientWidth 绘制，但显示尺寸没跟随容器）。
   // 改为默认铺满容器；同时补 ResizeObserver，使容器尺寸变化时重绘。
@@ -700,19 +735,51 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
   }, [render]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={styles.canvas}
-      data-testid="graph-canvas"
-      style={{
-        width: width !== undefined ? width : "100%",
-        height: height !== undefined ? height : "100%",
-      }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
-      onWheel={handleWheel}
-    />
+    <div className={styles.viewport}>
+      <canvas
+        ref={canvasRef}
+        className={styles.canvas}
+        data-testid="graph-canvas"
+        style={{
+          width: width !== undefined ? width : "100%",
+          height: height !== undefined ? height : "100%",
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onWheel={handleWheel}
+      />
+      {/* v2.6.0：图谱此前没有任何本地控件（只能靠滚轮缩放、无法重排） */}
+      <div className={styles.canvasToolbar} data-testid="graph-toolbar">
+        <button
+          type="button"
+          className={styles.toolbarBtn}
+          onClick={() => zoomBy(1.25)}
+          title="放大"
+          aria-label="放大"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className={styles.toolbarBtn}
+          onClick={() => zoomBy(0.8)}
+          title="缩小"
+          aria-label="缩小"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className={styles.toolbarBtn}
+          onClick={relayout}
+          title="重新布局"
+          aria-label="重新布局"
+        >
+          <Icon name="refresh" size={13} strokeWidth={1.8} aria-hidden />
+        </button>
+      </div>
+    </div>
   );
 }

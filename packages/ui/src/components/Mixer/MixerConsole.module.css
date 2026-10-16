@@ -2,6 +2,11 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* v2.6.0：此前无 flex 声明 → 作为 .mixerFill 的子项按内容宽度收缩到 480px，
+     整个调音台只占 1600px 屏幕的 30%（实测死区 95.1% 的真正根因）。
+     现在占满可用宽度，通道条再由 flex:1 1 0 平分。 */
+  flex: 1;
+  min-width: 0;
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-ui);
@@ -51,6 +56,9 @@
 .stripsContainer {
   flex: 1;
   display: flex;
+  /* v2.6.0：显式宽度，否则父级 shrink-to-fit 时通道条的 flex-grow 无处可涨
+     （实测 4 通道仍挤在左侧 330px，右侧 65% 空白） */
+  width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0;
@@ -73,8 +81,12 @@
 
 /* Channel Strip */
 .channelStrip {
-  flex: 0 0 100px;
+  /* v2.6.0：原为 flex: 0 0 100px（固定宽）—— 4 通道 + master 只占约 580px，
+     1600px 窗口下右侧 65% 永久空白（实测死区 95.1%）。改为可增长并夹上限，
+     让通道条平分可用宽度，像真实调音台。 */
+  flex: 1 1 0;
   min-width: 100px;
+  max-width: 240px;
   display: flex;
   flex-direction: column;
   align-items: center;

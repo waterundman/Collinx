@@ -1656,7 +1656,11 @@
       "planReady": "编制方案已就绪",
       "conflictsDetected": "检测到 {{count}} 处声部冲突",
       "errorsAndWarnings": "{{errors}} 错误 · {{warnings}} 警告",
-      "hint": "选择右侧乐器编制，点击\"编制方案\"开始"
+      "hint": "选择右侧乐器编制，点击\"编制方案\"开始",
+      "guideTitle": "编制流程",
+      "guideStep1": "在右侧选择预设编制（弦乐四重奏 / 爵士大乐队 / 电子…）",
+      "guideStep2": "勾选需要的乐器 —— 右侧会显示每个声部的音域提示",
+      "guideStep3": "点击「编制方案」把声部写入工程，冲突信息会显示在这里"
     },
     "taste": {
       "analyzeExport": "分析当前导出"
