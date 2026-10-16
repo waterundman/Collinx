@@ -63,7 +63,9 @@ void PluginProcessor::activate()
         return;
 
     if (instance != nullptr)
-        instance->setActive(true);
+        // v2.8.0：juce::AudioPluginInstance 没有 setActive()（该 API 不存在，
+        // 属"从未编译过"的臆造调用）。JUCE 里控制插件激活的公开 API 是总线开关。
+        instance->enableAllBuses();
 
     active.store(true);
     DBG("PluginProcessor: Activated " << getName());
@@ -75,7 +77,7 @@ void PluginProcessor::deactivate()
         return;
 
     if (instance != nullptr)
-        instance->setActive(false);
+        instance->disableAllBuses(); // v2.8.0：同上，setActive(false) → 关闭全部总线
 
     active.store(false);
     DBG("PluginProcessor: Deactivated " << getName());

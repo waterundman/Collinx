@@ -194,12 +194,12 @@ public:
 
 private:
     /**
-     * Snapshot used by the audio thread — a plain vector of raw pointers.
-     * Avoids heap allocation on the audio thread.
+     * Snapshot used by the audio thread — holds shared_ptrs to keep plugins alive
+     * during processing even if the message thread removes them from the chain.
      */
     struct ChainSnapshot
     {
-        std::vector<PluginProcessor*> processors;
+        std::vector<std::shared_ptr<PluginProcessor>> processors;
         bool chainBypassed = false;
     };
 
@@ -217,7 +217,7 @@ private:
     void processParallel(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi);
 
     // Owned plugins (message thread only)
-    std::vector<std::unique_ptr<PluginProcessor>> plugins;
+    std::vector<std::shared_ptr<PluginProcessor>> plugins;
 
     // Snapshot for audio thread
     ChainSnapshot snapshot;

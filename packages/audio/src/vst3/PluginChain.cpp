@@ -205,7 +205,7 @@ int PluginChain::addPlugin(std::unique_ptr<PluginProcessor> plugin)
         std::lock_guard<std::mutex> lock(snapshotMutex);
 
         index = static_cast<int>(plugins.size());
-        plugins.push_back(std::move(plugin));
+        plugins.push_back(std::shared_ptr<PluginProcessor>(std::move(plugin)));
 
         if (isPrepared)
             prepareAndActivatePlugin(*plugins.back());
@@ -245,26 +245,29 @@ void PluginChain::removePlugin(int index)
 
 void PluginChain::removePluginById(int pluginId)
 {
-    std::lock_guard<std::mutex> lock(snapshotMutex);
-
-    for (size_t i = 0; i < plugins.size(); ++i)
+    bool found = false;
     {
-        if (plugins[i] != nullptr && plugins[i]->getId() == pluginId)
+        std::lock_guard<std::mutex> lock(snapshotMutex);
+
+        for (size_t i = 0; i < plugins.size(); ++i)
         {
-            auto& plugin = plugins[i];
-            if (plugin->isActive())
-                plugin->deactivate();
-            plugin->release();
+            if (plugins[i] != nullptr && plugins[i]->getId() == pluginId)
+            {
+                auto& plugin = plugins[i];
+                if (plugin->isActive())
+                    plugin->deactivate();
+                plugin->release();
 
-            plugins.erase(plugins.begin() + static_cast<int>(i));
-            rebuildSnapshot();
-
-            if (chainChangeCallback)
-                chainChangeCallback();
-
-            return;
+                plugins.erase(plugins.begin() + static_cast<int>(i));
+                rebuildSnapshot();
+                found = true;
+                break;
+            }
         }
     }
+
+    if (found && chainChangeCallback)
+        chainChangeCallback();
 }
 
 void PluginChain::movePlugin(int fromIndex, int toIndex)
@@ -399,7 +402,7 @@ void PluginChain::rebuildSnapshot()
 
     for (const auto& plugin : plugins)
     {
-        snapshot.processors.push_back(plugin.get());
+        snapshot.processors.push_back(plugin);
     }
 }
 
@@ -418,7 +421,7 @@ void PluginChain::processSequential(juce::AudioBuffer<float>& buffer, juce::Midi
         localSnapshot = snapshot;
     }
 
-    for (auto* plugin : localSnapshot.processors)
+    for (const auto& plugin : localSnapshot.processors)
     {
         if (plugin == nullptr)
             continue;
@@ -472,7 +475,7 @@ void PluginChain::processParallel(juce::AudioBuffer<float>& buffer, juce::MidiBu
         // Fallback: process sequentially if parallel processor not available
         for (size_t i = 0; i < localSnapshot.processors.size(); ++i)
         {
-            auto* plugin = localSnapshot.processors[i];
+            const auto& plugin = localSnapshot.processors[i];
             if (plugin && !plugin->isBypassed())
                 plugin->process(individualBuffers[i], midi);
         }

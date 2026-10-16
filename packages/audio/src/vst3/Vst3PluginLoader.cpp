@@ -125,7 +125,7 @@ void Vst3PluginLoader::unloadPlugin(int index)
 
     if (plugin->isActive)
     {
-        plugin->instance->setActive(false);
+        plugin->instance->disableAllBuses(); // v2.8.0：同上，setActive(false) → 关闭全部总线
     }
 
     DBG("Vst3PluginLoader: Unloaded " << plugin->description.name);
@@ -144,7 +144,7 @@ void Vst3PluginLoader::unloadAll()
                 plugin->instance->releaseResources();
 
             if (plugin->isActive)
-                plugin->instance->setActive(false);
+                plugin->instance->disableAllBuses(); // v2.8.0：同上，setActive(false) → 关闭全部总线
         }
     }
 
@@ -163,7 +163,9 @@ void Vst3PluginLoader::activatePlugin(int index)
     if (plugin == nullptr || plugin->isActive)
         return;
 
-    plugin->instance->setActive(true);
+    plugin->// v2.8.0：juce::AudioPluginInstance 没有 setActive()（该 API 不存在，
+        // 属"从未编译过"的臆造调用）。JUCE 里控制插件激活的公开 API 是总线开关。
+        instance->enableAllBuses();
     plugin->isActive = true;
     DBG("Vst3PluginLoader: Activated " << plugin->description.name);
 }
@@ -179,7 +181,7 @@ void Vst3PluginLoader::deactivatePlugin(int index)
     if (plugin == nullptr || !plugin->isActive)
         return;
 
-    plugin->instance->setActive(false);
+    plugin->instance->disableAllBuses(); // v2.8.0：同上，setActive(false) → 关闭全部总线
     plugin->isActive = false;
     DBG("Vst3PluginLoader: Deactivated " << plugin->description.name);
 }
@@ -256,5 +258,8 @@ void Vst3PluginLoader::processPlugin(int index,
     if (plugin == nullptr || !plugin->isActive || !plugin->isPrepared)
         return;
 
-    plugin->instance->processBlock(buffer, midiBuffer);
+    // v2.8.0：processBlock 需要非 const 的 MidiBuffer&，而本函数参数是 const。
+    // 拷贝一份再传入（插件处理会就地消费 MIDI 事件）。
+    juce::MidiBuffer midiCopy(midiBuffer);
+    plugin->instance->processBlock(buffer, midiCopy);
 }
