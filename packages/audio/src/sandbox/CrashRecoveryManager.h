@@ -8,9 +8,20 @@
 #include <vector>
 #include <unordered_map>
 
+// PluginCrashDetector / PluginHealthMonitor 必须拿到完整定义，不能只做前向声明：
+// 本头文件的成员函数签名直接命名了它们的嵌套类型
+// （PluginCrashDetector::CrashInfo @ 213、PluginHealthMonitor::HealthState @ 219/220），
+// 而不完整类型没有可见的成员，命名其嵌套类型即报
+//   error: invalid use of incomplete type 'class PluginCrashDetector'
+//   error: 'PluginHealthMonitor::HealthState' has not been declared
+// 且 GCC 在错误恢复中会把 const CrashInfo& 误读成 const int&，连带报出
+// 「no declaration matches」等一串假象错（.cpp:34/344/377）。
+// 两个被包含的头文件都不反向依赖本文件（已确认无循环包含），且均只依赖 JUCE/std。
+#include "PluginCrashDetector.h"
+#include "PluginHealthMonitor.h"
+
+// UnifiedPluginManager 仅以引用形式出现在声明中（195 行），前向声明足够。
 class UnifiedPluginManager;
-class PluginCrashDetector;
-class PluginHealthMonitor;
 
 /**
  * CrashRecoveryManager — Manages the full crash recovery lifecycle.
