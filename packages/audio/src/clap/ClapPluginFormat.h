@@ -34,9 +34,15 @@ public:
 
     bool fileMightContainThisPluginType(const juce::String& fileOrIdentifier) override;
 
+    juce::String getNameOfPluginFromIdentifier(const juce::String& fileOrIdentifier) override;
+
+    bool pluginNeedsRescanning(const juce::PluginDescription& description) override;
+
     juce::FileSearchPath getDefaultLocationsToSearch() override;
 
     bool canScanForPlugins() const override;
+
+    bool isTrivialToScan() const override;
 
     void findAllTypesForFile(juce::OwnedArray<juce::PluginDescription>& results,
                              const juce::String& fileOrIdentifier) override;
