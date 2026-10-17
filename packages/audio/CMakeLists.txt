@@ -149,6 +149,14 @@ if(BUILD_TESTS)
     src/clap/ClapPluginLoader.cpp
     src/clap/ClapNoteExpression.cpp
     src/clap/ClapParamModulation.cpp
+    # v2.8.0（第 28 轮）：漏了整个 src/vst3 实现 → 链接期 29 个 undefined reference
+    # （PluginChain / Vst3HostManager / Vst3PluginLoader / Vst3PluginScanner /
+    #   PluginProcessor）。这些 .cpp 在主目标里已编译通过，此处补齐同一份清单。
+    src/vst3/Vst3HostManager.cpp
+    src/vst3/Vst3PluginScanner.cpp
+    src/vst3/Vst3PluginLoader.cpp
+    src/vst3/PluginProcessor.cpp
+    src/vst3/PluginChain.cpp
     src/sandbox/PluginCrashDetector.cpp
     src/sandbox/PluginHealthMonitor.cpp
     src/sandbox/CrashRecoveryManager.cpp
