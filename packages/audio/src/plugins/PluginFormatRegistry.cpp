@@ -30,8 +30,15 @@ bool PluginFormatRegistry::initialize()
     }
 
     // Register CLAP format (custom implementation)
-    auto clapFormat = std::make_shared<ClapPluginFormat>();
+    //
+    // 所有权模型（v2.8.0 第 30 轮修正）：交给 AudioPluginFormatManager 的格式
+    // 由它**独占**（JUCE 8.0.1 头文件注释："The object passed in will be owned
+    // and deleted by the manager"）。registry 只保留裸指针用于查询。
+    // 此前的写法是 make_shared 持有同一个对象、再把裸指针交给 manager，
+    // 两者析构时各自 delete 一次 → 双重释放 → SegFault。
+    auto* clapFormat = new ClapPluginFormat();
     registerFormat(clapFormat);
+    formatManager.addFormat(clapFormat);
 
     initialized = true;
     DBG("PluginFormatRegistry: Initialized with " + juce::String(formats.size()) + " formats");
@@ -101,8 +108,11 @@ void PluginFormatRegistry::registerFormat(std::shared_ptr<juce::AudioPluginForma
     entry.name = format->getName();
     formats.push_back(entry);
 
-    // Also add to AudioPluginFormatManager
-    formatManager.addFormat(format.get());
+    // v2.8.0 第 30 轮：这里**不能**再调 formatManager.addFormat(format.get())。
+    // addFormat 会接管所有权并 delete，而本重载的 shared_ptr 仍持有同一对象
+    // → 双重释放。走本重载的格式只登记在 registry（shared 所有权归调用方），
+    // 若还需要让它参与 formatManager 的实例创建，请改用裸指针重载，
+    // 由 formatManager 独占（见 initialize() 中 CLAP 的注册方式）。
 
     DBG("PluginFormatRegistry: Registered format '" + format->getName() + "' (shared ownership)");
 }

@@ -70,8 +70,10 @@ public:
             ClapPluginScanner scanner;
             juce::AudioPluginFormatManager manager;
             manager.addDefaultFormats();
-            ClapPluginFormat clapFormat;
-            manager.addFormat(&clapFormat);
+            // addFormat() 接管所有权并在析构时 delete（JUCE 8.0.1 头文件注释：
+            // "The object passed in will be owned and deleted by the manager"）。
+            // 传栈对象地址 = 让 manager 去 delete 一个栈变量 → 作用域结束时 SegFault。
+            manager.addFormat(new ClapPluginFormat());
             return scanner.initialize(&manager);
         }, passed, failed);
 
@@ -98,8 +100,8 @@ public:
             ClapPluginLoader loader;
             juce::AudioPluginFormatManager manager;
             manager.addDefaultFormats();
-            ClapPluginFormat clapFormat;
-            manager.addFormat(&clapFormat);
+            // 同上：addFormat() 接管所有权，不能传栈对象。
+            manager.addFormat(new ClapPluginFormat());
             return loader.initialize(&manager);
         }, passed, failed);
 

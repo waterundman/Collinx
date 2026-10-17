@@ -10,9 +10,11 @@
  * the standard JUCE plugin hosting API.
  *
  * Usage:
- *   ClapPluginFormat format;
  *   AudioPluginFormatManager manager;
- *   manager.addFormat(&format);
+ *   manager.addFormat(new ClapPluginFormat());   // 所有权转移给 manager
+ *
+ * 注意：addFormat() 会接管所有权并在 manager 析构时 delete。
+ * 不要传栈对象地址，也不要传仍被智能指针持有的对象。
  */
 class ClapPluginFormat : public juce::AudioPluginFormat
 {
