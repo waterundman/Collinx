@@ -149,9 +149,14 @@ public:
 
         runTest("AutomationCurve Thin Keyframes", [&]() {
             AutomationCurve curve;
+            // 端点 0@0 → 1@1，中间两点取**该直线上**的值（0.1→0.1、0.2→0.2），
+            // 与直线的偏差为 0，才符合 thinKeyframes 的剔除以义。
+            // 原数据写作 0.001 / 0.002（注释称 "Nearly on the line"）其实只是
+            // "接近零"：t=0.2 处直线值为 0.2，偏差 0.198 远大于 tolerance，
+            // 按定义不该被删 —— 是数据与语义不符，断言（== 2）保持不变。
             curve.addKeyframe(0.0, 0.0f);
-            curve.addKeyframe(0.1, 0.001f); // Nearly on the line
-            curve.addKeyframe(0.2, 0.002f); // Nearly on the line
+            curve.addKeyframe(0.1, 0.1f);
+            curve.addKeyframe(0.2, 0.2f);
             curve.addKeyframe(1.0, 1.0f);
             curve.thinKeyframes(0.01f);
             return curve.getNumKeyframes() == 2; // Should remove middle keyframes
@@ -349,8 +354,11 @@ private:
 
 // 原本是本文件独立可执行时的 main()。单二进制构建下只能有一个 main（在
 // vst3_tests.cpp，由 START_JUCE_APPLICATION 提供），故改为具名入口由其调度。
-int runAutomationTests(int& passed, int& failed)
+int runAutomationTests(int& totalPassed, int& totalFailed)
 {
+    int passed = 0;
+    int failed = 0;
+
     AutomationTestRunner::runAll(passed, failed);
 
     std::cout << std::endl;
@@ -358,6 +366,9 @@ int runAutomationTests(int& passed, int& failed)
     std::cout << "Passed: " << passed << std::endl;
     std::cout << "Failed: " << failed << std::endl;
     std::cout << "Total:  " << (passed + failed) << std::endl;
+
+    totalPassed += passed;
+    totalFailed += failed;
 
     return failed > 0 ? 1 : 0;
 }

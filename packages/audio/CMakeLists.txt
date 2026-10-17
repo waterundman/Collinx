@@ -111,6 +111,12 @@ target_compile_definitions(collinx-audio-engine PRIVATE JUCE_WEB_BROWSER=0)
 # curl_easy_* / curl_multi_* 等符号，而 pkg-config 的 curl 库不会自动传进链接器，
 # 导致链接期 46 个 undefined reference。引擎不需要联网功能。
 target_compile_definitions(collinx-audio-engine PRIVATE JUCE_USE_CURL=0)
+# v2.8.0（第 31 轮）：JUCE 的 VST3 宿主支持是**编译期开关**。不定义
+# JUCE_PLUGINHOST_VST3 时，AudioPluginFormatManager::addDefaultFormats()
+# 根本不会注册 VST3PluginFormat（Linux 上也同样），于是
+# PluginFormatRegistry 拿不到 "VST3"，测试里 4 条相关断言必然失败。
+# 引擎的职责就是宿主 VST3，故显式开启。
+target_compile_definitions(collinx-audio-engine PRIVATE JUCE_PLUGINHOST_VST3=1)
 
 # v2.8.0：原此处调用了 juce_generate_juce_header(collinx-audio-engine)，但
 #   1) 目标是普通 add_executable，JUCE 要求目标由 juce_add_* 创建才带 sources 目录
@@ -192,6 +198,9 @@ if(BUILD_TESTS)
 
   target_compile_definitions(collinx-audio-tests PRIVATE JUCE_WEB_BROWSER=0)
   target_compile_definitions(collinx-audio-tests PRIVATE JUCE_USE_CURL=0)
+  # v2.8.0（第 31 轮）：与主目标一致，否则 addDefaultFormats() 不注册 VST3，
+  # registry 相关断言（Has VST3 / Detect VST3 File / Format Names）必挂。
+  target_compile_definitions(collinx-audio-tests PRIVATE JUCE_PLUGINHOST_VST3=1)
 
   # v2.8.0：同上，移除对未使用 JuceHeader.h 的生成调用（详见主目标处的说明）。
 

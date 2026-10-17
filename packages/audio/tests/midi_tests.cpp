@@ -219,8 +219,11 @@ private:
 
 // 原本是本文件独立可执行时的 main()。单二进制构建下只能有一个 main（在
 // vst3_tests.cpp，由 START_JUCE_APPLICATION 提供），故改为具名入口由其调度。
-int runMidiTests(int& passed, int& failed)
+int runMidiTests(int& totalPassed, int& totalFailed)
 {
+    int passed = 0;
+    int failed = 0;
+
     MidiTestRunner::runAll(passed, failed);
 
     std::cout << std::endl;
@@ -228,6 +231,9 @@ int runMidiTests(int& passed, int& failed)
     std::cout << "Passed: " << passed << std::endl;
     std::cout << "Failed: " << failed << std::endl;
     std::cout << "Total:  " << (passed + failed) << std::endl;
+
+    totalPassed += passed;
+    totalFailed += failed;
 
     return failed > 0 ? 1 : 0;
 }

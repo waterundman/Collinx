@@ -151,8 +151,11 @@ TEST(test_progress_reporter_throttle)
 // ============================================================
 // Entry（原本是独立可执行文件的 main；单二进制下由 vst3_tests.cpp 调度）
 // ============================================================
-int runScanTests(int& passed, int& failed)
+int runScanTests(int& totalPassed, int& totalFailed)
 {
+    int passed = 0;
+    int failed = 0;
+
     for (auto& t : tests)
     {
         std::cout << "Running: " << t.name << " ... ";
@@ -177,6 +180,9 @@ int runScanTests(int& passed, int& failed)
     std::cout << "\n=== Results: " << passed << " passed, "
               << failed << " failed, "
               << tests.size() << " total ===" << std::endl;
+
+    totalPassed += passed;
+    totalFailed += failed;
 
     return failed > 0 ? 1 : 0;
 }
