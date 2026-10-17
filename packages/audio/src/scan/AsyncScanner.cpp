@@ -522,7 +522,20 @@ AsyncScanner::ScanResult AsyncScanner::scanFile(const juce::File& file)
     try
     {
         // Detect format
-        auto* format = formatManager->findFormatForFile(file.getFullPathName());
+        // v2.8.0：juce::AudioPluginFormatManager 没有 findFormatForFile()（臆造 API）。
+        // 正确做法是遍历已注册的 format，用 fileMightContainThisPluginType()
+        // 判断哪个格式认得这个文件。
+        juce::AudioPluginFormat* format = nullptr;
+        for (int i = 0; i < formatManager->getNumFormats(); ++i)
+        {
+            auto* candidate = formatManager->getFormat(i);
+            if (candidate != nullptr &&
+                candidate->fileMightContainThisPluginType(file.getFullPathName()))
+            {
+                format = candidate;
+                break;
+            }
+        }
         if (format == nullptr)
         {
             result.success = false;
