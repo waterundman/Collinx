@@ -8,6 +8,24 @@
  * Tests format registry and unified manager functionality.
  */
 
+/**
+ * JUCE 8.0.1 的 VST3PluginFormat::fileMightContainThisPluginType 原文是：
+ *     auto f = File::createFileWithoutCheckingPath (fileOrIdentifier);
+ *     return f.hasFileExtension (".vst3") && f.exists();
+ * 即「扩展名 + 文件真实存在」两个条件，只给 "test.vst3" 这种不存在的路径时
+ * 必然返回 false。要测 VST3 识别，得给一个真实存在的 .vst3 文件。
+ * （CLAP 走我们自己的实现，只判扩展名，所以 "test.clap" 仍然有效。）
+ */
+static juce::File makeExistingVst3File()
+{
+    auto file = juce::File::createTempFile(".vst3");
+
+    if (! file.existsAsFile())
+        (void) file.create();
+
+    return file;
+}
+
 class UnifiedTestRunner
 {
 public:
@@ -56,7 +74,7 @@ public:
         runTest("PluginFormatRegistry Detect VST3 File", [&]() {
             PluginFormatRegistry registry;
             registry.initialize();
-            return registry.isKnownPluginFormat("test.vst3");
+            return registry.isKnownPluginFormat(makeExistingVst3File().getFullPathName());
         }, passed, failed);
 
         runTest("PluginFormatRegistry Unknown Format", [&]() {
@@ -132,7 +150,9 @@ public:
         runTest("UnifiedPluginManager IsKnownPlugin", [&]() {
             UnifiedPluginManager manager;
             manager.initialize();
-            return manager.isKnownPlugin("test.clap") && manager.isKnownPlugin("test.vst3");
+            // VST3 需要真实存在的文件（见 makeExistingVst3File 的说明）
+            return manager.isKnownPlugin("test.clap")
+                && manager.isKnownPlugin(makeExistingVst3File().getFullPathName());
         }, passed, failed);
 
         runTest("UnifiedPluginManager Not Known Plugin", [&]() {
