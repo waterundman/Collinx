@@ -72,14 +72,14 @@ public:
 
         runTest("MidiEffectChain Add Effect", [&]() {
             MidiEffectChain chain;
-            auto effect = std::make_unique<MidiEffectProcessor>();
+            auto effect = std::make_unique<TestMidiEffectProcessor>();
             int index = chain.addEffect(std::move(effect));
             return index == 0 && chain.getNumEffects() == 1;
         }, passed, failed);
 
         runTest("MidiEffectChain Remove Effect", [&]() {
             MidiEffectChain chain;
-            auto effect = std::make_unique<MidiEffectProcessor>();
+            auto effect = std::make_unique<TestMidiEffectProcessor>();
             chain.addEffect(std::move(effect));
             chain.removeEffect(0);
             return chain.isEmpty();
@@ -87,8 +87,8 @@ public:
 
         runTest("MidiEffectChain Move Effect", [&]() {
             MidiEffectChain chain;
-            auto effect1 = std::make_unique<MidiEffectProcessor>();
-            auto effect2 = std::make_unique<MidiEffectProcessor>();
+            auto effect1 = std::make_unique<TestMidiEffectProcessor>();
+            auto effect2 = std::make_unique<TestMidiEffectProcessor>();
             chain.addEffect(std::move(effect1));
             chain.addEffect(std::move(effect2));
             chain.moveEffect(0, 1);
