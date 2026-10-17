@@ -1,4 +1,15 @@
 #include <juce_audio_basics/juce_audio_basics.h>
+
+// v2.8.0：MidiEffectProcessor 的 getName() 是纯虚（设计如此，已有两个派生类
+// MidiTransposer / MidiVelocityScaler）。测试里直接实例化基类会报
+// "cannot declare variable to be of abstract type"，故提供测试专用派生类。
+namespace {
+class TestMidiEffectProcessor : public MidiEffectProcessor
+{
+public:
+    juce::String getName() const override { return "TestEffect"; }
+};
+} // namespace
 #include "../src/midi/MidiEffectProcessor.h"
 #include "../src/midi/MidiEffectChain.h"
 #include "../src/midi/MidiRouter.h"
@@ -19,12 +30,12 @@ public:
         // ── MidiEffectProcessor tests ──────────────────────────────────
 
         runTest("MidiEffectProcessor Creation", [&]() {
-            MidiEffectProcessor processor;
+            TestMidiEffectProcessor processor;
             return processor.getId() >= 0;
         }, passed, failed);
 
         runTest("MidiEffectProcessor Lifecycle", [&]() {
-            MidiEffectProcessor processor;
+            TestMidiEffectProcessor processor;
             processor.prepare(44100.0, 512);
             bool prepared = processor.isPrepared();
             processor.activate();
@@ -37,7 +48,7 @@ public:
         }, passed, failed);
 
         runTest("MidiEffectProcessor Bypass", [&]() {
-            MidiEffectProcessor processor;
+            TestMidiEffectProcessor processor;
             processor.setBypassed(true);
             bool bypassed = processor.isBypassed();
             processor.setBypassed(false);
@@ -46,7 +57,7 @@ public:
         }, passed, failed);
 
         runTest("MidiEffectProcessor MIDI Channel Filter", [&]() {
-            MidiEffectProcessor processor;
+            TestMidiEffectProcessor processor;
             processor.setMidiChannel(5);
             return processor.getMidiChannel() == 5;
         }, passed, failed);
