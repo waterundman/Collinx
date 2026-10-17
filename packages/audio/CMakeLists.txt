@@ -107,6 +107,10 @@ target_link_libraries(collinx-audio-engine PRIVATE
 # 而 #include <gtk/gtk.h>；我们用的是普通 add_executable，JUCE 的 pkg-config
 # include 路径不会自动传入（只有 juce_add_* 目标才会）。直接关掉这个用不到的组件。
 target_compile_definitions(collinx-audio-engine PRIVATE JUCE_WEB_BROWSER=0)
+# v2.8.0：同理关掉 libcurl —— JUCE_USE_CURL 默认开启，juce_core 会引用
+# curl_easy_* / curl_multi_* 等符号，而 pkg-config 的 curl 库不会自动传进链接器，
+# 导致链接期 46 个 undefined reference。引擎不需要联网功能。
+target_compile_definitions(collinx-audio-engine PRIVATE JUCE_USE_CURL=0)
 
 # v2.8.0：原此处调用了 juce_generate_juce_header(collinx-audio-engine)，但
 #   1) 目标是普通 add_executable，JUCE 要求目标由 juce_add_* 创建才带 sources 目录
@@ -179,6 +183,7 @@ if(BUILD_TESTS)
   )
 
   target_compile_definitions(collinx-audio-tests PRIVATE JUCE_WEB_BROWSER=0)
+  target_compile_definitions(collinx-audio-tests PRIVATE JUCE_USE_CURL=0)
 
   # v2.8.0：同上，移除对未使用 JuceHeader.h 的生成调用（详见主目标处的说明）。
 
