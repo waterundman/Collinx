@@ -43,7 +43,10 @@ public:
         runTest("ClapPluginFormat DefaultLocations Not Empty", [&]() {
             ClapPluginFormat format;
             auto paths = format.getDefaultLocationsToSearch();
-            return !paths.isEmpty();
+            // v2.8.0：juce::FileSearchPath 没有 isEmpty()（编译报 no member named）。
+            // 用 getNumPaths() 判断；注意同文件的 !paths.empty() 是 std::vector
+            // 的 empty()，不要一起改错。
+            return paths.getNumPaths() > 0;
         }, passed, failed);
 
         // ── ClapPluginScanner tests ───────────────────────────────────
