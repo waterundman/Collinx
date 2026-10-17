@@ -1,6 +1,9 @@
 #pragma once
 
 #include "PresetFormat.h"
+// v2.8.0：juce::ValueTree 定义在 juce_data_structures 模块，
+// 此前全仓 8 个文件用了它却没 include（编译器报 "ValueTree in namespace juce does not name a type"）。
+#include <juce_data_structures/juce_data_structures.h>
 #include "PresetStorage.h"
 #include <vector>
 #include <functional>

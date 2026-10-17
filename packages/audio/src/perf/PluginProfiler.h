@@ -197,6 +197,41 @@ private:
         // Accumulator for averaging (protected by mutex)
         double processTimeSum = 0.0;
         int64_t processTimeSamples = 0;
+
+        // v2.8.0：std::atomic 的拷贝构造/赋值都是 deleted，含 atomic 成员的
+        // 结构体会因此失去隐式拷贝能力 —— PluginProfiler.cpp 里
+        // `pluginStatsMap[pluginId] = stats;` 会报
+        // "use of deleted function ... operator="。
+        // 显式实现为逐字段 load/store（relaxed 足够：这里只是拷贝快照）。
+        PluginStatsInternal() = default;
+
+        PluginStatsInternal(const PluginStatsInternal& other)
+            : lastProcessTime(other.lastProcessTime.load(std::memory_order_relaxed)),
+              peakProcessTime(other.peakProcessTime.load(std::memory_order_relaxed)),
+              minProcessTime(other.minProcessTime.load(std::memory_order_relaxed)),
+              totalBlocks(other.totalBlocks.load(std::memory_order_relaxed)),
+              processTimeSum(other.processTimeSum),
+              processTimeSamples(other.processTimeSamples)
+        {
+        }
+
+        PluginStatsInternal& operator=(const PluginStatsInternal& other)
+        {
+            if (this != &other)
+            {
+                lastProcessTime.store(other.lastProcessTime.load(std::memory_order_relaxed),
+                                      std::memory_order_relaxed);
+                peakProcessTime.store(other.peakProcessTime.load(std::memory_order_relaxed),
+                                      std::memory_order_relaxed);
+                minProcessTime.store(other.minProcessTime.load(std::memory_order_relaxed),
+                                     std::memory_order_relaxed);
+                totalBlocks.store(other.totalBlocks.load(std::memory_order_relaxed),
+                                  std::memory_order_relaxed);
+                processTimeSum = other.processTimeSum;
+                processTimeSamples = other.processTimeSamples;
+            }
+            return *this;
+        }
     };
 
     PluginChain* pluginChain = nullptr;
