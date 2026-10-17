@@ -142,8 +142,8 @@ private:
             ParallelProcessor pp;
             auto* proc1 = new TestProcessor("Test1", 0, 0.5f);
             auto* proc2 = new TestProcessor("Test2", 0, 0.5f);
-            pp.addProcessor(std::unique_ptr<Processor>(proc1));
-            pp.addProcessor(std::unique_ptr<Processor>(proc2));
+            pp.addProcessor(std::unique_ptr<ParallelProcessor::Processor>(proc1));
+            pp.addProcessor(std::unique_ptr<ParallelProcessor::Processor>(proc2));
             pp.setProcessingMode(ParallelProcessor::ProcessingMode::Sequential);
             pp.prepare(44100.0, 512, 2);
 
@@ -166,8 +166,8 @@ private:
             ParallelProcessor pp;
             auto* proc1 = new TestProcessor("Test1", 0, 0.5f);
             auto* proc2 = new TestProcessor("Test2", 0, 0.5f);
-            pp.addProcessor(std::unique_ptr<Processor>(proc1));
-            pp.addProcessor(std::unique_ptr<Processor>(proc2));
+            pp.addProcessor(std::unique_ptr<ParallelProcessor::Processor>(proc1));
+            pp.addProcessor(std::unique_ptr<ParallelProcessor::Processor>(proc2));
             pp.setProcessingMode(ParallelProcessor::ProcessingMode::Parallel);
             pp.prepare(44100.0, 512, 2);
 
