@@ -33,6 +33,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # v2.8.0：juce_gui_extra 的 WebBrowserComponent 需要 gtk/gtk.h。
+      # 此前只装了 libwebkit2gtk-4.1-dev，它不带 GTK 开发头文件，导致编译到
+      # juce_gui_extra.cpp 时报 "gtk/gtk.h: No such file or directory"。
+      # 注意：注释必须放在 run 之外 —— 在 bash 的 \ 续行中间插 # 会破坏命令。
       - name: Install JUCE Linux build dependencies
         run: |
           sudo apt-get update
@@ -42,7 +46,8 @@ jobs:
             libcurl4-openssl-dev libfreetype6-dev \
             libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
             libxinerama-dev libxrandr-dev libxrender-dev \
-            libgl1-mesa-dev libwebkit2gtk-4.1-dev \
+            libgl1-mesa-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
             xvfb
 
       - name: Cache JUCE checkout
