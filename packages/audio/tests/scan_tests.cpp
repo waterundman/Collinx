@@ -149,13 +149,10 @@ TEST(test_progress_reporter_throttle)
 // These tests verify the ScanProgressReporter which is self-contained.
 
 // ============================================================
-// Main
+// Entry（原本是独立可执行文件的 main；单二进制下由 vst3_tests.cpp 调度）
 // ============================================================
-int main()
+int runScanTests(int& passed, int& failed)
 {
-    int passed = 0;
-    int failed = 0;
-
     for (auto& t : tests)
     {
         std::cout << "Running: " << t.name << " ... ";

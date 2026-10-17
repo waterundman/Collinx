@@ -456,10 +456,16 @@ void testPresetManagerTags()
     tempDir.deleteRecursively();
 }
 
-// ── Main ────────────────────────────────────────────────────────────────
+// ── Entry ───────────────────────────────────────────────────────────────
+// 原本是本文件独立可执行时的 main()。单二进制构建下只能有一个 main（在
+// vst3_tests.cpp），故改为具名入口由其调度；计数器是文件作用域静态量，
+// 用它回填写出参。
 
-int main()
+int runPresetTests(int& passed, int& failed)
 {
+    testsPassed = 0;
+    testsFailed = 0;
+
     std::cout << "=== Preset System Unit Tests ===\n\n";
 
     // PresetFormat tests
@@ -492,6 +498,9 @@ int main()
     std::cout << "\n=== Results ===\n";
     std::cout << "Passed: " << testsPassed << "\n";
     std::cout << "Failed: " << testsFailed << "\n";
+
+    passed += testsPassed;
+    failed += testsFailed;
 
     return testsFailed > 0 ? 1 : 0;
 }

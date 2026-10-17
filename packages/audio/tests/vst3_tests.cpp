@@ -8,6 +8,14 @@
 #include "unified_tests.cpp"
 #include "crash_detection_tests.cpp"
 
+// 各测试套件在自己的 TU 里定义的入口（原本各自是 main）。
+// 单二进制只能有一个 main（下面 START_JUCE_APPLICATION 生成的那个），
+// 所以这里统一声明、在 initialise() 里按顺序调度。
+int runMidiTests(int& passed, int& failed);
+int runPresetTests(int& passed, int& failed);
+int runScanTests(int& passed, int& failed);
+int runAutomationTests(int& passed, int& failed);
+
 /**
  * Simple test runner for VST3 integration.
  * Note: This is a basic test framework. For production, consider using
@@ -164,6 +172,14 @@ public:
         // ── Stage 2: Crash Detection Mechanism tests ──────────────────
 
         CrashDetectionTestRunner::runAll(passed, failed);
+
+        // ── MIDI / Preset / Scan / Automation 套件 ──────────────────────
+        // 这四个文件原来各带一个 main()，从未与主入口同时链接过；
+        // 现改为具名入口在此调度，保证其用例仍然被执行。
+        runMidiTests(passed, failed);
+        runPresetTests(passed, failed);
+        runScanTests(passed, failed);
+        runAutomationTests(passed, failed);
 
         std::cout << std::endl;
         std::cout << "Results: " << passed << " passed, "
