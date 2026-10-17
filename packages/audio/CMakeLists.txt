@@ -90,6 +90,13 @@ add_executable(collinx-audio-engine ${SOURCES})
 target_include_directories(collinx-audio-engine PRIVATE src)
 
 target_link_libraries(collinx-audio-engine PRIVATE
+
+# v2.8.0：引擎不需要 WebView。juce_gui_extra 在 Linux 上会因
+# JUCE_WEB_BROWSER 默认开启而 #include <gtk/gtk.h> —— 而我们用的是普通
+# add_executable，JUCE 的 pkg-config include 路径不会自动传进来，
+# 于是编译到 juce_gui_extra.cpp 就报 gtk/gtk.h 找不到。
+# 直接关掉这个用不到的组件，比引入 GTK 依赖更干净。
+target_compile_definitions(collinx-audio-engine PRIVATE JUCE_WEB_BROWSER=0)
   juce::juce_audio_basics
   juce::juce_audio_devices
   juce::juce_audio_formats
@@ -161,6 +168,7 @@ if(BUILD_TESTS)
   target_include_directories(collinx-audio-tests PRIVATE src)
 
   target_link_libraries(collinx-audio-tests PRIVATE
+  target_compile_definitions(collinx-audio-tests PRIVATE JUCE_WEB_BROWSER=0)
     juce::juce_audio_basics
     juce::juce_audio_devices
     juce::juce_audio_formats
