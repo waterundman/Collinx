@@ -1,5 +1,9 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include "../src/midi/MidiEffectProcessor.h"
+#include "../src/midi/MidiEffectChain.h"
+#include "../src/midi/MidiRouter.h"
+
 // v2.8.0：MidiEffectProcessor 的 getName() 是纯虚（设计如此，已有两个派生类
 // MidiTransposer / MidiVelocityScaler）。测试里直接实例化基类会报
 // "cannot declare variable to be of abstract type"，故提供测试专用派生类。
@@ -10,9 +14,6 @@ public:
     juce::String getName() const override { return "TestEffect"; }
 };
 } // namespace
-#include "../src/midi/MidiEffectProcessor.h"
-#include "../src/midi/MidiEffectChain.h"
-#include "../src/midi/MidiRouter.h"
 
 /**
  * Simple test runner for MIDI effect chain integration.
