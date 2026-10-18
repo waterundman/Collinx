@@ -101,7 +101,28 @@ UI 各视图重渲染
 > **教训**：18k 行代码没有构建，就没有"质量"可言，只能算"意图"。
 > 已补 `.github/workflows/ci-audio.yml` 建立基线。
 
-### 4.2 能力缺口：N-API 只有插件宿主，没有合成器
+### 4.2 合成器接口（v2.8.0 已补齐）
+
+**状态：已完成并验证。** SynthBridge 暴露 23 个方法（prepare / noteOn /
+noteOff / render / transport / volume / engine 切换），CI 的 build-napi job
+构建 .node 后执行冒烟断言：
+
+```
+exports: SynthBridge, version, engineType
+block length: 1024  energy: 293.7753      ← 非静音，合成器真的在发声
+```
+
+**关键设计：不包装 AudioEngine。** 它继承 juce::AudioAppComponent，会自开
+音频设备并在消息线程工作；而 Node addon 里 OS 主线程归 V8（见 §4.3）。
+SynthBridge 因此**只做纯渲染**：不创建 AudioDeviceManager、不碰
+MessageManager、不需要 GUI，音频设备由调用方驱动。
+
+线程模型：noteOn/noteOff 写 juce::MidiBuffer（内部 lock-free 队列），
+render() 用 swapWith 取走独占消费——音频线程不抢锁。
+
+### 4.2.1 历史缺口（已解决，留档）
+
+原 N-API 只暴露 VST3 插件宿主（PluginManagerBridge / AudioProcessorBridge）：
 
 `src/napi/` 只暴露了两个类：
 
@@ -261,10 +282,7 @@ packages/desktop/          Electron 外壳
 **安全基线**：`contextIsolation: true` + `nodeIntegration: false`，渲染进程拿不到
 Node 能力；暴露的是收敛的领域 API（`audioEngine.*`），不是 `ipcRenderer` 本身。
 
-**当前阻塞**（两件，与引擎侧同一个瓶颈）：
-1. `packages/audio` 尚未编译通过（CI 迭代中）
-2. N-API 缺合成器接口 —— 需把 `AudioEngine::handleMidiMessage` / `Transport` /
-   `setMasterVolume` 包一层绑定（约 200 行 C++）
+**当前状态**：① 已编译通过且有 201 条测试（CI 绿）；②N-API 合成器接口已补齐并验证能渲染非静音音频。剩余的是**音频设备驱动**（SharedArrayBuffer + AudioWorklet），属工程接线而非引擎能力。
 
 ## 七、结构重整建议
 
