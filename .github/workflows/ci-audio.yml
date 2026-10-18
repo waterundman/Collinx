@@ -140,4 +140,12 @@ jobs:
             if (!(block instanceof Float32Array)) throw new Error('render() 未返回 Float32Array');
             if (nz <= 0) throw new Error('渲染结果全静音 —— 合成器没有真正发声');
             console.log('OK: SynthBridge 能渲染出非静音音频');
+            // VST3 宿主桥（v2.8.0 同批修好的 1628 行代码）：只验证可实例化与
+            // 路径推导，不做真实磁盘扫描（CI 里没有插件，且扫描会拖慢）
+            const pm = new m.PluginManagerBridge();
+            if (!pm) throw new Error('PluginManagerBridge 实例化失败');
+            const paths = m.getDefaultScanPaths();
+            console.log('PluginManagerBridge OK, VST3 scan paths:', paths.length);
+            if (!Array.isArray(paths)) throw new Error('getDefaultScanPaths 未返回数组');
+
           "
