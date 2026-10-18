@@ -224,3 +224,69 @@ if(BUILD_TESTS)
   add_test(NAME PerfTests COMMAND collinx-audio-tests)
   add_test(NAME AutomationTests COMMAND collinx-audio-tests)
 endif()
+
+# ─────────────────────────────────────────────────────────────────────────
+# 可选：Node addon（@collinx/audio-native）
+#
+# 为什么不用 binding.gyp：那份配置定义了 JUCE_* 宏，却**没有任何 JUCE
+# include 路径**，也没装 node-addon-api —— 也就是说它从未构建成功过。
+# 这里复用 CMake 已经拉好的 JUCE，用 -DBUILD_NAPI=ON 显式开启。
+#
+# 产物：collinx-audio-native.node（含 SynthBridge + VST3 宿主桥）
+# ─────────────────────────────────────────────────────────────────────────
+option(BUILD_NAPI "Build Node addon (@collinx/audio-native)" OFF)
+
+if(BUILD_NAPI)
+  find_path(NODE_ADDON_API_INCLUDE napi.h
+    PATHS
+      ${CMAKE_CURRENT_SOURCE_DIR}/node_modules/node-addon-api
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../node_modules/node-addon-api
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../packages/ui/node_modules/node-addon-api
+    NO_DEFAULT_PATH)
+
+  if(NOT NODE_ADDON_API_INCLUDE)
+    message(FATAL_ERROR
+      "BUILD_NAPI=ON 但找不到 node-addon-api。先执行：\n"
+      "  npm i -D node-addon-api（在 packages/audio 或仓库根目录）")
+  endif()
+  message(STATUS "node-addon-api: ${NODE_ADDON_API_INCLUDE}")
+
+  add_library(collinx-audio-native SHARED
+    src/napi/Vst3HostAddon.cpp
+    src/napi/PluginManagerBridge.cpp
+    src/napi/AudioProcessorBridge.cpp
+    src/napi/SynthBridge.cpp
+    src/vst3/Vst3HostManager.cpp
+    src/vst3/Vst3PluginScanner.cpp
+    src/vst3/Vst3PluginLoader.cpp
+    src/vst3/PluginProcessor.cpp
+    src/vst3/PluginChain.cpp
+    src/builtin-synth.cpp
+    src/wavetable-synth.cpp
+    src/transport.cpp
+  )
+
+  target_include_directories(collinx-audio-native PRIVATE
+    ${NODE_ADDON_API_INCLUDE}
+    src)
+
+  target_compile_definitions(collinx-audio-native PRIVATE
+    NAPI_VERSION=8
+    NAPI_DISABLE_CPP_EXCEPTIONS
+    JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0)
+
+  target_link_libraries(collinx-audio-native PRIVATE
+    juce::juce_audio_basics
+    juce::juce_audio_devices
+    juce::juce_audio_formats
+    juce::juce_audio_processors
+    juce::juce_data_structures
+    juce::juce_dsp)
+
+  # Node 只认 .node 后缀，且不需要 lib 前缀
+  set_target_properties(collinx-audio-native PROPERTIES
+    PREFIX ""
+    SUFFIX ".node")
+endif()

@@ -80,3 +80,60 @@ jobs:
           name: ctest-log
           path: packages/audio/build/Testing/Temporary/LastTest.log
           if-no-files-found: ignore
+
+  # ── Node addon（@collinx/audio-native）──────────────────────────────
+  # 独立 job：addon 是新的、未验证的代码，失败不应连累主引擎的测试结果。
+  # 它编译 SynthBridge（v2.8.0 新增的合成器桥）+ 既有 VST3 宿主桥。
+  build-napi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install JUCE Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libasound2-dev libjack-jackd2-dev \
+            libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev \
+            libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libgl1-mesa-dev
+
+      - name: Install node-addon-api
+        working-directory: packages/audio
+        run: npm i --no-save --no-package-lock node-addon-api
+
+      - name: Cache JUCE checkout
+        uses: actions/cache@v4
+        with:
+          path: packages/audio/build/_deps
+          key: juce-8.0.1-${{ runner.os }}
+
+      - name: Configure with BUILD_NAPI
+        working-directory: packages/audio
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_NAPI=ON
+
+      - name: Build addon target
+        working-directory: packages/audio
+        run: cmake --build build --parallel 2 --target collinx-audio-native
+
+      - name: Verify .node artifact exists
+        working-directory: packages/audio
+        run: |
+          ls -la build/*.node
+          node -e "
+            const path = require('path');
+            const m = require(path.resolve('build/collinx-audio-native.node'));
+            console.log('exports:', Object.keys(m).join(', '));
+            const s = new m.SynthBridge();
+            s.prepare(44100, 512);
+            s.noteOn(60, 0.8);
+            const block = s.render(512);
+            const nz = block.reduce((a, v) => a + Math.abs(v), 0);
+            console.log('block length:', block.length, 'energy:', nz.toFixed(4));
+            if (!(block instanceof Float32Array)) throw new Error('render() 未返回 Float32Array');
+            if (nz <= 0) throw new Error('渲染结果全静音 —— 合成器没有真正发声');
+            console.log('OK: SynthBridge 能渲染出非静音音频');
+          "

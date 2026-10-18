@@ -275,3 +275,54 @@ export declare function getDefaultScanPaths(): string[];
 
 /** Check if a file is a VST3 plugin by extension. */
 export declare function isVst3File(filePath: string): boolean;
+
+// ─────────────────────────────────────────────────────────────────────────
+// SynthBridge —— 合成器桥（v2.8.0）
+//
+// 纯渲染：不打开音频设备、不碰 MessageManager。调用方负责驱动
+// `render(numSamples)`（实时音频线程或离线导出循环）。
+// 之所以不包装 AudioEngine，是因为它继承 juce::AudioAppComponent，
+// 在 Node addon 里会与 V8 争夺 OS 主线程（死锁风险，见 SynthBridge.h）。
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface TransportState {
+  bar: number;
+  beat: number;
+  bpm: number;
+  state: "stopped" | "playing" | "paused";
+}
+
+export declare class SynthBridge {
+  constructor();
+
+  /** 初始化渲染参数。sampleRate 8000..384000，blockSize 16..8192 */
+  prepare(sampleRate: number, blockSize: number): boolean;
+  isPrepared(): boolean;
+  /** 清空全部声部与待发 MIDI */
+  reset(): void;
+
+  noteOn(midi: number, velocity?: number, channel?: number): void;
+  noteOff(midi: number, channel?: number): void;
+  allNotesOff(channel?: number): void;
+
+  /**
+   * 渲染音频块。
+   * @returns **交织立体声** Float32Array，长度 = numSamples * 2，格式 [L,R,L,R,...]
+   */
+  render(numSamples?: number): Float32Array;
+
+  setEngine(engine: "builtin" | "wavetable"): void;
+  setVolume(volume: number): void;
+  getVolume(): number;
+  /** 仅 wavetable 引擎有效 */
+  setWaveform(index: number): void;
+
+  setTempo(bpm: number): void;
+  setTimeSignature(numerator: number, denominator: number): void;
+  play(): void;
+  pause(): void;
+  stop(): void;
+  setPosition(bar: number, beat?: number): void;
+  getTransportState(): TransportState;
+  setLoop(startBar: number, endBar: number, enable: boolean): void;
+}

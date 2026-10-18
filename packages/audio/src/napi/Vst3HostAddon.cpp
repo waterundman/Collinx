@@ -20,6 +20,7 @@
 #include <napi.h>
 #include "PluginManagerBridge.h"
 #include "AudioProcessorBridge.h"
+#include "SynthBridge.h"
 
 /**
  * Module initialization function.
@@ -30,6 +31,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
     // Register bridge classes
     PluginManagerBridge::Init(env, exports);
     AudioProcessorBridge::Init(env, exports);
+
+    // v2.8.0：合成器桥（纯渲染，不碰音频设备/MessageManager）
+    SynthBridge::Init(env, exports);
 
     // Export version info
     exports.Set("version", Napi::String::New(env, "1.2.0"));
