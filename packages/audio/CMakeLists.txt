@@ -210,6 +210,11 @@ if(BUILD_TESTS)
   # v2.8.0：同上，移除对未使用 JuceHeader.h 的生成调用（详见主目标处的说明）。
 
 
+  # ⚠️ 以下 8 个 add_test 跑的是**同一个二进制**（单入口 vst3_tests.cpp 的
+  # JUCEApplication::initialise 里依次调度全部 suite）。所以 ctest 的
+  # "8/8 passed" 实际含义是「同一套 201 条用例跑了 8 遍」，各 NAME 不对应
+  # 独立子集。保留 8 个只是为了失败时能看出是哪次运行挂了；跑一遍约 1 秒。
+  # 若要真正按 suite 分流，需要给二进制加 argv 参数选择入口。
   add_test(NAME Vst3Tests COMMAND collinx-audio-tests)
   add_test(NAME ClapTests COMMAND collinx-audio-tests)
   add_test(NAME MidiTests COMMAND collinx-audio-tests)
