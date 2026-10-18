@@ -67,8 +67,11 @@ jobs:
 
       - name: Test
         working-directory: packages/audio
-        # JUCE 的 GUI/host 模块在无显示环境下需要虚拟显示
-        run: xvfb-run -a ctest --test-dir build --output-on-failure
+        # JUCE 的 GUI/host 模块在无显示环境下需要虚拟显示。
+        # -V：把测试的 stdout 也打进 CI 日志 —— 否则 ctest 只在失败时显示输出，
+        # 成功时看不到 "Results: N passed, M failed"，无法确认用例真的被执行
+        # （v2.8.0 审查时正是靠这一点发现 scan_tests 的 assert 在 Release 下失效）。
+        run: xvfb-run -a ctest --test-dir build -V
 
       - name: Upload CTest log on failure
         if: failure()
