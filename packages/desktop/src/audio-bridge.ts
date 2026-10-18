@@ -37,14 +37,43 @@ export interface AudioEngineBridgeInfo {
 }
 
 type NativeAddon = {
+  SynthBridge?: new () => NativeSynthBridge;
   AudioProcessorBridge?: unknown;
   PluginManagerBridge?: unknown;
 };
 
+/**
+ * addon 里 SynthBridge 的形状（对应 packages/audio/src/napi/index.d.ts）。
+ * 这里只声明桌面壳用到的子集 —— 不用 `import type` 引用 C++ 包，
+ * 因为那个包没有 package.json，不属于 TS 模块图。
+ */
+export interface NativeSynthBridge {
+  prepare(sampleRate: number, blockSize: number): boolean;
+  isPrepared(): boolean;
+  reset(): void;
+  noteOn(midi: number, velocity?: number, channel?: number): void;
+  noteOff(midi: number, channel?: number): void;
+  allNotesOff(channel?: number): void;
+  /** 交织立体声 Float32Array，长度 = numSamples * 2 */
+  render(numSamples?: number): Float32Array;
+  setEngine(engine: "builtin" | "wavetable"): void;
+  setVolume(volume: number): void;
+  getVolume(): number;
+  setTempo(bpm: number): void;
+  setTimeSignature(numerator: number, denominator: number): void;
+  play(): void;
+  pause(): void;
+  stop(): void;
+  setPosition(bar: number, beat?: number): void;
+  getTransportState(): { bar: number; beat: number; bpm: number; state: string };
+}
+
 export class AudioEngineBridge {
   private addon: NativeAddon | null = null;
+  private synth: NativeSynthBridge | null = null;
   private status: AudioEngineStatus = "unavailable";
   private reason = "音频引擎尚未接通（packages/audio 需先构建出 N-API 产物）";
+  private sampleRate = 44100;
 
   /**
    * 尝试加载原生引擎。
@@ -57,7 +86,6 @@ export class AudioEngineBridge {
 
     try {
       // 运行时动态 require：装不上/编不出时不能让整个应用启动失败
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const nativePath = process.env.COLLINX_AUDIO_ADDON ?? "@collinx/audio-native";
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       this.addon = require(nativePath) as NativeAddon;
@@ -67,7 +95,7 @@ export class AudioEngineBridge {
       this.status = "unavailable";
       this.reason =
         err instanceof Error
-          ? `加载 ${"@collinx/audio-native"} 失败：${err.message}`
+          ? `加载音频 addon 失败：${err.message}`
           : "音频引擎加载失败";
     }
     return this.info();
@@ -77,29 +105,74 @@ export class AudioEngineBridge {
     return {
       status: this.status,
       reason: this.reason,
-      // 采样率等参数要等 N-API 合成器接口补齐后才能真实返回，
-      // 现在不填假值（v2.7.0 已清理过一批假指标面板）。
-      sampleRate: undefined,
-      backend: this.addon ? "juce-native" : undefined,
+      sampleRate: this.synth ? this.sampleRate : undefined,
+      backend: this.synth ? "juce-synthbridge" : undefined,
     };
   }
 
   /**
-   * 打开音频设备。
+   * 初始化合成器（不打开音频设备）。
    *
-   * 注意：这里**只是把请求转交给原生层**，实际的音频线程由 JUCE 在
-   * 它自己的线程上管理；本方法不阻塞等待设备就绪（否则又会踩主线程的坑）。
+   * 音频设备由调用方驱动：桌面壳后续用 SharedArrayBuffer 环形缓冲把
+   * render() 的音频交给渲染进程的 AudioWorklet 播放（见 README「阶段 2」）。
+   * 本轮只保证：addon 能加载、合成器能初始化、能渲染出非静音音频。
    */
-  async start(): Promise<boolean> {
-    if (!this.addon) return false;
-    // TODO(v2.9.0)：N-API 合成器接口补齐后接入
-    //   - engine.prepare(sampleRate, blockSize, channels)
-    //   - engine.setAudioChannels(0, 2)
-    return false;
+  async start(sampleRate = 44100, blockSize = 512): Promise<boolean> {
+    if (!this.addon?.SynthBridge) {
+      this.reason = "addon 中没有 SynthBridge 导出";
+      return false;
+    }
+    try {
+      this.synth = new this.addon.SynthBridge();
+      const ok = this.synth.prepare(sampleRate, blockSize);
+      if (!ok) {
+        this.reason = "SynthBridge.prepare() 返回 false";
+        this.synth = null;
+        return false;
+      }
+      this.sampleRate = sampleRate;
+      return true;
+    } catch (err) {
+      this.reason = err instanceof Error ? err.message : "合成器初始化失败";
+      this.synth = null;
+      return false;
+    }
+  }
+
+  /** 渲染一块音频（交织立体声）；未初始化时返回 null */
+  render(numSamples?: number): Float32Array | null {
+    return this.synth ? this.synth.render(numSamples) : null;
+  }
+
+  noteOn(midi: number, velocity = 0.8): void {
+    this.synth?.noteOn(midi, velocity);
+  }
+
+  noteOff(midi: number): void {
+    this.synth?.noteOff(midi);
+  }
+
+  setTempo(bpm: number): void {
+    this.synth?.setTempo(bpm);
+  }
+
+  play(): void {
+    this.synth?.play();
+  }
+
+  /** 停止传输（不释放合成器） */
+  transportStop(): void {
+    this.synth?.stop();
+  }
+
+  transportState(): { bar: number; beat: number; bpm: number; state: string } | null {
+    return this.synth ? this.synth.getTransportState() : null;
   }
 
   async stop(): Promise<void> {
-    if (!this.addon) return;
-    // TODO(v2.9.0)：engine.shutdownAudio()
+    if (!this.synth) return;
+    this.synth.allNotesOff();
+    this.synth.stop();
+    this.synth = null;
   }
 }
