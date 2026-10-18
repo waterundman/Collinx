@@ -268,16 +268,11 @@ if(BUILD_NAPI)
   endif()
   message(STATUS "node headers: ${NODE_INCLUDE_DIR}")
 
+  # 只包含合成器相关源文件。VST3 宿主桥（PluginManagerBridge / 各 vst3 实现）
+  # 尚未编译通过 —— 见 src/napi/SynthAddon.cpp 顶部说明，单独一轮修。
   add_library(collinx-audio-native SHARED
-    src/napi/Vst3HostAddon.cpp
-    src/napi/PluginManagerBridge.cpp
-    src/napi/AudioProcessorBridge.cpp
+    src/napi/SynthAddon.cpp
     src/napi/SynthBridge.cpp
-    src/vst3/Vst3HostManager.cpp
-    src/vst3/Vst3PluginScanner.cpp
-    src/vst3/Vst3PluginLoader.cpp
-    src/vst3/PluginProcessor.cpp
-    src/vst3/PluginChain.cpp
     src/builtin-synth.cpp
     src/wavetable-synth.cpp
     src/transport.cpp
