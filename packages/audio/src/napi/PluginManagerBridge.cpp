@@ -388,8 +388,6 @@ Napi::Value PluginManagerBridge::GetAllPluginsInfo(const Napi::CallbackInfo& inf
         result.Set(i, makePluginInfo(i));
     return result;
 }
-    return result;
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
