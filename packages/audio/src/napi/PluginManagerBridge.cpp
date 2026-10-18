@@ -185,7 +185,7 @@ Napi::Value PluginManagerBridge::LoadPlugin(const Napi::CallbackInfo& info)
         const auto& cached = hostManager->getScanner().getCachedResults();
         for (const auto& desc : cached)
         {
-            if (desc.identifier.toStdString() == descId || desc.name.toStdString() == descId)
+            if (desc.fileOrIdentifier.toStdString() == descId || desc.name.toStdString() == descId)
             {
                 descriptionCache[descId] = desc;
                 it = descriptionCache.find(descId);
@@ -348,7 +348,7 @@ Napi::Value PluginManagerBridge::GetPluginInfo(const Napi::CallbackInfo& info)
     obj.Set("numOutputChannels", Napi::Number::New(env, loaded->description.numOutputChannels));
     obj.Set("isActive", Napi::Boolean::New(env, loaded->isActive));
     obj.Set("isPrepared", Napi::Boolean::New(env, loaded->isPrepared));
-    obj.Set("identifier", Napi::String::New(env, loaded->description.identifier.toStdString()));
+    obj.Set("identifier", Napi::String::New(env, loaded->description.fileOrIdentifier.toStdString()));
 
     return obj;
 }
@@ -356,14 +356,38 @@ Napi::Value PluginManagerBridge::GetPluginInfo(const Napi::CallbackInfo& info)
 Napi::Value PluginManagerBridge::GetAllPluginsInfo(const Napi::CallbackInfo& info)
 {
     Napi::Env env = info.Env();
-    int numPlugins = hostManager->getLoader().getNumPlugins();
+    const int numPlugins = hostManager->getLoader().getNumPlugins();
+
+    // v2.8.0：原代码是 GetPluginInfo({info.Env(), {Napi::Number::New(env, i)}}) ——
+    // 花括号初始化列表被当成 Napi::CallbackInfo 的构造实参，报
+    // "invalid user-defined conversion to const Napi::CallbackInfo&"。
+    // CallbackInfo 由 N-API 在调用时提供，无法在代码里伪造，故用 lambda 复用逻辑。
+    auto makePluginInfo = [&](int index) -> Napi::Value
+    {
+        auto* loaded = hostManager->getLoader().getPlugin(index);
+        if (loaded == nullptr)
+            return env.Null();
+
+        const auto& d = loaded->description;
+        Napi::Object obj = Napi::Object::New(env);
+        obj.Set("index", Napi::Number::New(env, index));
+        obj.Set("name", Napi::String::New(env, d.name.toStdString()));
+        obj.Set("vendor", Napi::String::New(env, d.manufacturerName.toStdString()));
+        obj.Set("category", Napi::String::New(env, d.category.toStdString()));
+        obj.Set("isInstrument", Napi::Boolean::New(env, d.isInstrument));
+        obj.Set("numInputChannels", Napi::Number::New(env, d.numInputChannels));
+        obj.Set("numOutputChannels", Napi::Number::New(env, d.numOutputChannels));
+        obj.Set("isActive", Napi::Boolean::New(env, loaded->isActive));
+        obj.Set("isPrepared", Napi::Boolean::New(env, loaded->isPrepared));
+        obj.Set("identifier", Napi::String::New(env, d.fileOrIdentifier.toStdString()));
+        return obj;
+    };
 
     Napi::Array result = Napi::Array::New(env, numPlugins);
     for (int i = 0; i < numPlugins; ++i)
-    {
-        Napi::Value pluginInfo = GetPluginInfo({info.Env(), {Napi::Number::New(env, i)}});
-        result.Set(i, pluginInfo);
-    }
+        result.Set(i, makePluginInfo(i));
+    return result;
+}
     return result;
 }
 
@@ -374,7 +398,7 @@ Napi::Object PluginManagerBridge::PluginDescriptionToObject(
 {
     Napi::Object obj = Napi::Object::New(env);
     obj.Set("name", Napi::String::New(env, desc.name.toStdString()));
-    obj.Set("identifier", Napi::String::New(env, desc.identifier.toStdString()));
+    obj.Set("identifier", Napi::String::New(env, desc.fileOrIdentifier.toStdString()));
     obj.Set("manufacturerName", Napi::String::New(env, desc.manufacturerName.toStdString()));
     obj.Set("version", Napi::String::New(env, desc.version.toStdString()));
     obj.Set("category", Napi::String::New(env, desc.category.toStdString()));

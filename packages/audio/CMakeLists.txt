@@ -268,14 +268,26 @@ if(BUILD_NAPI)
   endif()
   message(STATUS "node headers: ${NODE_INCLUDE_DIR}")
 
-  # 只包含合成器相关源文件。VST3 宿主桥（PluginManagerBridge / 各 vst3 实现）
-  # 尚未编译通过 —— 见 src/napi/SynthAddon.cpp 顶部说明，单独一轮修。
+  # 合成器 + VST3 宿主桥。VST3 桥（PluginManagerBridge 等 1628 行）在 v2.8.0
+  # 首次尝试编译，修掉三类错误后并入同一 addon：
+  #   1. ScanWorker 缺 GetPromise 声明  2. PluginDescription 没有 identifier 字段
+  #   3. 用花括号伪造 Napi::CallbackInfo → 改用 lambda 复用构造逻辑
   add_library(collinx-audio-native SHARED
-    src/napi/SynthAddon.cpp
+    src/napi/Vst3HostAddon.cpp
+    src/napi/PluginManagerBridge.cpp
+    src/napi/AudioProcessorBridge.cpp
     src/napi/SynthBridge.cpp
+    src/vst3/Vst3HostManager.cpp
+    src/vst3/Vst3PluginScanner.cpp
+    src/vst3/Vst3PluginLoader.cpp
+    src/vst3/PluginProcessor.cpp
+    src/vst3/PluginChain.cpp
     src/builtin-synth.cpp
     src/wavetable-synth.cpp
     src/transport.cpp
+    src/plugins/PluginFormatRegistry.cpp
+    src/scan/AsyncScanner.cpp
+    src/scan/ScanCache.cpp
   )
 
   target_include_directories(collinx-audio-native PRIVATE

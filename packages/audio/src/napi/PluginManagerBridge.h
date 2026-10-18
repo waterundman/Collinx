@@ -199,6 +199,10 @@ private:
         void OnOK() override;
         void OnError(const Napi::Error& error) override;
 
+        // v2.8.0：.cpp 里有 ScanWorker::GetPromise() 的类外定义，但类内从未声明
+        // （编译器报 no member named + no declaration matches）。补上声明即可。
+        Napi::Value GetPromise();
+
     private:
         Vst3PluginScanner* scanner;
         bool useDefaultPaths;
