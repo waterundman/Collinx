@@ -198,6 +198,11 @@ if(BUILD_TESTS)
 
   target_compile_definitions(collinx-audio-tests PRIVATE JUCE_WEB_BROWSER=0)
   target_compile_definitions(collinx-audio-tests PRIVATE JUCE_USE_CURL=0)
+  # v2.8.0（审查发现）：scan_tests.cpp 用 21 个 C 标准 assert()，而 CI 是
+  # CMAKE_BUILD_TYPE=Release → 默认 -DNDEBUG → assert 被整体移除。
+  # 也就是说 scan_tests 一直是空跑通过。这里对测试目标 undefine NDEBUG，
+  # 让断言真正生效（注意：不能用 NDEBUG=0，assert 只看是否定义）。
+  target_compile_options(collinx-audio-tests PRIVATE -UNDEBUG)
   # v2.8.0（第 31 轮）：与主目标一致，否则 addDefaultFormats() 不注册 VST3，
   # registry 相关断言（Has VST3 / Detect VST3 File / Format Names）必挂。
   target_compile_definitions(collinx-audio-tests PRIVATE JUCE_PLUGINHOST_VST3=1)
