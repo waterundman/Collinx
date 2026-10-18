@@ -60,6 +60,27 @@ ipcMain.handle("audio:info", () => audio.info());
 ipcMain.handle("audio:start", async () => audio.start());
 ipcMain.handle("audio:stop", async () => audio.stop());
 
+// 播放驱动：返回共享内存，渲染进程据此建 AudioWorkletNode
+ipcMain.handle("audio:startPlayback", () => audio.startPlayback());
+ipcMain.handle("audio:stopPlayback", () => audio.stopPlayback());
+ipcMain.handle("audio:playbackStats", () => audio.playbackStats());
+
+// SharedArrayBuffer 需要 crossOriginIsolated（COOP + COEP）。
+// 没有这两个头时 Chromium 不暴露 SharedArrayBuffer，音频管线只能退化成静音。
+// 注意：加了 COEP: require-corp 后所有子资源都必须带 CORP 头，
+// 因此只对本地界面（dev server / file://）启用，外部资源会因此被拦。
+app.on("web-contents-created", (_e, contents) => {
+  contents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Cross-Origin-Opener-Policy": ["same-origin"],
+        "Cross-Origin-Embedder-Policy": ["require-corp"],
+      },
+    });
+  });
+});
+
 // ── 生命周期 ─────────────────────────────────────────────────
 void app.whenReady().then(() => {
   createWindow();

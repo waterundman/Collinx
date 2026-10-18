@@ -26,6 +26,8 @@
  * 命名管道传控制消息。届时本文件的实现整体替换，**对外的 API 形状不变**。
  */
 
+import { AudioDriver } from "./audio-driver";
+
 export type AudioEngineStatus = "unavailable" | "ready" | "error";
 
 export interface AudioEngineBridgeInfo {
@@ -74,6 +76,8 @@ export class AudioEngineBridge {
   private status: AudioEngineStatus = "unavailable";
   private reason = "音频引擎尚未接通（packages/audio 需先构建出 N-API 产物）";
   private sampleRate = 44100;
+  /** 播放驱动（仅在 startPlayback 后存在） */
+  private driver: AudioDriver | null = null;
 
   /**
    * 尝试加载原生引擎。
@@ -169,8 +173,37 @@ export class AudioEngineBridge {
     return this.synth ? this.synth.getTransportState() : null;
   }
 
+  /**
+   * 启动播放驱动：按固定节奏渲染 → 写入环形缓冲。
+   *
+   * 返回共享内存与参数，渲染进程据此创建 AudioWorkletNode：
+   *   const node = new AudioWorkletNode(ctx, 'synth-worklet',
+   *     { processorOptions: { buffer: sab } });
+   *
+   * 注意：SharedArrayBuffer 在 Chromium 里要求 crossOriginIsolated，
+   * 主进程已通过 COOP/COEP 响应头满足该条件（见 main.ts）。
+   */
+  startPlayback(): { buffer: SharedArrayBuffer; sampleRate: number; blockSize: number } | null {
+    if (!this.synth) return null;
+    if (!this.driver) {
+      this.driver = new AudioDriver(this.synth, { sampleRate: this.sampleRate });
+    }
+    return this.driver.start();
+  }
+
+  stopPlayback(): void {
+    this.driver?.stop();
+    this.driver = null;
+  }
+
+  /** 播放健康度：水位、溢出、欠载 */
+  playbackStats(): ReturnType<AudioDriver["stats"]> | null {
+    return this.driver ? this.driver.stats() : null;
+  }
+
   async stop(): Promise<void> {
     if (!this.synth) return;
+    this.stopPlayback();
     this.synth.allNotesOff();
     this.synth.stop();
     this.synth = null;

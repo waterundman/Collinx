@@ -30,6 +30,24 @@ const api = {
     info: (): Promise<AudioEngineInfo> => ipcRenderer.invoke("audio:info"),
     start: (): Promise<boolean> => ipcRenderer.invoke("audio:start"),
     stop: (): Promise<void> => ipcRenderer.invoke("audio:stop"),
+
+    /** 启动播放，返回共享内存与采样参数；需先 start() 初始化合成器 */
+    startPlayback: (): Promise<{
+      buffer: SharedArrayBuffer;
+      sampleRate: number;
+      blockSize: number;
+    } | null> => ipcRenderer.invoke("audio:startPlayback"),
+
+    stopPlayback: (): Promise<void> => ipcRenderer.invoke("audio:stopPlayback"),
+
+    /** 播放健康度：水位 / 溢出 / 欠载 */
+    playbackStats: (): Promise<{
+      producedFrames: number;
+      availableFrames: number;
+      overflowCount: number;
+      underrunCount: number;
+      uptimeMs: number;
+    } | null> => ipcRenderer.invoke("audio:playbackStats"),
   },
 };
 

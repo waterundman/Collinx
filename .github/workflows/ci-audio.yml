@@ -149,3 +149,24 @@ jobs:
             if (!Array.isArray(paths)) throw new Error('getDefaultScanPaths 未返回数组');
 
           "
+
+  # ── 桌面壳的纯逻辑测试（环形缓冲 / 驱动节奏）──────────────────────
+  # 不需要 Electron、不需要原生 addon —— 这两个模块刻意做成零依赖，
+  # 就是为了能在纯 Node 里确定性验证。
+  desktop-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Run desktop logic tests
+        working-directory: packages/desktop
+        run: |
+          node --test --experimental-strip-types \
+            src/audio-ring-buffer.test.ts \
+            src/audio-driver.test.ts
