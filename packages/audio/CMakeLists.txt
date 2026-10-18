@@ -251,6 +251,23 @@ if(BUILD_NAPI)
   endif()
   message(STATUS "node-addon-api: ${NODE_ADDON_API_INCLUDE}")
 
+  # node-addon-api 的 napi.h 会 #include <node_api.h>，后者在 Node 自己的
+  # include/node 目录里（不属于 node-addon-api 包）。用 node 的可执行路径推导：
+  #   <prefix>/bin/node  →  <prefix>/include/node
+  find_program(NODE_EXECUTABLE node REQUIRED)
+  execute_process(
+    COMMAND ${NODE_EXECUTABLE} -p
+            "require('path').resolve(process.execPath,'../../include/node')"
+    OUTPUT_VARIABLE NODE_INCLUDE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+  if(NOT EXISTS "${NODE_INCLUDE_DIR}/node_api.h")
+    message(FATAL_ERROR
+      "找不到 node_api.h（推导路径 ${NODE_INCLUDE_DIR}）。若 Node 由包管理器安装，"
+      "请额外安装 node 头文件包（如 libnode-dev）。")
+  endif()
+  message(STATUS "node headers: ${NODE_INCLUDE_DIR}")
+
   add_library(collinx-audio-native SHARED
     src/napi/Vst3HostAddon.cpp
     src/napi/PluginManagerBridge.cpp
@@ -268,6 +285,7 @@ if(BUILD_NAPI)
 
   target_include_directories(collinx-audio-native PRIVATE
     ${NODE_ADDON_API_INCLUDE}
+    ${NODE_INCLUDE_DIR}
     src)
 
   target_compile_definitions(collinx-audio-native PRIVATE
