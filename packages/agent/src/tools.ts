@@ -1,5 +1,5 @@
-import type { ToolRegistry, AgentBus, NoteEvent, HarmonyEntry, DiffOperation } from "@collinx/core";
-import { randomUUID, TempoMap, createSection, FormRole, createDiffEnvelope } from "@collinx/core";
+import type { ToolRegistry, AgentBus, NoteEvent, HarmonyEntry, DiffOperation, ToolResult } from "@collinx/core";
+import { randomUUID, TempoMap, createSection, FormRole, createDiffEnvelope, mixerToDiff } from "@collinx/core";
 import { Composer } from "./composer";
 import { Arranger } from "./arranger";
 import { Planner } from "./planner";
@@ -57,6 +57,62 @@ export function registerBuiltinTools(
         key: params.key as string | undefined,
         scale: params.scale as string | undefined,
       });
+    },
+  });
+
+  /**
+   * project.stats —— 读取工程统计。
+   *
+   * 真实验收里 AI 说过「同样无法查询，没有音符统计类工具」，因为 tool handler
+   * 原先只收 params、拿不到图。为此给 ToolRegistry 加了可选的 ToolContext
+   * （只读图视图），这是第一个用到它的工具。
+   *
+   * 设计要点：
+   * - 权限 read_only：不产出 diff、不需要用户审批
+   * - **没有图上下文时明确报错**，而不是返回 0 —— 否则用户会以为工程是空的
+   */
+  registry.register({
+    name: "project.stats",
+    description: "读取当前工程的统计：音符数、轨道数、小节数、当前速度",
+    permission: "read_only",
+    parameters: [],
+    handler: async (_params, ctx) => {
+      const graph = ctx?.readGraph?.();
+      if (!graph) {
+        return {
+          status: "error",
+          requiresUserConfirmation: false,
+          auditRef: randomUUID(),
+          data: "缺少图上下文（readGraph），无法读取工程统计",
+        };
+      }
+
+      const noteNodes = graph.getNodesByType("NoteSpan");
+      const trackIds = new Set<string>();
+      let maxBar = 0;
+
+      for (const node of noteNodes) {
+        const data = node.data as { trackId?: unknown; bar?: unknown };
+        if (typeof data.trackId === "string") trackIds.add(data.trackId);
+        const bar = Number(data.bar);
+        if (Number.isFinite(bar) && bar > maxBar) maxBar = bar;
+      }
+
+      const tempoMap = graph.getMeta().tempo_map;
+      const bpm = tempoMap.length > 0 ? tempoMap[0].bpm : 120;
+
+      return {
+        status: "ok",
+        resultType: "data",
+        requiresUserConfirmation: false,
+        auditRef: randomUUID(),
+        data: {
+          notes: noteNodes.length,
+          tracks: trackIds.size,
+          bars: maxBar,
+          bpm,
+        },
+      };
     },
   });
 
@@ -207,6 +263,92 @@ export function registerBuiltinTools(
         requiresUserConfirmation: true,
         auditRef: randomUUID(),
       };
+    },
+  });
+
+  /**
+   * mixer.setTrackVolume —— 让 AI 能调音量/声像。
+   *
+   * 与 transport.setTempo 同源的缺口：AI 能"建议 FX 链"，却不能把某轨调到 -6 dB。
+   *
+   * ⚠️ mixer 的架构特殊性（与音符不同）：
+   * 混音状态**不在 ProjectGraph 里**，是 store 的独立状态 `state.mixer`，
+   * 走独立的 diff 通道（UI 侧用 baseRevision `mixer://state-v1` 对齐）。
+   * 因此这里沿用 mixing agent 的既有做法 `mixerToDiff(changes, "HEAD")`，
+   * 由 UI 的 alignRevision 在入队时对齐 —— 不要在工具里猜 revision。
+   */
+  registry.register({
+    name: "mixer.setTrackVolume",
+    description: "设置某条轨道的音量（dB）与声像",
+    permission: "proposal_only",
+    parameters: [
+      { name: "trackId", type: "string", required: true, description: "轨道 ID，如 melody" },
+      { name: "gainDb", type: "number", required: false, description: "增益 dB，+12 ~ -60" },
+      { name: "pan", type: "number", required: false, description: "声像 -1（左）~ 1（右）" },
+    ],
+    handler: async (params) => {
+      const trackId = params.trackId;
+      if (typeof trackId !== "string" || trackId.trim() === "") {
+        return {
+          status: "error",
+          requiresUserConfirmation: false,
+          auditRef: randomUUID(),
+          data: "trackId 必须是非空字符串",
+        };
+      }
+
+      const changes: { gainDb?: string; pan?: string } = {};
+
+      if (params.gainDb !== undefined) {
+        const gainDb = Number(params.gainDb);
+        if (!Number.isFinite(gainDb) || gainDb > 12 || gainDb < -60) {
+          return {
+            status: "error",
+            requiresUserConfirmation: false,
+            auditRef: randomUUID(),
+            data: `gainDb 必须在 -60..12 之间，收到 ${String(params.gainDb)}`,
+          };
+        }
+        // MixerTrack.gainDb 在模型里是字符串
+        changes.gainDb = String(gainDb);
+      }
+
+      if (params.pan !== undefined) {
+        const pan = Number(params.pan);
+        if (!Number.isFinite(pan) || pan < -1 || pan > 1) {
+          return {
+            status: "error",
+            requiresUserConfirmation: false,
+            auditRef: randomUUID(),
+            data: `pan 必须在 -1..1 之间，收到 ${String(params.pan)}`,
+          };
+        }
+        changes.pan = String(pan);
+      }
+
+      if (changes.gainDb === undefined && changes.pan === undefined) {
+        return {
+          status: "error",
+          requiresUserConfirmation: false,
+          auditRef: randomUUID(),
+          data: "至少要给出 gainDb 或 pan 之一（空操作没有意义）",
+        };
+      }
+
+      const summaryParts: string[] = [];
+      if (changes.gainDb !== undefined) summaryParts.push(`音量 ${changes.gainDb} dB`);
+      if (changes.pan !== undefined) summaryParts.push(`声像 ${changes.pan}`);
+
+      return {
+        status: "ok",
+        resultType: "proposal",
+        data: { trackId, changes },
+        diff: mixerToDiff([{ trackId, changes }], "HEAD"),
+        confidence: 0.9,
+        requiresUserConfirmation: true,
+        auditRef: randomUUID(),
+        summary: `把 ${trackId} 的${summaryParts.join("、")}`,
+      } as ToolResult;
     },
   });
 

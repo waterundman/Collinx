@@ -1,5 +1,6 @@
 import { randomUUID } from "../util/random-uuid";
 import type { DiffEnvelope, Actor, PermissionScope } from "../diff/diff-envelope";
+import type { ProjectGraph } from "../graph/project-graph";
 import {
   createToolCallRecord,
   type ToolCallRecord,
@@ -27,12 +28,35 @@ export interface ToolResult {
   auditRef: string;
 }
 
+/**
+ * 只读图视图 —— 工具只能读，不能改。
+ *
+ * 只挑读方法，不暴露 addNode/removeNode/withMeta 等写方法：
+ * 所有对工程的修改必须走 DiffEnvelope（可审批、可审计、可回滚），
+ * 这是本项目"AI 只能提案不能直接改"的根基。
+ */
+export type ReadonlyGraphView = Pick<
+  ProjectGraph,
+  "getMeta" | "getNode" | "getNodesByType" | "getRevisionId"
+>;
+
+/**
+ * v2.8.0：工具的可选运行时上下文。
+ *
+ * 存在的原因：所有只读能力（统计工程、查当前速度、列轨道）都需要读图，
+ * 而 handler 原先只有 params —— 于是 AI 只能回答「我没有查询工具」。
+ * 注入只读视图后，这类能力才能实现，同时不破坏可审计性。
+ */
+export interface ToolContext {
+  readGraph?: () => ReadonlyGraphView;
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
   permission: ToolPermission;
   parameters: ToolParameter[];
-  handler: (params: Record<string, unknown>) => Promise<ToolResult>;
+  handler: (params: Record<string, unknown>, ctx?: ToolContext) => Promise<ToolResult>;
 }
 
 export interface AuditEntry {
@@ -136,7 +160,9 @@ export class ToolRegistry {
   async call(
     name: string,
     params: Record<string, unknown>,
-    actor: Actor
+    actor: Actor,
+    /** 可选运行时上下文（只读图视图等）；不传时只读类工具会明确报错 */
+    ctx?: ToolContext
   ): Promise<ToolResult> {
     // One correlationId per invocation: every ToolCallRecord this call emits
     // (running then success/error) shares it, so the UI store can upsert the
@@ -194,7 +220,7 @@ export class ToolRegistry {
     });
 
     try {
-      let result = await tool.handler(params);
+      let result = await tool.handler(params, ctx);
 
       if (!result.auditRef) {
         result = { ...result, auditRef: randomUUID() };

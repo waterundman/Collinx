@@ -845,10 +845,20 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         args: Record<string, unknown>,
       ): Promise<AgentToolOutcome> => {
         try {
-          const result = await toolRegistry.call(toolName, args, {
-            type: "agent",
-            name: "HarmonyBot",
-          });
+          const result = await toolRegistry.call(
+            toolName,
+            args,
+            {
+              type: "agent",
+              name: "HarmonyBot",
+            },
+            {
+              // v2.8.0：只读图视图。让 project.stats 这类读类工具能读到当前工程。
+              // 用 stateRef 而非闭包里的 state —— 工具可能在异步回调里执行，
+              // 闭包捕获的 state 会过期，统计结果就不准了。
+              readGraph: () => stateRef.current.graph,
+            },
+          );
           // 工具约定把 DiffEnvelope[] 挂在 ToolResult.diffs 上（ToolResult 只
           // 类型化了单数 diff），这里两者都取，避免漏掉提案。
           const carried = (result as { diffs?: unknown }).diffs;
