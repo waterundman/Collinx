@@ -19,6 +19,23 @@ export type DiffOperation =
   | { op: "add_edge"; path: string; edgeType: string; sourceId: string; targetId: string; data?: Record<string, unknown> }
   | { op: "remove_edge"; path: string; edgeId: string }
   | { op: "update_meta"; path: string; data: Partial<ProjectMeta> }
+  /**
+   * v2.8.0：增量改速度。
+   *
+   * 为什么需要它：`update_meta` 对 `tempo_map` 是**整体赋值**，而 agent 工具
+   * 是无状态纯函数、拿不到当前图，只能表达「在 bar N 设为 bpm X」。
+   * 用 update_meta 会导致多 tempo 点的工程被抹掉其它小节的速度（数据破坏）。
+   *
+   * 语义与 SET_TEMPO action 对齐：同 bar 覆盖、否则追加、按 bar 升序。
+   */
+  | {
+      op: "set_tempo";
+      path: string;
+      bar: number;
+      bpm: number;
+      /** 与 TempoChange.curve 一致；此处内联，因为 model/tempo-map.ts 里该接口未导出 */
+      curve?: "instant" | "linear" | "ease_in" | "ease_out";
+    }
   | { op: "add_note_group"; path: string; notes: NoteEvent[] };
 
 export interface DomainExplanation {

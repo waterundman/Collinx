@@ -1,5 +1,5 @@
 import type { ToolRegistry, AgentBus, NoteEvent, HarmonyEntry, DiffOperation } from "@collinx/core";
-import { randomUUID, TempoMap, createSection, FormRole } from "@collinx/core";
+import { randomUUID, TempoMap, createSection, FormRole, createDiffEnvelope } from "@collinx/core";
 import { Composer } from "./composer";
 import { Arranger } from "./arranger";
 import { Planner } from "./planner";
@@ -57,6 +57,66 @@ export function registerBuiltinTools(
         key: params.key as string | undefined,
         scale: params.scale as string | undefined,
       });
+    },
+  });
+
+  /**
+   * transport.setTempo —— 让 AI 能改速度。
+   *
+   * 真实点击验收发现：用户说「把速度改成 90 BPM」，AI 答「我没有改 BPM 的工具，
+   * 你去面板手动改」。最高频的参数修改反而没有工具，是能力面最大的缺口。
+   *
+   * 用 set_tempo 这个增量 op（而不是 update_meta）：后者对 tempo_map 是整体赋值，
+   * 而本工具是无状态纯函数、拿不到当前图，无法构造完整 tempo_map ——
+   * 硬用 update_meta 会抹掉其它小节的速度点（真实数据破坏）。
+   * set_tempo 由 diff-engine 按「同 bar 覆盖 / 否则追加 / 按 bar 升序」应用。
+   */
+  registry.register({
+    name: "transport.setTempo",
+    description: "修改指定小节的速度（BPM）",
+    permission: "proposal_only",
+    parameters: [
+      { name: "bpm", type: "number", required: true, description: "速度，20-400" },
+      { name: "bar", type: "number", required: false, description: "起始小节，默认 1" },
+    ],
+    handler: async (params) => {
+      const bpm = Number(params.bpm);
+      if (!Number.isFinite(bpm) || bpm < 20 || bpm > 400) {
+        return {
+          status: "error",
+          requiresUserConfirmation: false,
+          auditRef: randomUUID(),
+          data: `bpm 必须在 20..400 之间，收到 ${String(params.bpm)}`,
+        };
+      }
+
+      const bar = params.bar === undefined ? 1 : Number(params.bar);
+      if (!Number.isInteger(bar) || bar < 1) {
+        return {
+          status: "error",
+          requiresUserConfirmation: false,
+          auditRef: randomUUID(),
+          data: `bar 必须是正整数，收到 ${String(params.bar)}`,
+        };
+      }
+
+      return {
+        status: "ok",
+        resultType: "proposal",
+        data: { bpm, bar },
+        diff: createDiffEnvelope({
+          baseRevision: "",
+          actor: { type: "agent", name: "Transport" },
+          permissionScope: "proposal_only",
+          summary: `设置第 ${bar} 小节速度为 ${bpm} BPM`,
+          // v2.8.0：用 set_tempo（增量）而不是 update_meta（整体替换 tempo_map），
+          // 否则多 tempo 点的工程会被抹掉其它小节的速度（见 core/diff 的 T01 守卫）
+          ops: [{ op: "set_tempo", path: "/", bar, bpm }],
+        }),
+        confidence: 0.9,
+        requiresUserConfirmation: true,
+        auditRef: randomUUID(),
+      };
     },
   });
 

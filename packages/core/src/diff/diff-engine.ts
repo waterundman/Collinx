@@ -271,6 +271,25 @@ export class DiffEngine {
           if (op.data.key_map !== undefined) meta.key_map = op.data.key_map;
           return true;
         }
+        case "set_tempo": {
+          // v2.8.0：增量改速度 —— 同 bar 覆盖 / 否则追加 / 按 bar 升序。
+          // 与 SET_TEMPO action 的语义一致（v2.1.0 起）。
+          // 存在这个 op 的原因：update_meta 对 tempo_map 是整体赋值，
+          // 会让无状态的 agent 工具无法安全地只改一个小节。
+          if (!Number.isInteger(op.bar) || op.bar < 1) return false;
+          if (!Number.isFinite(op.bpm) || op.bpm <= 0) return false;
+
+          const meta = graph.getMeta();
+          const existing = meta.tempo_map.find((t) => t.bar === op.bar);
+          if (existing) {
+            existing.bpm = op.bpm;
+            if (op.curve !== undefined) existing.curve = op.curve;
+          } else {
+            meta.tempo_map.push({ bar: op.bar, bpm: op.bpm, curve: op.curve });
+            meta.tempo_map.sort((a, b) => a.bar - b.bar);
+          }
+          return true;
+        }
         case "add_note_group": {
           for (const note of op.notes) {
             graph.addNode("NoteSpan", note as unknown as Record<string, unknown>);
