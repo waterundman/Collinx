@@ -83,6 +83,21 @@ const EDGE_FLOW_SPEED = 0.5;
 
 /** v2.6.0：音高 → 音名（C4 记法，MIDI 60 = C4）。 */
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+/**
+ * 从节点 data 里读 MIDI 音高。
+ *
+ * ⚠️ v2.8.0 修：ProjectNote 的字段名是 **pitchMidi**（见 core/src/io/midi-exporter.ts），
+ * 而 v2.6.0 这里写的是 data.pitch —— undefined → NaN → Number.isFinite 为 false
+ * → 着色回退成默认灰、文案回退成类型名。也就是说 v2.6.0「按音高着色 / 显示 C4」
+ * 的改动**从未生效**，图谱一直是「21 个一样的灰点」。
+ * 这里同时兼容 pitch，避免将来字段改名再次静默失效。
+ */
+function readPitchMidi(data?: Record<string, unknown>): number {
+  const raw = data?.pitchMidi ?? data?.pitch;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : Number.NaN;
+}
+
 function pitchLabel(pitch: number): string {
   const p = Math.round(pitch);
   return `${NOTE_NAMES[((p % 12) + 12) % 12]}${Math.floor(p / 12) - 1}`;
@@ -101,7 +116,7 @@ function pitchTint(pitch: number): string {
 
 function getColor(node: { type: string; data?: Record<string, unknown> }): string {
   if (node.type === "NoteSpan") {
-    const pitch = Number(node.data?.pitch);
+    const pitch = readPitchMidi(node.data);
     if (Number.isFinite(pitch)) return pitchTint(pitch);
   }
   return getNodeColor(node.type);
@@ -473,7 +488,7 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       // v2.6.0：NoteSpan 显示音高（C4）而不是类型名 "NoteSpan"
-      const pitch = Number(node.data?.pitch);
+      const pitch = readPitchMidi(node.data);
       const label =
         node.data?.name ??
         (node.type === "NoteSpan" && Number.isFinite(pitch) ? pitchLabel(pitch) : node.type);
