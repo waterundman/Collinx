@@ -43,6 +43,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NoteEvent, TempoMap } from "@collinx/core";
 import { encodeNoteOn, encodeNoteOff } from "../services/midi-output";
+import { AudioPreview } from "../services/audio-preview";
 import {
   buildPlaybackEvents,
   buildClickEvents,
@@ -298,6 +299,23 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
   const phaseRef = useRef<TransportPhase>("idle");
   const positionRef = useRef<{ bar: number; beat: number }>({ bar: 1, beat: 1 });
   const sessionRef = useRef<PlaybackSession | null>(null);
+  /**
+   * v2.8.0：浏览器内预览合成器（Web Audio）。
+   *
+   * 存在的原因：本 hook 全程依赖 Web MIDI 把音符发给**外部音源**，
+   * 没有 MIDI 设备时用户按播放键完全听不到声音（实测 AudioContext 创建 0 次）。
+   * 合成器是**并行**的第二条通路：有 MIDI 设备时两者都响，没有时至少能听到。
+   *
+   * 两条约束：
+   * 1. **不改时钟** —— 时间轴仍由既有 lookahead 调度器掌管，
+   *    合成器只接收"何时该响"的相对秒数
+   * 2. **jsdom 下是 no-op** —— AudioPreview 内部对缺失 AudioContext 静默降级，
+   *    因此不会影响既有 599 条测试
+   */
+  const previewRef = useRef<AudioPreview | null>(null);
+  if (previewRef.current === null) {
+    previewRef.current = new AudioPreview();
+  }
   /** 已发出 noteOn 的音符：键 `${pitch}:${channel}` → 已换算通道（0-15）。
    *  两通道并存后单 pitch 键不诚实，故键含通道（见文件头抗卡音说明）。 */
   const soundingNotesRef = useRef<Map<string, number>>(new Map());
@@ -306,6 +324,10 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
 
   /** 停全部在鸣音：先 clear() 再逐条补发 noteOff，最后清空 Map（顺序不可颠倒） */
   const allSoundOff = useCallback((): void => {
+    // v2.8.0：内部合成器也要停 —— 它不走 MIDI 端口，
+    // 若只停端口，无设备时合成器的音会一直挂着（卡音）。
+    previewRef.current?.allNotesOff();
+
     const port = getOutputPortRef.current?.() ?? null;
     if (!port) {
       soundingNotesRef.current.clear();
@@ -365,21 +387,41 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       }
       const ev = session.events[session.index]!;
       session.index += 1;
-      if (!port) {
-        continue; // 无端口：静默跳过（水位仍推进，避免重复投递）
-      }
+
+      // 通道与时间戳必须**先**算 —— 内部合成器与 MIDI 端口共用同一份判定
       // 通道：click 事件显式带 9（GM 打击乐，A1）；音符事件省略 → 按设置通道。
       const evChannel = ev.channel ?? ch;
       // 统一 now() 域时间戳（生产 = performance.now()）
       const timestamp =
         session.startPerfNow + (ev.atSeconds - session.startSeconds) * 1000;
+
+      // v2.8.0：内部合成器（并行通路）。
+      // 没有 MIDI 设备时这是唯一能听到声音的路径 —— 此前 `if (!port) continue`
+      // 会让音符在无设备时彻底静音（实测 AudioContext 创建 0 次）。
+      // 时钟域转换只在这一处：MIDI 时间戳属 performance.now() 域，
+      // Web Audio 属 AudioContext.currentTime 域，两者不可混算；
+      // 这里只换算「还有多久该响」的秒数，排程交给合成器按音频时钟自己做。
+      const preview = previewRef.current;
+      const delaySec = Math.max(0, (timestamp - performance.now()) / 1000);
+      const voiceKey = `${ev.pitchMidi}:${evChannel}`;
+      if (ev.kind === "on") {
+        preview?.noteOn(voiceKey, ev.pitchMidi, ev.velocity, delaySec);
+      } else {
+        preview?.noteOff(voiceKey, delaySec);
+      }
+
+      // 在鸣记录不受端口有无影响 —— 合成器也在响，pause/stop 必须能停掉它
+      if (ev.kind === "on") {
+        soundingNotesRef.current.set(voiceKey, evChannel);
+      }
+
+      if (!port) {
+        continue; // 无端口：MIDI 不投递，但合成器已发声、水位仍推进
+      }
+
       try {
         if (ev.kind === "on") {
           port.send(encodeNoteOn(ev.pitchMidi, ev.velocity, evChannel), timestamp);
-          // 抗卡音：click 的 noteOn 也进入在鸣 Map（否则 stop 中断 count-in 时
-          // 会卡音）。stop()/pause() 经 allSoundOff 按 evChannel 补 noteOff。
-          // 键含通道：两通道并存后单 pitch 键不诚实（见文件头抗卡音说明）。
-          soundingNotesRef.current.set(`${ev.pitchMidi}:${evChannel}`, evChannel);
         } else {
           port.send(encodeNoteOff(ev.pitchMidi, evChannel), timestamp);
         }
@@ -621,6 +663,13 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       // h.getResult().play() 期望直接进 playing 不受影响）。count-in 进行中
       // 再次 play 视为幂等空操作。
       if (phaseRef.current === "playing" || phaseRef.current === "count-in") return;
+
+      // v2.8.0：必须在**用户手势的同步调用栈**里创建 AudioContext。
+      // 浏览器自动播放策略下，非手势创建的上下文会停在 suspended 且不发声。
+      // 这里不 await —— 创建是同步的，resume 是异步的，播放不等它；
+      // 合成器在未 running 期间的所有 noteOn 都是 no-op（静默降级）。
+      void previewRef.current?.ensureStarted();
+
       // D4：暂停后续播不得重走 count-in（count-in 仅用于"起播"，DAW 惯例）。
       // 引擎侧强制 countInBars=0：从暂停位置直进 playing 续播，不重复预备小节。
       // 不改对外签名、不改 App 传参（App 仍按惯例传 countInBars）。
