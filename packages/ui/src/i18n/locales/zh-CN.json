@@ -1310,7 +1310,8 @@
     "preview": "五线谱预览",
     "renderingInProgress": "数据视图 · 切换到「渲染视图」查看完整乐谱（{{count}} 个音符）",
     "noNotes": "暂无音符数据",
-    "vexflowHint": "使用 VexFlow 渲染引擎进行完整乐谱渲染"
+    "vexflowHint": "使用 VexFlow 渲染引擎进行完整乐谱渲染",
+    "exportWAV": "导出 WAV"
   },
   "mixer": {
     "title": "混音台",

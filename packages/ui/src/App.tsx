@@ -47,6 +47,7 @@ import { useTransport, type RecordedTake } from "./hooks/useTransport";
 import { useSettings } from "./hooks/useSettings";
 import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
 import { convertTakeToNotes } from "./services/recorded-take";
+import { renderNotesToWav } from "./services/wav-export";
 import type {
   ArrangerConfigInput,
   ArrangerRunResult,
@@ -816,6 +817,48 @@ export function App() {
     void actions.exportPDF(defaultLayout).catch(console.error);
   }, [actions, defaultLayout]);
 
+  /**
+   * v2.8.0：导出 WAV —— 让用户拿到能播的成品。
+   *
+   * 之前只有 MIDI / MusicXML / PDF，没有音频。而"做出一首歌"的终点是一个
+   * 能播的文件：前八步做得再好，交不出成品等于没交付。
+   *
+   * 用 OfflineAudioContext 离线渲染（样本级确定），不用实时录音 ——
+   * 后者受设备缓冲与调度抖动影响，同一工程两次导出长度都不同。
+   */
+  const handleExportWAV = useCallback(() => {
+    void (async () => {
+      try {
+        const renderable = notes.map((n) => {
+          const startSec = tempoMap.timeAt(n.bar, n.beat);
+          // durQn 是四分音符数；用当前位置的 BPM 换算秒数。
+          // 不直接 timeAt(bar, beat + durQn) —— 那个 API 的 beat 是小节内
+          // 1-based 位置，跨小节时语义不成立。
+          const bpm = tempoMap.bpmAt(n.bar, n.beat);
+          const durSec = Math.max(0.05, (n.durQn * 60) / Math.max(1, bpm));
+          return {
+            pitchMidi: n.pitchMidi,
+            velocity: n.velocity,
+            startSec,
+            durSec,
+          };
+        });
+
+        const wav = await renderNotesToWav(renderable);
+        const blob = new Blob([wav as unknown as BlobPart], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "project.wav";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("导出 WAV 失败", err);
+      }
+    })();
+  }, [notes, tempoMap]);
+
   // Stage 0 (.agentmusic): open the hidden file picker; the change handler
   // reads the selected .agentmusic File and restores the project.
   const handleLoadProjectClick = useCallback(() => {
@@ -1292,6 +1335,7 @@ export function App() {
             onExportMusicXML={handleExportMusicXML}
             onExportMIDI={handleExportMIDI}
             onExportPDF={handleExportPDF}
+            onExportWAV={handleExportWAV}
           />
         </div>
       )}

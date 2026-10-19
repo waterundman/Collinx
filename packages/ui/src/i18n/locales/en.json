@@ -1310,7 +1310,8 @@
     "preview": "Score Preview",
     "renderingInProgress": "Data view · switch to Rendered view for the full score ({{count}} notes)",
     "noNotes": "No note data",
-    "vexflowHint": "Use VexFlow rendering engine for full score rendering"
+    "vexflowHint": "Use VexFlow rendering engine for full score rendering",
+    "exportWAV": "Export WAV"
   },
   "mixer": {
     "title": "Mixer",

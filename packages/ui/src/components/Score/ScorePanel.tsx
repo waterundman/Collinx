@@ -32,6 +32,8 @@ export interface ScorePanelProps {
   onExportMusicXML?: () => void;
   onExportMIDI?: () => void;
   onExportPDF?: () => void;
+  /** v2.8.0：导出音频（WAV）—— 之前只有 MIDI/XML/PDF，拿不到能播的成品 */
+  onExportWAV?: () => void;
   compact?: boolean;
   /**
    * 谱面播放头位置（只读跟随），透传给内部 ScoreRenderer。缺省零行为变化。
@@ -68,6 +70,7 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   onExportMusicXML,
   onExportMIDI,
   onExportPDF,
+  onExportWAV,
   compact = false,
   playheadPosition,
   onBarAnchorsChange,
@@ -143,6 +146,14 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
             data-testid="export-midi"
           >
             {t('score.exportMIDI')}
+          </button>
+        )}
+        {onExportWAV && (
+          <button
+            onClick={onExportWAV}
+            data-testid="export-wav"
+          >
+            {t('score.exportWAV')}
           </button>
         )}
         {onExportPDF && (
