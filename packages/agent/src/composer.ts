@@ -238,13 +238,24 @@ export class Composer {
      * 缺省 major 保持向后兼容。
      */
     mode?: string;
+    /** 也可以用它表达调式（AI 常用这个字段，如 "minor" / "harmonic_minor"） */
+    scale?: string;
   }): ToolResult {
     const bars = params.bars ?? 4;
     const key = params.key ?? "C";
     const styleHint = params.style ?? "classical";
 
     const keyOffset = KEY_MAP[key] ?? 60;
-    const modeKey = params.mode === "minor" ? "minor" : "major";
+    // 调式来源：mode 优先，其次 scale。
+    // AI 习惯用 scale 表达调式（"e minor" / "harmonic_minor"），
+    // 只认 mode 会让它的调用静默退化成大调 —— 实测就是这种情况：
+    // AI 明明在说 E 小调，落进工程的却是大调和弦。
+    const modeHint = String(params.mode ?? params.scale ?? "").toLowerCase();
+    const modeKey =
+      modeHint.includes("minor") || modeHint.includes("aeolian") || modeHint.includes("dorian") ||
+      modeHint.includes("phrygian") || modeHint.includes("locrian")
+        ? "minor"
+        : "major";
     const scale = modeKey === "minor" ? MINOR_SCALE : MAJOR_SCALE;
     const chords = DIATONIC_CHORDS[modeKey];
 

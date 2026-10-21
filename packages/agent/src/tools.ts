@@ -47,8 +47,7 @@ export function registerBuiltinTools(
       { name: "register", type: "string", required: true, description: "音区: low/mid/high" },
       { name: "styleHint", type: "string", required: false, description: "风格提示" },
       { name: "key", type: "string", required: false, description: "调性" },
-      { name: "mode", type: "string", required: false, description: "调式：major / minor" },
-      { name: "scale", type: "string", required: false, description: "音阶类型" },
+      { name: "scale", type: "string", required: false, description: "音阶/调式，如 minor / harmonic_minor" },
     ],
     handler: async (params) => {
       return composer.generateMotif({
@@ -57,7 +56,8 @@ export function registerBuiltinTools(
         styleHint: params.styleHint as string | undefined,
         key: params.key as string | undefined,
         scale: params.scale as string | undefined,
-        mode: params.mode as string | undefined,
+        // 注意：generateMotif 的调式由 scale 表达（"minor" / "harmonic_minor"），
+        // 不要再传 mode —— 它不读这个字段，传了只会让类型检查红。
       });
     },
   });
@@ -195,6 +195,8 @@ export function registerBuiltinTools(
         // v2.8.0：此前没透传 mode，composer 里又硬编码 "major"，
         // 用户要小调也只拿到大调和弦
         mode: params.mode as string | undefined,
+        // AI 常把调式放在 scale 字段（"natural_minor"），也要透传
+        scale: params.scale as string | undefined,
       });
     },
   });

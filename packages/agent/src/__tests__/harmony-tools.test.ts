@@ -114,3 +114,30 @@ describe("composer.suggestHarmony tool", () => {
     expect(data.mode).toBe("major");
   });
 });
+
+describe("suggestHarmony 调式来源容错（v2.8.0）", () => {
+  const call = async (params: Record<string, unknown>) => {
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry, new AgentBus());
+    return registry.call("composer.suggestHarmony", params, { type: "agent", name: "test" });
+  };
+
+  it("用 scale 表达调式也应生效（AI 习惯这么传）(critical)", async () => {
+    // 实测：AI 在对话里说 E 小调，但它把调式放在 scale 字段，
+    // 工具只认 mode → 静默退化成大调，落进工程的仍是大调和弦
+    const result = await call({ bars: 4, key: "E", scale: "natural_minor" });
+    expect(result.status).toBe("ok");
+    const data = result.data as { mode: string };
+    expect(data.mode).toBe("minor");
+  });
+
+  it("mode 优先于 scale", async () => {
+    const result = await call({ bars: 4, key: "C", mode: "major", scale: "minor" });
+    expect((result.data as { mode: string }).mode).toBe("major");
+  });
+
+  it("两者都没给时按大调", async () => {
+    const result = await call({ bars: 4, key: "C" });
+    expect((result.data as { mode: string }).mode).toBe("major");
+  });
+});
