@@ -31,7 +31,7 @@ import { TeachingPanel } from "./components/Teaching";
 import type { UserLevel } from "./components/Teaching";
 import { AgentPanel, AgentChat, ToolCallTimeline } from "./components/Agent";
 import { GraphView, NodeDetail } from "./components/KnowledgeGraph";
-import type { ConnectedNode, GraphData } from "./components/KnowledgeGraph";
+import type { ConnectedNode, GraphData, GraphEdge } from "./components/KnowledgeGraph";
 import { TopBar, TabPill } from "./components/Shell";
 import { SettingsPage } from "./components/Settings";
 import styles from "./App.module.css";
@@ -300,18 +300,64 @@ export function App() {
   // Stage 2: adapt the store's ProjectGraph (core class) to the pure-data
   // GraphData shape consumed by GraphView. GraphView itself is untouched.
   const graphData: GraphData = useMemo(
-    () => ({
-      nodes: graph.getAllNodes().map((n) => ({
+    () => {
+      const nodes = graph.getAllNodes().map((n) => ({
         id: n.id,
         type: n.type,
         data: n.data as Record<string, unknown>,
-      })),
-      edges: graph.getAllEdges().map((e) => ({
-        source: e.source_id,
-        target: e.target_id,
-        type: e.type,
-      })),
-    }),
+      }));
+
+      // v2.8.0：**派生结构边**。
+      // 图模型里目前只有 NoteSpan 节点（core 的 diff-engine 只 addNode NoteSpan），
+      // 没有 Track/Phrase 节点 → `graph.getAllEdges()` 恒为空 → 图谱页只剩
+      // 一堆孤立散点，完全不表达工程结构（用户原话：「图谱就没有使用」）。
+      //
+      // 这里在**视图层**派生「同轨音列」边：同一 trackId 的音符按 (bar,beat) 排序
+      // 依次相连。效果是三条清晰的音列线（旋律/贝斯/和弦），一眼能看出
+      // 「有几条轨、每条轨的音符怎么走」。
+      //
+      // 为什么放在 ui 层而不改 core：core 的图模型是 diff 的作用对象，
+      // 在那里加"视图用的派生边"会把展示语义混进数据模型；
+      // 而 GraphView 的数据契约（source/target/type）本就支持任意边。
+      const byTrack = new Map<string, typeof nodes>();
+      for (const n of nodes) {
+        if (n.type !== "NoteSpan") continue;
+        const trackId = typeof n.data.trackId === "string" ? n.data.trackId : "";
+        const list = byTrack.get(trackId) ?? [];
+        list.push(n);
+        byTrack.set(trackId, list);
+      }
+
+      const derivedEdges: GraphEdge[] = [];
+      for (const list of byTrack.values()) {
+        const ordered = [...list].sort((a, b) => {
+          const ab = Number(a.data.bar ?? 0);
+          const bb = Number(b.data.bar ?? 0);
+          if (ab !== bb) return ab - bb;
+          return Number(a.data.beat ?? 0) - Number(b.data.beat ?? 0);
+        });
+        for (let i = 1; i < ordered.length; i++) {
+          derivedEdges.push({
+            source: ordered[i - 1]!.id,
+            target: ordered[i]!.id,
+            type: "sequence",
+          });
+        }
+      }
+
+      return {
+        nodes,
+        // 真实边优先；没有真实边时才用派生边（两者不混，避免双重绘制）
+        edges:
+          graph.getAllEdges().length > 0
+            ? graph.getAllEdges().map((e) => ({
+                source: e.source_id,
+                target: e.target_id,
+                type: e.type,
+              }))
+            : derivedEdges,
+      };
+    },
     [graph],
   );
 
