@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { ToolRegistry } from "@collinx/core";
+import { ToolRegistry, AgentBus } from "@collinx/core";
 import { Composer } from "../composer";
+import { registerBuiltinTools } from "../tools";
 
 describe("Composer", () => {
   let registry: ToolRegistry;
@@ -212,3 +213,52 @@ describe("Composer", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// v2.8.0：旋律质量 —— 级进而非随机跳
+// 验收时用户看到密集谱面的原话是「这音符写的什么东西？这合规吗？」。
+// 原实现从 style.intervals 随机取音级，interval >= 7 时还会随机跳八度，
+// 相邻音完全无关，听感是随机音阶练习而不是动机。
+// ---------------------------------------------------------------------------
+describe("generateMotif 旋律质量（v2.8.0）", () => {
+  const call = async (params: Record<string, unknown>) => {
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry, new AgentBus());
+    return registry.call("composer.generateMotif", params, { type: "agent", name: "test" });
+  };
+
+  it("相邻音跨度不超过 7 半音（不再随机跳八度）(critical)", async () => {
+    const result = await call({ bars: 4, register: "mid", key: "E", scale: "minor", styleHint: "classical" });
+    expect(result.status).toBe("ok");
+    const notes = (result.data as { notes: { pitchMidi: number }[] }).notes;
+    expect(notes.length).toBeGreaterThan(2);
+
+    const leaps: number[] = [];
+    for (let i = 1; i < notes.length; i++) {
+      leaps.push(Math.abs(notes[i].pitchMidi - notes[i - 1].pitchMidi));
+    }
+    // 修复前会出现 12（整八度）的跳进；修复后上限 7（纯五度）
+    for (const d of leaps) {
+      expect(d).toBeLessThanOrEqual(7);
+    }
+  });
+
+  it("多数相邻音在级进/三度范围内（≤4 半音）", async () => {
+    const result = await call({ bars: 8, register: "mid", key: "C", scale: "major", styleHint: "pop" });
+    const notes = (result.data as { notes: { pitchMidi: number }[] }).notes;
+    const leaps = notes.slice(1).map((n, i) => Math.abs(n.pitchMidi - notes[i].pitchMidi));
+    const stepwise = leaps.filter((d) => d <= 4).length;
+    // 80% 概率走 ≤4 半音，样本足够大时应明显过半
+    expect(stepwise / leaps.length).toBeGreaterThan(0.6);
+  });
+
+  it("所有音都在调内（音高类属于该音阶）", async () => {
+    const result = await call({ bars: 4, register: "mid", key: "E", scale: "minor" });
+    const notes = (result.data as { notes: { pitchMidi: number }[] }).notes;
+    const eMinorPcs = new Set([4, 6, 7, 9, 11, 0, 2]); // E F# G A B C D
+    for (const n of notes) {
+      expect(eMinorPcs.has(((n.pitchMidi % 12) + 12) % 12)).toBe(true);
+    }
+  });
+});
+

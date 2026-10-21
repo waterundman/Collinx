@@ -116,6 +116,29 @@ export class Composer {
     const baseOctave = registerOffset[register] ?? 0;
 
     const notes: NoteEvent[] = [];
+
+    /**
+     * v2.8.0：旋律生成从随机选音改为级进为主。
+     *
+     * 原实现  会让相邻音**完全无关**，
+     * 且 interval ≥ 7 时  直接随机跳八度 ——
+     * 听感是随机音阶练习，不是动机。验收时用户的原话是
+     * 「这音符写的什么东西？这合规吗？」
+     *
+     * 现在：在调内音池（两个八度）里，从上一个音出发取**邻域候选**
+     * （±4 半音，即级进/三度内），20% 概率放宽到 ±7 半音做小跳。
+     * 八度只在音池范围内自然出现，不再随机跳。
+     */
+    const scalePitches: number[] = [];
+    for (let oct = 0; oct <= 1; oct++) {
+      for (const iv of scaleIntervals) {
+        const p = keyOffset + baseOctave + iv + oct * 12;
+        if (p >= 21 && p <= 108) scalePitches.push(p);
+      }
+    }
+    // 起点取主音（调内最稳的落点）
+    let lastPitch = scalePitches[0] ?? keyOffset + baseOctave;
+
     let noteId = 0;
     let currentBeat = 1.0;
 
@@ -131,11 +154,15 @@ export class Composer {
           dur = remainingBeats;
         }
 
-        const intervalIdx = Math.floor(rand() * style.intervals.length);
-        const interval = style.intervals[intervalIdx];
-        const scaleDegree = interval % scaleIntervals.length;
-        const octaveShift = Math.floor(interval / scaleIntervals.length);
-        const pitch = keyOffset + scaleIntervals[scaleDegree] + baseOctave + octaveShift * 12;
+        // 级进为主：优先取与上一个音距离 ≤4 半音的调内音；20% 概率放宽到 ≤7（小跳）
+        const maxLeap = rand() < 0.2 ? 7 : 4;
+        const neighbours = scalePitches.filter(
+          (p) => p !== lastPitch && Math.abs(p - lastPitch) <= maxLeap,
+        );
+        const pitch =
+          neighbours.length > 0
+            ? neighbours[Math.floor(rand() * neighbours.length)]
+            : lastPitch;
 
         if (pitch >= 21 && pitch <= 108) {
           notes.push(
@@ -152,6 +179,7 @@ export class Composer {
           );
         }
 
+        lastPitch = pitch;
         noteId++;
         currentBeat += dur;
         remainingBeats -= dur;

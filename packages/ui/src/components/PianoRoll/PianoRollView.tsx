@@ -436,11 +436,13 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
         grad.addColorStop(0, getCSSVar('--accent-purple'));
         grad.addColorStop(1, getCSSVar('--accent-purple-dark'));
       } else if (isHovered) {
-        grad.addColorStop(0, getCSSVar('--accent-lavender-light'));
+        // v2.8.0：原先音符用 --bg-surface/--bg-elevated 填充，浅色主题下两者
+        // 都是 #ffffff → 纯白音符画在白网格上，整条轨道看起来是空的。
+        grad.addColorStop(0, getCSSVar('--note-fill-hover'));
         grad.addColorStop(1, getCSSVar('--accent-purple-light'));
       } else {
-        grad.addColorStop(0, getCSSVar('--bg-surface'));
-        grad.addColorStop(1, getCSSVar('--bg-elevated'));
+        grad.addColorStop(0, getCSSVar('--note-fill'));
+        grad.addColorStop(1, getCSSVar('--note-fill'));
       }
       ctx.fillStyle = grad;
 

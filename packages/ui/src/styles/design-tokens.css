@@ -13,6 +13,10 @@
   --bg-error: #271515;
   --bg-warning: #1e1a10;
 
+  /* 音符填充（暗色）：中性紫，在 #0a0a0a 页底与 #16161e 表面上都可辨 */
+  --note-fill: #4c3f8f;
+  --note-fill-hover: #6c5ce7;
+
   /* ---- Surface Alias ----
      v2.6.0：同一语义（"页面底色"）曾有 --bg-primary / --canvas / --canvas-bg
      三个名字且值相同，改主题时极易漏改其一。现在一律引用语义源。 */

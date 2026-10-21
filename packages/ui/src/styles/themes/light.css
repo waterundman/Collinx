@@ -17,6 +17,14 @@
   --bg-error: #fef2f2;
   --bg-warning: #fffbeb;
 
+  /* ---- 音符（钢琴卷帘）----
+     v2.8.0：此前音符填充用 --bg-surface / --bg-elevated，而浅色主题下
+     这两个都是 #ffffff —— **纯白音符画在白色网格上，完全看不见**。
+     实测截图里钢琴卷帘一片空白，但乐谱能画出 36 个音符（数据是好的）。
+     改用音符专属色，保证与网格底色有对比。 */
+  --note-fill: #c4b5fd;
+  --note-fill-hover: #a78bfa;
+
   /* ---- Surface Alias（v2.5.0 补齐：此前继承暗色值，导致 --ink(#fff)
          被用在白底上 → 顶栏品牌字"看不见"；v2.6.0 再收敛掉 3 个零引用名） ---- */
   --canvas: var(--bg-primary);
