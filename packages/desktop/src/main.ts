@@ -69,8 +69,10 @@ ipcMain.handle("audio:playbackStats", () => audio.playbackStats());
 // 没有这两个头时 Chromium 不暴露 SharedArrayBuffer，音频管线只能退化成静音。
 // 注意：加了 COEP: require-corp 后所有子资源都必须带 CORP 头，
 // 因此只对本地界面（dev server / file://）启用，外部资源会因此被拦。
-app.on("web-contents-created", (_e, contents) => {
-  contents.session.webRequest.onHeadersReceived((details, callback) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+app.on("web-contents-created", (_e: any, contents: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  contents.session.webRequest.onHeadersReceived((details: any, callback: any) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,

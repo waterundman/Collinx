@@ -74,7 +74,8 @@ export class AudioEngineBridge {
   private addon: NativeAddon | null = null;
   private synth: NativeSynthBridge | null = null;
   private status: AudioEngineStatus = "unavailable";
-  private reason = "音频引擎尚未接通（packages/audio 需先构建出 N-API 产物）";
+  /** 未接通/失败原因；接通成功后会被清空，故类型含 undefined */
+  private reason: string | undefined = "音频引擎尚未接通（packages/audio 需先构建出 N-API 产物）";
   private sampleRate = 44100;
   /** 播放驱动（仅在 startPlayback 后存在） */
   private driver: AudioDriver | null = null;

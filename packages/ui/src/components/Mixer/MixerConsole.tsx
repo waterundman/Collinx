@@ -21,6 +21,8 @@ interface MixerConsoleProps {
    * 拖推子时无法判断是否削波，等于盲调。
    */
   audioLevel?: () => number;
+  /** v2.8.0：每轨电平（0..1）—— 重构出轨道总线后才有意义 */
+  trackLevel?: (trackId: string) => number;
   onRemoveTrack?: (trackId: string) => void;
   /**
    * Stage 2: trigger the Mixing Agent to propose an FX chain / mix setting.
@@ -104,6 +106,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
   onTrackChange,
   onAddTrack,
   audioLevel,
+  trackLevel,
   onRemoveTrack,
   onSuggestFxChain,
 }) => {
@@ -113,16 +116,22 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   // 输出电平：rAF 轮询而不是 setInterval —— 与屏幕刷新同步，且后台标签页自动暂停
   const [masterLevel, setMasterLevel] = useState(0);
+  const [trackLevels, setTrackLevels] = useState<Record<string, number>>({});
   useEffect(() => {
-    if (!audioLevel) return;
+    if (!audioLevel && !trackLevel) return;
     let raf = 0;
     const tick = () => {
-      setMasterLevel(audioLevel());
+      if (audioLevel) setMasterLevel(audioLevel());
+      if (trackLevel) {
+        const next: Record<string, number> = {};
+        for (const t of mixer.tracks) next[t.id] = trackLevel(t.sourceTrackId);
+        setTrackLevels(next);
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [audioLevel]);
+  }, [audioLevel, trackLevel, mixer.tracks]);
   const [newTrackName, setNewTrackName] = useState("");
   const [newTrackSource, setNewTrackSource] = useState("");
   const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
@@ -309,21 +318,29 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
   };
 
   const renderMeter = (track: MixerTrack) => {
-    const level = parseFloat(track.meterLevel || "0");
-    const pct = Math.max(0, Math.min(100, (1 - Math.abs(level)) * 100));
+    // v2.8.0 重构：改用**真实**电平（来自轨道总线的 AnalyserNode）。
+    // 重构前读的是 `track.meterLevel` —— 一个静态数据字段，且默认值是 "0"，
+    // 于是电平表永远满格显示（之前截图里 Master 那条红色满格就是这么来的）。
+    // 原来的比例公式 `(1 - |level|) * 100` 也是反的：level=0（无信号）反而 100%。
+    const level = trackLevels[track.id] ?? 0;
+    const pct = Math.max(0, Math.min(100, level * 100));
 
     return (
-      <div className={styles.meterContainer}>
+      <div className={styles.meterContainer} data-testid={`mixer-meter-${track.id}`}>
         <div className={styles.meterBar}>
           <div
             className={styles.meterFill}
             style={{
               width: `${pct}%`,
-              background: pct > 80 ? "var(--accent-red)" : pct > 60 ? "var(--accent-yellow)" : "var(--accent-green)",
+              background:
+                pct > 95 ? "var(--accent-red)" : pct > 75 ? "var(--accent-yellow)" : "var(--accent-green)",
             }}
           />
         </div>
-        <div className={styles.meterDb}>{level.toFixed(1)} dB</div>
+        {/* 峰值换算成 dB 显示，与推子的 dB 语义一致 */}
+        <div className={styles.meterDb}>
+          {level > 0 ? `${(20 * Math.log10(level)).toFixed(1)} dB` : "-∞"}
+        </div>
       </div>
     );
   };

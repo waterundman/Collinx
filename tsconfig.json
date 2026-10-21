@@ -13,5 +13,9 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "packages/desktop/src/*.test.ts"
+  ]
 }

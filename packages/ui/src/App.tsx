@@ -1334,6 +1334,7 @@ export function App() {
         <div className={styles.mixerFill} data-testid="mixer-layout">
           <MixerConsole
               audioLevel={transport.getAudioLevel}
+              trackLevel={transport.getTrackLevel}
             mixer={mixer}
             onTrackChange={handleMixerTrackChange}
             onAddTrack={handleMixerAddTrack}

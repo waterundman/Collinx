@@ -39,7 +39,7 @@ describe("mixer.setTrackVolume tool", () => {
     expect(diff).toBeTruthy();
     expect(diff!.ops).toHaveLength(1);
 
-    const op = diff!.ops[0] as {
+    const op = diff!.ops[0] as unknown as {
       op: string;
       nodeId: string;
       data: { trackId: string; changes: { gainDb?: string } };
@@ -58,7 +58,9 @@ describe("mixer.setTrackVolume tool", () => {
     );
     expect(result.status).toBe("ok");
 
-    const op = result.diff!.ops[0] as { data: { changes: { gainDb?: string; pan?: string } } };
+    const op = result.diff!.ops[0] as unknown as {
+      data: { changes: { gainDb?: string; pan?: string } };
+    };
     expect(op.data.changes.gainDb).toBe("-3");
     expect(op.data.changes.pan).toBe("0.25");
   });
