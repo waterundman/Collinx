@@ -862,6 +862,32 @@ export function App() {
     })();
   }, [notes, tempoMap]);
 
+  /**
+   * v2.8.0 重构：把混音台的推子送进音频图。
+   *
+   * 重构前 `MixerTrack.gainDb` 只存在 store 里，**从不进入音频路径** ——
+   * 用户拖动推子，数字变了、声音一点没变。混音台形同虚设。
+   *
+   * 现在每次 mixer 状态变化都把每条轨的 gainDb 同步到合成器的轨道总线：
+   * - 音符的 `trackId` 与 `MixerTrack.sourceTrackId` 是同一套标识
+   *   （demo 里都是 melody / bass / chords），所以能正确对应
+   * - Master 单独走 setMasterGain（它不在 tracks 数组里）
+   * - setTargetAtTime 让变化平滑，拖推子时不会产生拉链噪声
+   */
+  useEffect(() => {
+    // ⚠️ 守卫必须用 isNaN，不能用 isFinite：
+    // 推子拉到最低时 gainDb 存的是字符串 "-Infinity"，parseFloat 得到 -Infinity。
+    // 用 isFinite 会把它判成无效值回退到 0 dB —— 拉到最低反而变成**不衰减**，
+    // 电平一点不降（实测 58% → 62%）。放行 -Infinity 交给 dbToLinear，
+    // 它会返回 0（真静音），这才是推子到底该有的行为。
+    for (const track of mixer.tracks) {
+      const db = Number.parseFloat(track.gainDb);
+      transport.setTrackGain(track.sourceTrackId, Number.isNaN(db) ? 0 : db);
+    }
+    const masterDb = Number.parseFloat(mixer.masterTrack.gainDb);
+    transport.setMasterGain(Number.isNaN(masterDb) ? 0 : masterDb);
+  }, [mixer, transport]);
+
   // Stage 0 (.agentmusic): open the hidden file picker; the change handler
   // reads the selected .agentmusic File and restores the project.
   const handleLoadProjectClick = useCallback(() => {

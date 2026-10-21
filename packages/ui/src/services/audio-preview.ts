@@ -20,6 +20,7 @@
  */
 
 import { getInstrument, notePeakGain } from "./instruments";
+import { dbToLinear } from "./gain";
 
 /** MIDI 音高 → 频率（A4 = 69 = 440Hz） */
 export function midiToFrequency(pitchMidi: number): number {
@@ -49,15 +50,58 @@ export interface AudioPreviewOptions {
   release?: number;
 }
 
+/**
+ * 读一个 AnalyserNode 的时域峰值（0..1）。
+ *
+ * 用峰值而不是 RMS：削波是峰值造成的。RMS 会让已经爆掉的信号
+ * 看起来还有余量，混音时容易误判。
+ */
+function readPeak(analyser: AnalyserNode): number {
+  const buf = new Float32Array(analyser.fftSize);
+  try {
+    analyser.getFloatTimeDomainData(buf as Float32Array<ArrayBuffer>);
+  } catch {
+    return 0;
+  }
+  let peak = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const v = Math.abs(buf[i]);
+    if (v > peak) peak = v;
+  }
+  return Math.min(1, peak);
+}
+
 interface Voice {
   oscillators: OscillatorNode[];
   gain: GainNode;
+}
+
+/** 单条轨道的总线：入口增益（推子）→ 电平分析 → master */
+interface TrackBus {
+  /** 该轨所有 voice 汇入这里；gain 由混音台推子（gainDb）控制 */
+  entry: GainNode;
+  analyser: AnalyserNode;
+  /** 当前线性增益对应的 dB，用于避免重复设置 */
+  gainDb: number;
 }
 
 export class AudioPreview {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private voices = new Map<string, Voice>();
+  /**
+   * v2.8.0 重构：**轨道级总线**。
+   *
+   * 重构前所有音符直接连 master —— 于是混音台的推子只改了 `gainDb` 数字，
+   * 声音完全不受影响（实测：gainDb 从未出现在音频路径里）。
+   * 推子转了、电平没动，混音形同虚设。
+   *
+   * 现在每条轨道有自己的 GainNode（电平由推子控制）与 AnalyserNode
+   * （独立电平显示），voice 先连轨道总线再汇入 master。
+   */
+  private trackBuses = new Map<string, TrackBus>();
+  /** trackId 缺失时的兜底总线键 —— 不能让没有 trackId 的音符失去音量控制 */
+  private static readonly DEFAULT_BUS = "__default__";
   /**
    * v2.8.0：电平分析器（接在 master 之后、destination 之前）。
    * 混音台此前没有电平显示 —— 用户拖推子时无法判断是否削波，
@@ -112,6 +156,54 @@ export class AudioPreview {
     }
   }
 
+  /** 取（必要时创建）轨道总线 */
+  private ensureTrackBus(trackId?: string): TrackBus | null {
+    if (!this.ctx || !this.master) return null;
+    const key = trackId && trackId.length > 0 ? trackId : AudioPreview.DEFAULT_BUS;
+
+    const existing = this.trackBuses.get(key);
+    if (existing) return existing;
+
+    const entry = this.ctx.createGain();
+    const analyser = this.ctx.createAnalyser();
+    analyser.fftSize = 256;
+
+    entry.connect(analyser);
+    analyser.connect(this.master);
+
+    const bus: TrackBus = { entry, analyser, gainDb: 0 };
+    this.trackBuses.set(key, bus);
+    return bus;
+  }
+
+  /**
+   * 设置某轨道的音量（dB）。混音台推子改  后必须调它，
+   * 否则推子只是个数字 —— 这正是重构前的问题。
+   */
+  setTrackGain(trackId: string, db: number): void {
+    if (!this.ctx) return;
+    const bus = this.ensureTrackBus(trackId);
+    if (!bus) return;
+    const linear = dbToLinear(db);
+    // 用 setTargetAtTime 平滑过渡，避免拖动推子时产生 zipper noise（拉链噪声）
+    bus.entry.gain.setTargetAtTime(linear, this.ctx.currentTime, 0.01);
+    bus.gainDb = db;
+  }
+
+  /** 设置总输出音量（dB）。Mixer 的 Master 推子必须走这里。 */
+  setMasterGain(db: number): void {
+    if (!this.ctx || !this.master) return;
+    this.master.gain.setTargetAtTime(dbToLinear(db) * this.masterGain, this.ctx.currentTime, 0.01);
+  }
+
+  /** 某轨道的当前电平（0..1 峰值） */
+  getTrackLevel(trackId: string): number {
+    const key = trackId && trackId.length > 0 ? trackId : AudioPreview.DEFAULT_BUS;
+    const bus = this.trackBuses.get(key);
+    if (!bus) return 0;
+    return readPeak(bus.analyser);
+  }
+
   /**
    * 触发一个音符。
    *
@@ -127,6 +219,8 @@ export class AudioPreview {
     whenSec = 0,
     /** 音色 id（见 instruments.ts）；省略时用 DEFAULT_INSTRUMENT */
     instrumentId?: string,
+    /** 来源轨道 —— 决定它汇入哪条轨道总线（推子/电平按轨独立） */
+    trackId?: string,
   ): void {
     if (!this.ctx || !this.master || this.ctx.state !== "running") return;
 
@@ -147,7 +241,10 @@ export class AudioPreview {
       Math.max(peak * spec.sustain, 0.0002),
       t0 + spec.attack + 0.15,
     );
-    gain.connect(this.master);
+    // 连到**轨道总线**而不是 master —— 这样推子才能影响这条轨的声音
+    const bus = this.ensureTrackBus(trackId);
+    if (bus) gain.connect(bus.entry);
+    else gain.connect(this.master);
 
     const freq = midiToFrequency(pitchMidi);
     const oscs: OscillatorNode[] = [];
@@ -200,17 +297,7 @@ export class AudioPreview {
    */
   getLevel(): number {
     if (!this.analyser) return 0;
-    try {
-      this.analyser.getFloatTimeDomainData(this.levelBuffer as Float32Array<ArrayBuffer>);
-    } catch {
-      return 0;
-    }
-    let peak = 0;
-    for (let i = 0; i < this.levelBuffer.length; i++) {
-      const v = Math.abs(this.levelBuffer[i]);
-      if (v > peak) peak = v;
-    }
-    return Math.min(1, peak);
+    return readPeak(this.analyser);
   }
 
   /** 停止全部发声（stop / 切歌 / 卸载时调用） */
@@ -221,6 +308,11 @@ export class AudioPreview {
   /** 关闭并释放 AudioContext */
   async dispose(): Promise<void> {
     this.allNotesOff();
+    // 断开并丢弃所有轨道总线，避免 AudioContext 关闭后仍持有节点引用
+    for (const bus of this.trackBuses.values()) {
+      try { bus.entry.disconnect(); bus.analyser.disconnect(); } catch { /* ignore */ }
+    }
+    this.trackBuses.clear();
     if (this.ctx) {
       try {
         await this.ctx.close();

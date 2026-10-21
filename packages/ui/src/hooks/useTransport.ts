@@ -109,6 +109,12 @@ export interface UseTransportResult {
   play: (opts?: { countInBars?: number }) => void;
   /** v2.8.0：当前输出电平（0..1），供混音台显示 */
   getAudioLevel: () => number;
+  /** v2.8.0：设置某轨音量（dB）—— 推子必须走这里才能影响声音 */
+  setTrackGain: (trackId: string, db: number) => void;
+  /** v2.8.0：某轨的实时电平（0..1） */
+  getTrackLevel: (trackId: string) => number;
+  /** v2.8.0：Master 推子 → 总输出音量 */
+  setMasterGain: (db: number) => void;
   pause: () => void;
   stop: () => void;
   seek: (pos: { bar: number; beat: number }) => void;
@@ -415,6 +421,9 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
           delaySec,
           // 按来源轨道选音色：旋律明亮、贝斯饱满、和弦铺底
           instrumentForTrack(ev.trackId),
+          // 同时告诉合成器这条音属于哪条轨道 —— 它决定汇入哪条轨道总线，
+          // 推子与电平才能按轨独立（重构前的核心缺口）
+          ev.trackId,
         );
       } else {
         preview?.noteOff(voiceKey, delaySec);
@@ -793,6 +802,24 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
    */
   const getAudioLevel = useCallback((): number => previewRef.current?.getLevel() ?? 0, []);
 
+  /**
+   * v2.8.0 重构：把混音台的推子送进音频图。
+   * 重构前 gainDb 只存在 store 里，从不进入音频路径 —— 推子转了声音不变。
+   */
+  const setTrackGain = useCallback((trackId: string, db: number): void => {
+    previewRef.current?.setTrackGain(trackId, db);
+  }, []);
+
+  const getTrackLevel = useCallback(
+    (trackId: string): number => previewRef.current?.getTrackLevel(trackId) ?? 0,
+    [],
+  );
+
+  /** v2.8.0：Master 推子 → 总输出音量 */
+  const setMasterGain = useCallback((db: number): void => {
+    previewRef.current?.setMasterGain(db);
+  }, []);
+
   return {
     phase,
     position,
@@ -802,6 +829,9 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     pause,
     stop,
     getAudioLevel,
+    setTrackGain,
+    getTrackLevel,
+    setMasterGain,
     seek,
     loop,
     setLoop,
