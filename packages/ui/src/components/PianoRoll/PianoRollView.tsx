@@ -153,6 +153,9 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   const [pixelsPerBeat, setPixelsPerBeat] = useState(40);
   const [scrollX, setScrollX] = useState(0);
   const [scrollY, setScrollY] = useState(0);
+  /** 供自动定位 effect 读取最新滚动位置，避免把 scrollY 放进依赖导致滚走就被弹回 */
+  const scrollYRef = useRef(scrollY);
+  scrollYRef.current = scrollY;
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
   // v2.4.0 S5：默认「绘制」= 双击新增音符（与改动前行为一致）；切到「选择」后
   // 双击不再新增，工具按钮因此真正影响交互而非只换高亮。
@@ -200,6 +203,34 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
   const followTarget = (followPlayhead ? playheadPosition : undefined) ?? cursorPosition;
 
   const keyboardKeys = useMemo(() => buildKeyboardKeys(), []);
+
+  /**
+   * v2.8.0：音符在钢琴卷帘里看不见的真正根因。
+   *
+   * NOTE_HEIGHT 是固定 18px，整个音域（C1~C8）高约 1584px，而画布只有
+   * ~228px —— 一次只显示 12 个半音。scrollY 默认为 0（顶部 = C8），
+   * 而音乐通常写在 C2~C5，于是所有音符的 ny 都落在画布下方 1000px 处，
+   * 画了但完全不可见（实测 canvas 像素里紫色样本数为 0）。
+   *
+   * 这里只在「当前视口内一个音符都没有」时重新定位，并把视口中心对准
+   * 音符的平均音高 —— 用户手动滚到别处时不会被弹回。
+   */
+  useEffect(() => {
+    if (notes.length === 0 || canvasSize.height <= 0) return;
+    const h = canvasSize.height;
+    const y = scrollYRef.current;
+    const topPitch = MAX_PITCH - y / NOTE_HEIGHT;
+    const bottomPitch = MAX_PITCH - (y + h) / NOTE_HEIGHT;
+    const hasVisible = notes.some(
+      (n) => n.pitchMidi <= topPitch && n.pitchMidi >= bottomPitch,
+    );
+    if (hasVisible) return;
+
+    const avgPitch = notes.reduce((sum, n) => sum + n.pitchMidi, 0) / notes.length;
+    const target = (MAX_PITCH - avgPitch) * NOTE_HEIGHT - h / 2;
+    setScrollY(Math.max(0, Math.min(maxScrollY, target)));
+  }, [notes, canvasSize.height, maxScrollY]);
+
 
   const interaction = usePianoRollInteraction({
     notes,
