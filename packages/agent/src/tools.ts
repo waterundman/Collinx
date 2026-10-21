@@ -47,6 +47,7 @@ export function registerBuiltinTools(
       { name: "register", type: "string", required: true, description: "音区: low/mid/high" },
       { name: "styleHint", type: "string", required: false, description: "风格提示" },
       { name: "key", type: "string", required: false, description: "调性" },
+      { name: "mode", type: "string", required: false, description: "调式：major / minor" },
       { name: "scale", type: "string", required: false, description: "音阶类型" },
     ],
     handler: async (params) => {
@@ -56,6 +57,7 @@ export function registerBuiltinTools(
         styleHint: params.styleHint as string | undefined,
         key: params.key as string | undefined,
         scale: params.scale as string | undefined,
+        mode: params.mode as string | undefined,
       });
     },
   });
@@ -190,6 +192,9 @@ export function registerBuiltinTools(
         bars: params.bars as number,
         key: params.key as string,
         style: params.style as string | undefined,
+        // v2.8.0：此前没透传 mode，composer 里又硬编码 "major"，
+        // 用户要小调也只拿到大调和弦
+        mode: params.mode as string | undefined,
       });
     },
   });

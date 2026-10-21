@@ -22,6 +22,11 @@ const SCALE_MAP: Record<string, number[]> = {
   blues: [0, 3, 5, 6, 7, 10],
 };
 
+/** 音高类 → 音名（用于和弦根音显示；此前用 fromCharCode 只会得到 A/B） */
+const PITCH_CLASS_NAMES = [
+  "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
+
 const KEY_MAP: Record<string, number> = {
   C: 60, "C#": 61, Db: 61, D: 62, "D#": 63, Eb: 63, E: 64,
   F: 65, "F#": 66, Gb: 66, G: 67, "G#": 68, Ab: 68,
@@ -199,14 +204,21 @@ export class Composer {
     bars: number;
     key: string;
     style?: string;
+    /**
+     * v2.8.0：调式。此前 mode 被硬编码成 "major"，参数里的调性根本没被读 ——
+     * 用户要 E 小调，拿到的仍是大调和弦（验收时 AI 主动报出了这个问题）。
+     * 缺省 major 保持向后兼容。
+     */
+    mode?: string;
   }): ToolResult {
     const bars = params.bars ?? 4;
     const key = params.key ?? "C";
     const styleHint = params.style ?? "classical";
 
     const keyOffset = KEY_MAP[key] ?? 60;
-    const mode = "major";
-    const chords = DIATONIC_CHORDS[mode];
+    const modeKey = params.mode === "minor" ? "minor" : "major";
+    const scale = modeKey === "minor" ? MINOR_SCALE : MAJOR_SCALE;
+    const chords = DIATONIC_CHORDS[modeKey];
 
     const matchingPatterns = PROGRESSION_PATTERNS.filter(
       (p) => p.style === styleHint || p.style === "classical"
@@ -221,21 +233,55 @@ export class Composer {
     for (let i = 0; i < pattern.pattern.length && bar <= bars; i++) {
       const degree = pattern.pattern[i];
       const chord = chords[degree % chords.length];
-      const rootNote = keyOffset + (degree === 0 ? 0 : MAJOR_SCALE[degree % MAJOR_SCALE.length]);
+      const rootNote = keyOffset + (degree === 0 ? 0 : scale[degree % scale.length]);
 
       harmonyEntries.push({
         bar,
         beat: 1,
+        // 修复：原来用 String.fromCharCode(65 + (rootNote%12>4?1:0))，
+        // 只会产出 "A" 或 "B"，根音名完全错。改为按音高类取标准音名。
         chord: {
-          root: String.fromCharCode(65 + (rootNote % 12 > 4 ? 1 : 0)),
+          root: PITCH_CLASS_NAMES[rootNote % 12],
           quality: chord[1],
         },
         durationQn: 4.0,
         romanNumeral: chord[0],
-        function: degree === 0 || degree === 5 || degree === 3 ? "tonic" : "subdominant",
+        // 主功能：小调 i / III / VI，大调 I / IV / vi 都算稳定功能；
+        // 这里用「首和弦或第七度」近似，够用且不再写死 degree 3/5
+        function: degree === 0 ? "tonic" : degree === 4 ? "dominant" : "subdominant",
+        // 保留 degree 供下方生成和弦音符
+        degree,
       });
 
       bar++;
+    }
+
+    // v2.8.0：把和弦落成**实际音符**并产出可审批 diff。
+    // 此前 resultType=proposal 却没有 diff —— 用户在 Agent 面板看不到任何提案，
+    // AI 的"和声建议"只是一段文字（与 v2.4.0 修过的 generateMotif 同类缺陷）。
+    const notes: NoteEvent[] = [];
+    for (const entry of harmonyEntries) {
+      const degree = entry.degree as number;
+      const bar = entry.bar as number;
+      const rootPitch = keyOffset + scale[degree % scale.length];
+      const thirdIdx = degree + 2;
+      const fifthIdx = degree + 4;
+      // 三和弦：根音 / 三度 / 五度；超出音阶长度时升八度
+      const thirdPitch = keyOffset + scale[thirdIdx % 7] + (thirdIdx >= 7 ? 12 : 0);
+      const fifthPitch = keyOffset + scale[fifthIdx % 7] + (fifthIdx >= 7 ? 12 : 0);
+
+      for (const pitchMidi of [rootPitch, thirdPitch, fifthPitch]) {
+        notes.push(
+          createNoteEvent({
+            trackId: "chords",
+            bar,
+            beat: 1,
+            durQn: 4,
+            pitchMidi,
+            velocity: 0.6,
+          }),
+        );
+      }
     }
 
     return {
@@ -243,10 +289,17 @@ export class Composer {
       resultType: "proposal",
       data: {
         key,
-        mode,
+        mode: modeKey,
         entries: harmonyEntries,
         pattern: pattern.name,
       },
+      diff: createDiffEnvelope({
+        baseRevision: "",
+        actor: { type: "agent", name: "Composer" },
+        permissionScope: "proposal_only",
+        summary: `生成 ${harmonyEntries.length} 小节和声（${key} ${modeKey} / ${pattern.name}）`,
+        ops: [{ op: "add_note_group", path: "/", notes }],
+      }),
       confidence: 0.7,
       requiresUserConfirmation: true,
       auditRef: randomUUID(),
