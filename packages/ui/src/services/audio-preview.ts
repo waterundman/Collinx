@@ -58,6 +58,13 @@ export class AudioPreview {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private voices = new Map<string, Voice>();
+  /**
+   * v2.8.0：电平分析器（接在 master 之后、destination 之前）。
+   * 混音台此前没有电平显示 —— 用户拖推子时无法判断是否削波，
+   * 混音等于盲调。AnalyserNode 是 pass-through，不影响声音。
+   */
+  private analyser: AnalyserNode | null = null;
+  private levelBuffer: Float32Array = new Float32Array(512);
   private readonly masterGain: number;
   private readonly attack: number;
   private readonly release: number;
@@ -89,7 +96,14 @@ export class AudioPreview {
         this.ctx = new Ctor();
         this.master = this.ctx.createGain();
         this.master.gain.value = this.masterGain;
-        this.master.connect(this.ctx.destination);
+
+        this.analyser = this.ctx.createAnalyser();
+        // fftSize 只影响频率分辨率；这里只要时域峰值，取最小值即可
+        this.analyser.fftSize = 512;
+        this.levelBuffer = new Float32Array(this.analyser.fftSize);
+
+        this.master.connect(this.analyser);
+        this.analyser.connect(this.ctx.destination);
       }
       if (this.ctx.state === "suspended") await this.ctx.resume();
       return this.ctx.state === "running";
@@ -173,6 +187,30 @@ export class AudioPreview {
     } catch {
       // 已经停止过的振荡器重复 stop 会抛错；忽略即可
     }
+  }
+
+  /**
+   * 当前输出电平（0..1，取时域峰值的绝对值）。
+   *
+   * 为什么用峰值而不是 RMS：削波是峰值造成的。RMS 会让已经爆掉的信号
+   * 看起来还有余量，混音时容易误判。
+   *
+   * 未启动 / 无 analyser 时返回 0（而不是抛错）—— 调用方可以安全地
+   * 按 rAF 轮询而不必先判空。
+   */
+  getLevel(): number {
+    if (!this.analyser) return 0;
+    try {
+      this.analyser.getFloatTimeDomainData(this.levelBuffer as Float32Array<ArrayBuffer>);
+    } catch {
+      return 0;
+    }
+    let peak = 0;
+    for (let i = 0; i < this.levelBuffer.length; i++) {
+      const v = Math.abs(this.levelBuffer[i]);
+      if (v > peak) peak = v;
+    }
+    return Math.min(1, peak);
   }
 
   /** 停止全部发声（stop / 切歌 / 卸载时调用） */

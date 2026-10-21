@@ -107,6 +107,8 @@ export interface UseTransportResult {
   positionSeconds: number;
   isPlaying: boolean;
   play: (opts?: { countInBars?: number }) => void;
+  /** v2.8.0：当前输出电平（0..1），供混音台显示 */
+  getAudioLevel: () => number;
   pause: () => void;
   stop: () => void;
   seek: (pos: { bar: number; beat: number }) => void;
@@ -785,6 +787,12 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     };
   }, [clearTimers, allSoundOff]);
 
+  /**
+   * v2.8.0：当前输出电平（0..1），供混音台显示。
+   * 未播放 / 合成器未就绪时返回 0，调用方可安全轮询。
+   */
+  const getAudioLevel = useCallback((): number => previewRef.current?.getLevel() ?? 0, []);
+
   return {
     phase,
     position,
@@ -793,6 +801,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     play,
     pause,
     stop,
+    getAudioLevel,
     seek,
     loop,
     setLoop,

@@ -1307,6 +1307,7 @@ export function App() {
       {activeTab === "mixer" && (
         <div className={styles.mixerFill} data-testid="mixer-layout">
           <MixerConsole
+              audioLevel={transport.getAudioLevel}
             mixer={mixer}
             onTrackChange={handleMixerTrackChange}
             onAddTrack={handleMixerAddTrack}

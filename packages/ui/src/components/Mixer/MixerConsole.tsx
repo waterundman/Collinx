@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   MixerState,
   MixerTrack,
@@ -16,6 +16,11 @@ interface MixerConsoleProps {
   mixer: MixerState;
   onTrackChange?: (trackId: string, changes: Partial<MixerTrack>) => void;
   onAddTrack?: (name: string, sourceId: string) => void;
+  /**
+   * v2.8.0：master 输出电平（0..1）。混音台此前没有电平显示 ——
+   * 拖推子时无法判断是否削波，等于盲调。
+   */
+  audioLevel?: () => number;
   onRemoveTrack?: (trackId: string) => void;
   /**
    * Stage 2: trigger the Mixing Agent to propose an FX chain / mix setting.
@@ -98,6 +103,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
   mixer,
   onTrackChange,
   onAddTrack,
+  audioLevel,
   onRemoveTrack,
   onSuggestFxChain,
 }) => {
@@ -105,6 +111,18 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
   const [fxEditor, setFxEditor] = useState<FXEditorState | null>(null);
   const [dragSlot, setDragSlot] = useState<{ trackId: string; slotIdx: number } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  // 输出电平：rAF 轮询而不是 setInterval —— 与屏幕刷新同步，且后台标签页自动暂停
+  const [masterLevel, setMasterLevel] = useState(0);
+  useEffect(() => {
+    if (!audioLevel) return;
+    let raf = 0;
+    const tick = () => {
+      setMasterLevel(audioLevel());
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [audioLevel]);
   const [newTrackName, setNewTrackName] = useState("");
   const [newTrackSource, setNewTrackSource] = useState("");
   const [hoveredTrack, setHoveredTrack] = useState<string | null>(null);
@@ -546,6 +564,34 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
         <span className={styles.mixerSubtitle}>
           {t('mixer.trackCount', { count: mixer.tracks.length })}
         </span>
+        {audioLevel && (
+          <span
+            data-testid="mixer-master-level"
+            title={`输出电平 ${Math.round(masterLevel * 100)}%`}
+            style={{
+              display: 'inline-block',
+              width: 120,
+              height: 6,
+              marginLeft: 10,
+              verticalAlign: 'middle',
+              background: 'rgba(0,0,0,0.18)',
+              borderRadius: 3,
+              overflow: 'hidden',
+            }}
+          >
+            <span
+              style={{
+                display: 'block',
+                width: `${Math.round(masterLevel * 100)}%`,
+                height: '100%',
+                // 超过 95% 视为削波（红），75% 以上预警（黄）
+                background:
+                  masterLevel > 0.95 ? '#ef4444' : masterLevel > 0.75 ? '#f59e0b' : '#22c55e',
+                transition: 'width 60ms linear',
+              }}
+            />
+          </span>
+        )}
         <button className={styles.addTrackBtn} data-testid="mixer-add-track" onClick={handleAddTrackClick}>
           {t('mixer.addTrack')}
         </button>
@@ -587,7 +633,13 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
       {showAddModal && (
         <>
           <div className={styles.modalBackdrop} onClick={() => setShowAddModal(false)} />
-          <div className={styles.addTrackModal}>
+          <div
+            className={styles.addTrackModal}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('mixer.addTrackModal')}
+            onKeyDown={(e) => { if (e.key === "Escape") setShowAddModal(false); }}
+          >
             <div className={styles.modalTitle}>{t('mixer.addTrackModal')}</div>
             <div className={styles.modalRow}>
               <label className={styles.modalLabel}>{t('mixer.trackName')}</label>
