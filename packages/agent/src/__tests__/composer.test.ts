@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ToolRegistry, AgentBus } from "@collinx/core";
-import { Composer } from "../composer";
+import { Composer, normalizeScaleName, normalizeKeyName } from "../composer";
 import { registerBuiltinTools } from "../tools";
 
 describe("Composer", () => {
@@ -259,6 +259,192 @@ describe("generateMotif 旋律质量（v2.8.0）", () => {
     for (const n of notes) {
       expect(eMinorPcs.has(((n.pitchMidi % 12) + 12) % 12)).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2.8.1：旋律密度与乐句呼吸
+//
+// 验收时用户看着钢琴卷帘的原话是「钢琴窗口这根本不符合逻辑啊，一个小节里面
+// 怎么有那么多音符」。原实现每拍随机挑一个节奏模板，模板池里混着
+// [0.25,0.25,0.25,0.25]（16 分），48 小节实测每小节 8~16 个音 —— 谱面密到
+// 不可读，也没有任何长音呼吸。
+//
+// 现在的约束：
+//   1. 以四分/二分音符为主、八分为辅、16 分只作点缀；melody 轨硬上限 8 音/小节
+//   2. 每 4 小节至少 1 小节以 ≥2 拍的长音收尾（乐句呼吸）
+// ---------------------------------------------------------------------------
+describe("generateMotif 密度与呼吸（v2.8.1）", () => {
+  type N = { bar: number; beat: number; durQn: number; pitchMidi: number };
+
+  const call = async (params: Record<string, unknown>) => {
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry, new AgentBus());
+    const result = await registry.call("composer.generateMotif", params, {
+      type: "agent",
+      name: "test",
+    });
+    expect(result.status).toBe("ok");
+    return (result.data as { notes: N[] }).notes;
+  };
+
+  const countByBar = (notes: N[]): Map<number, number> => {
+    const m = new Map<number, number>();
+    for (const n of notes) m.set(n.bar, (m.get(n.bar) ?? 0) + 1);
+    return m;
+  };
+
+  it("每小节音符数不超过 8（所有风格）(critical)", async () => {
+    for (const styleHint of ["classical", "jazz", "pop", "rock", "electronic", "minimal"]) {
+      const notes = await call({ bars: 16, register: "mid", key: "E", scale: "minor", styleHint });
+      const perBar = countByBar(notes);
+      for (let bar = 1; bar <= 16; bar++) {
+        expect(perBar.get(bar) ?? 0).toBeLessThanOrEqual(8);
+      }
+    }
+  });
+
+  it("平均每小节 2~6 个音（不再密到不可读）", async () => {
+    const notes = await call({ bars: 48, register: "mid", key: "C", scale: "major", styleHint: "pop" });
+    const perBar = countByBar(notes);
+    expect(perBar.size).toBe(48);
+    const avg = notes.length / 48;
+    expect(avg).toBeGreaterThanOrEqual(2);
+    expect(avg).toBeLessThanOrEqual(6);
+  });
+
+  it("每 4 小节至少有一小节以 ≥2 拍长音收尾（乐句呼吸）(critical)", async () => {
+    for (const styleHint of ["classical", "pop", "jazz", "electronic"]) {
+      const notes = await call({ bars: 16, register: "mid", key: "E", scale: "minor", styleHint });
+      for (let groupStart = 1; groupStart <= 16; groupStart += 4) {
+        const groupEnd = groupStart + 3;
+        const lastNoteDurInGroup = notes
+          .filter((n) => n.bar >= groupStart && n.bar <= groupEnd)
+          .map((n) => {
+            // 只取每小节最后一个音
+            const sameBar = notes.filter((m) => m.bar === n.bar);
+            const lastBeat = Math.max(...sameBar.map((m) => m.beat));
+            return { bar: n.bar, beat: n.beat, durQn: n.durQn, isLast: n.beat === lastBeat };
+          })
+          .filter((n) => n.isLast)
+          .map((n) => n.durQn);
+        expect(Math.max(...lastNoteDurInGroup)).toBeGreaterThanOrEqual(2);
+      }
+    }
+  });
+
+  it("每个小节的时值总和不超过 4 拍（不越界写谱）", async () => {
+    const notes = await call({ bars: 8, register: "mid", key: "G", scale: "major", styleHint: "jazz" });
+    const byBar = new Map<number, N[]>();
+    for (const n of notes) byBar.set(n.bar, [...(byBar.get(n.bar) ?? []), n]);
+    for (const [, barNotes] of byBar) {
+      const end = Math.max(...barNotes.map((n) => n.beat - 1 + n.durQn));
+      expect(end).toBeLessThanOrEqual(4.001);
+    }
+  });
+
+  it("相邻音跨度仍不超过 7 半音（回退保护）", async () => {
+    const notes = await call({ bars: 8, register: "mid", key: "E", scale: "minor" });
+    for (let i = 1; i < notes.length; i++) {
+      expect(Math.abs(notes[i].pitchMidi - notes[i - 1].pitchMidi)).toBeLessThanOrEqual(7);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2.8.1：scale 参数不生效（端到端实测 AI 说 E 小调、落进工程是 E 大调）
+//
+// 根因在工具层：SCALE_MAP 只认精确小写 key。AI 按自然语言习惯传
+// "E minor" / "e minor" / "natural minor" / "minor（自然小调）" 时全部 miss，
+// 静默 fallback 到 MAJOR_SCALE —— 于是 E 大调。key 也可能是合成串 "E minor"。
+// ---------------------------------------------------------------------------
+describe("generateMotif 调式归一化（v2.8.1）", () => {
+  const E_MINOR_PCS = new Set([4, 6, 7, 9, 11, 0, 2]); // E F# G A B C D
+
+  const call = async (params: Record<string, unknown>) => {
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry, new AgentBus());
+    const result = await registry.call("composer.generateMotif", params, {
+      type: "agent",
+      name: "test",
+    });
+    expect(result.status).toBe("ok");
+    return result.data as { notes: { pitchMidi: number }[]; motif: { name: string } };
+  };
+
+  const assertEMinor = (notes: { pitchMidi: number }[]) => {
+    expect(notes.length).toBeGreaterThan(3);
+    for (const n of notes) {
+      expect(E_MINOR_PCS.has(((n.pitchMidi % 12) + 12) % 12)).toBe(true);
+    }
+  };
+
+  it("scale 传 'minor' 得到小调音高类", async () => {
+    const data = await call({ bars: 4, register: "mid", key: "E", scale: "minor" });
+    assertEMinor(data.notes);
+  });
+
+  it("scale 传 'aeolian' 得到小调音高类", async () => {
+    const data = await call({ bars: 4, register: "mid", key: "E", scale: "aeolian" });
+    assertEMinor(data.notes);
+  });
+
+  it("scale 传 'E minor'（调名+调式合成串）得到小调音高类", async () => {
+    const data = await call({ bars: 4, register: "mid", key: "E", scale: "E minor" });
+    assertEMinor(data.notes);
+  });
+
+  it("scale 传大小写/空格不规范的 '  Natural Minor ' 得到小调音高类", async () => {
+    const data = await call({ bars: 4, register: "mid", key: "e", scale: "  Natural Minor " });
+    assertEMinor(data.notes);
+  });
+
+  it("key 传 'E minor'（AI 常把调式塞进 key）也能解析出 E 小调", async () => {
+    const data = await call({ bars: 4, register: "mid", key: "E minor" });
+    assertEMinor(data.notes);
+  });
+
+  it("mode 传 'minor'（AI 从 suggestHarmony 迁移过来的字段）也生效", async () => {
+    const data = await call({ bars: 4, register: "mid", key: "E", mode: "minor" });
+    assertEMinor(data.notes);
+  });
+
+  it("明确的 major 仍是自然大调（不误伤）", async () => {
+    const data = await call({ bars: 4, register: "mid", key: "E", scale: "major" });
+    const E_MAJOR_PCS = new Set([4, 6, 8, 9, 11, 1, 3]); // E F# G# A B C# D#
+    const pcs = new Set(data.notes.map((n) => ((n.pitchMidi % 12) + 12) % 12));
+    expect(pcs.size).toBeGreaterThan(1);
+    for (const pc of pcs) {
+      expect(E_MAJOR_PCS.has(pc)).toBe(true);
+    }
+    // 大调的三度/七度必须是 G#(8)/D#(3)，不能是小调的 G(7)/D(2)
+    expect(pcs.has(7) || pcs.has(2)).toBe(false);
+  });
+
+  it("无法识别的 scale 回退大调且不抛错", async () => {
+    const data = await call({ bars: 2, register: "mid", key: "C", scale: "quantum_lydian" });
+    expect(data.notes.length).toBeGreaterThan(0);
+  });
+
+  it("别名归一化表：小调的各种写法都能识别", () => {
+    const minorNames = ["minor", "Minor", " MINOR ", "natural minor", "Natural_Minor", "aeolian", "E minor", "e-minor", "minor（自然小调）", "自然小调"];
+    for (const raw of minorNames) {
+      expect(["minor", "natural_minor", "aeolian"]).toContain(normalizeScaleName(raw));
+    }
+    expect(normalizeScaleName("harmonic minor")).toBe("harmonic_minor");
+    expect(normalizeScaleName("和声小调")).toBe("harmonic_minor");
+    expect(normalizeScaleName("major")).toBe("major");
+    expect(normalizeScaleName("quantum_lydian")).toBeNull();
+    expect(normalizeScaleName(undefined)).toBeNull();
+  });
+
+  it("调名解析：带调式的合成串 / 升降号 / 大小写", () => {
+    expect(normalizeKeyName("E")).toEqual({ key: "E", mode: null });
+    expect(normalizeKeyName("e")).toEqual({ key: "E", mode: null });
+    expect(normalizeKeyName("E minor")).toEqual({ key: "E", mode: "minor" });
+    expect(normalizeKeyName("Bb")).toEqual({ key: "Bb", mode: null });
+    expect(normalizeKeyName("f# minor")).toEqual({ key: "F#", mode: "minor" });
+    expect(normalizeKeyName("F sharp")).toEqual({ key: "F#", mode: null });
   });
 });
 

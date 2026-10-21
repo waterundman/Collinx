@@ -215,17 +215,19 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
    * 这里只在「当前视口内一个音符都没有」时重新定位，并把视口中心对准
    * 音符的平均音高 —— 用户手动滚到别处时不会被弹回。
    */
+  const didInitialFitRef = useRef(false);
+  /**
+   * 只在**首次**就绪（画布量出高度后）做一次纵向定位。
+   *
+   * 之前挂在 notes 变化上会抢用户的操作：任何一次音符增删都会重算 scrollY，
+   * 于是「中键拖拽平移」的位移断言被改写的 scrollY 顶掉（实测 S2-T17 红）。
+   * 用户一旦能看见音符，之后就不再自动定位 —— 平移权完全交给用户。
+   */
   useEffect(() => {
+    if (didInitialFitRef.current) return;
     if (notes.length === 0 || canvasSize.height <= 0) return;
+    didInitialFitRef.current = true;
     const h = canvasSize.height;
-    const y = scrollYRef.current;
-    const topPitch = MAX_PITCH - y / NOTE_HEIGHT;
-    const bottomPitch = MAX_PITCH - (y + h) / NOTE_HEIGHT;
-    const hasVisible = notes.some(
-      (n) => n.pitchMidi <= topPitch && n.pitchMidi >= bottomPitch,
-    );
-    if (hasVisible) return;
-
     const avgPitch = notes.reduce((sum, n) => sum + n.pitchMidi, 0) / notes.length;
     const target = (MAX_PITCH - avgPitch) * NOTE_HEIGHT - h / 2;
     setScrollY(Math.max(0, Math.min(maxScrollY, target)));

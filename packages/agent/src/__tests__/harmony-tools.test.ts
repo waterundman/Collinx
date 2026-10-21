@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { ToolRegistry, AgentBus } from "@collinx/core";
 import { registerBuiltinTools } from "../tools";
 

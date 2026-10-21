@@ -43,7 +43,7 @@ Collinx 不代替你点按钮。它把你的音乐工程变成一张有类型的
    (提案 → 确认 → 写入)              (贝叶斯审美记忆)
 ```
 
-**Project Graph** — 12 种节点类型、10 种边类型、支持版本控制和分支管理。所有音乐数据（音符、和弦、曲式、轨道、效果、谱面、审美证据）都在同一张图里。
+**Project Graph** — 13 种节点类型、10 种边类型、支持版本控制和分支管理。所有音乐数据（音符、和弦、曲式、轨道、效果、谱面、审美证据）都在同一张图里。
 
 **DiffEnvelope** — Agent 操作的输出格式。包含操作摘要、领域解释、证据引用、风险标记和回滚令牌。默认权限 `proposal_only`：Agent 只能提案，你说了算。
 
@@ -75,12 +75,15 @@ Collinx 不代替你点按钮。它把你的音乐工程变成一张有类型的
 | **compose** | 钢琴卷帘 + 紧凑谱面 + 编排时间线 |
 | **arrange** | 段落编排 + Diff 预览 |
 | **orchestrate** | 乐器分配 + 冲突显示 |
-| **mixer** | 完整混音台 — 增益、声像、静音、独奏、FX 链 |
-| **score** | 完整谱面 — 自动布局、分谱提取、MusicXML 导出 |
+| **mixer** | 混音台 — 增益、声像、静音、独奏（推子与电平表作用于真实音频；FX 链目前仅数据） |
+| **score** | 完整谱面 — 自动布局、分谱提取、四类导出（WAV / MIDI / PDF / MusicXML） |
 | **taste** | 品味基因组时间线 + 参数库 + Diff 报告 |
 | **teaching** | 多级音乐理论解释 |
 | **agent** | Diff 队列 + 聊天界面 |
 | **graph** | 工程图可视化 — Canvas 2D 力导向布局 |
+
+播放由浏览器内置合成器出声（5 种音色，按轨道自动分配），每轨推子与电平表都真的作用在音频上。
+**尚未接入**：VST3/CLAP 插件、SF2 采样音色、FX 链听感、桌面原生引擎发声 —— 完整边界见 `docs/architecture.md` §六。
 
 ---
 
@@ -94,7 +97,7 @@ pnpm dev              # 启动所有开发服务器
 pnpm dev:ui           # 仅启动 UI（端口 5180）
 pnpm build            # 构建所有包
 pnpm test             # 单元测试（Vitest）
-pnpm test:e2e         # E2E 测试（Playwright, 84 用例）
+pnpm test:e2e         # E2E 测试（Playwright, 90 用例）
 pnpm typecheck        # 类型检查
 ```
 
@@ -103,8 +106,8 @@ pnpm typecheck        # 类型检查
 ## 测试
 
 ```
-62+ 单元测试文件    覆盖所有模型、图、Diff、Taste、IO、Agent
-12  E2E 测试文件    覆盖全部 9 个标签页的核心交互
+144 单元测试文件    core 51 / agent 19 / ui 74，覆盖模型、图、Diff、Taste、IO、Agent
+21  E2E 测试文件    90 用例，覆盖全部 9 个标签页的核心交互
 5   集成测试        音符→导出、混音链、图→Diff、曲式编排、Agent 工具链
 2   专项套件        性能测试 + 稳定性测试
 ```
@@ -126,11 +129,13 @@ Vitest · Playwright · JUCE 8 (C++20)
 ```
 Collinx/
 ├── packages/
-│   ├── core/          领域模型、图、Diff、Taste、IO
-│   ├── agent/         8 个 Agent + 工具注册 + Agent Bus
-│   ├── ui/            React 前端 + 15 个组件目录 + E2E 测试
-│   └── audio/         C++20/JUCE 音频引擎（VST3/CLAP）
-├── docs/              术语、迭代计划、研究文档
+│   ├── core/          领域模型、图、Diff、Taste、IO、工具注册表
+│   ├── agent/         8 个 Agent + 17 个工具
+│   ├── ui/            React 前端 + 21 个组件目录 + E2E 测试
+│   ├── desktop/       Electron 外壳 + 原生引擎桥（N-API / 环形缓冲 / AudioWorklet）
+│   ├── audio-engine/  引擎契约（纯类型，当前未接入产品）
+│   └── audio/         C++20/JUCE 音频引擎（VST3/CLAP，仅桌面侧）
+├── docs/              架构（architecture.md 为唯一权威）、术语、版本记录
 └── .github/           CI 流水线
 ```
 

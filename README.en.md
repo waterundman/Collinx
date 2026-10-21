@@ -44,7 +44,7 @@ This isn't a chatbot wrapped around a DAW. Agents have tool permissions, operati
    (propose → approve → write)     (Bayesian taste memory)
 ```
 
-**Project Graph** — 12 node types, 10 edge types, version control and branch management. All music data lives here: notes, chords, form, tracks, effects, scores, aesthetic evidence.
+**Project Graph** — 13 node types, 10 edge types, version control and branch management. All music data lives here: notes, chords, form, tracks, effects, scores, aesthetic evidence.
 
 **DiffEnvelope** — The output format of every agent operation. Contains summary, domain explanations, evidence references, risk flags, and a rollback token. Default permission: `proposal_only` — agents propose, you decide.
 
@@ -95,7 +95,7 @@ pnpm dev              # Start all dev servers
 pnpm dev:ui           # Start UI only (port 5180)
 pnpm build            # Build all packages
 pnpm test             # Unit tests (Vitest)
-pnpm test:e2e         # E2E tests (Playwright, 84 cases)
+pnpm test:e2e         # E2E tests (Playwright, 90 cases)
 pnpm typecheck        # Type checking
 ```
 
@@ -104,8 +104,8 @@ pnpm typecheck        # Type checking
 ## Tests
 
 ```
-62+ unit test files   Covering all models, graph, diff, taste, IO, agents
-12  E2E spec files    Covering all 9 tabs' core interactions
+144 unit test files  core 51 / agent 19 / ui 74 — models, graph, diff, taste, IO, agents
+21  E2E spec files   90 cases across all 9 tabs' core interactions
 5   integration       Note→export, mixer chain, graph→diff, form, agent tools
 2   suites            Performance + stability
 ```
@@ -127,11 +127,13 @@ Vitest · Playwright · JUCE 8 (C++20)
 ```
 Collinx/
 ├── packages/
-│   ├── core/          Domain models, graph, diff, taste, IO
-│   ├── agent/         8 agents + tool registry + agent bus
-│   ├── ui/            React frontend + 15 component dirs + E2E tests
-│   └── audio/         C++20/JUCE audio engine (VST3/CLAP)
-├── docs/              Terminology, iteration plan, research
+│   ├── core/          Domain models, graph, diff, taste, IO, tool registry
+│   ├── agent/         8 agents + 17 tools
+│   ├── ui/            React frontend + 21 component dirs + E2E tests
+│   ├── desktop/       Electron shell + native engine bridge (N-API / ring buffer / AudioWorklet)
+│   ├── audio-engine/  Engine contract (types only, not wired yet)
+│   └── audio/         C++20/JUCE audio engine (VST3/CLAP, desktop only)
+├── docs/              Architecture (architecture.md is authoritative), glossary, version records
 └── .github/           CI pipeline
 ```
 

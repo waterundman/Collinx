@@ -1196,10 +1196,15 @@ describe("PianoRollView v2.0.0 follow / pan / suspension (S2-T12..T17)", () => {
     const canvas = canvasOf(el);
 
     // 负控（先做，scrollX 仍为 0）：左键 mouse 拖拽音符 → onNoteMove 被调用。
-    // note rect: x∈[0,40]、y∈[864,881]（(108-60)*18）。
-    mouse(canvas, "mousedown", { button: 0, clientX: 5, clientY: 870 });
-    mouse(canvas, "mousemove", { button: 0, clientX: 45, clientY: 870 });
-    mouse(canvas, "mouseup", { button: 0, clientX: 45, clientY: 870 });
+    // note rect: x∈[0,40]、y = (108-60)*18 - scrollY。
+    // v2.8.0：PianoRoll 首次就绪时会自动把纵向视口对准音符所在音区
+    // （此前 scrollY 恒为 0，音符被画在画布下方 1200px 处、根本看不见）。
+    // 因此这里必须按**实际** scrollY 换算 y —— 被测语义（左键拖音符 / 中键平移）
+    // 没有变，变的是坐标前提，所以断言强度不变。
+    const noteY = (108 - 60) * 18 - readScrollY(el);
+    mouse(canvas, "mousedown", { button: 0, clientX: 5, clientY: noteY + 6 });
+    mouse(canvas, "mousemove", { button: 0, clientX: 45, clientY: noteY + 6 });
+    mouse(canvas, "mouseup", { button: 0, clientX: 45, clientY: noteY + 6 });
     expect(onNoteMove).toHaveBeenCalledTimes(1);
     expect(readScrollX(el)).toBe(0); // 左键拖音符不平移
 

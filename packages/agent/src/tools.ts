@@ -45,9 +45,22 @@ export function registerBuiltinTools(
     parameters: [
       { name: "bars", type: "number", required: true, description: "小节数" },
       { name: "register", type: "string", required: true, description: "音区: low/mid/high" },
-      { name: "styleHint", type: "string", required: false, description: "风格提示" },
-      { name: "key", type: "string", required: false, description: "调性" },
-      { name: "scale", type: "string", required: false, description: "音阶/调式，如 minor / harmonic_minor" },
+      { name: "styleHint", type: "string", required: false, description: "风格提示: classical/jazz/pop/rock/electronic/minimal" },
+      { name: "key", type: "string", required: false, description: "调性根音: C/C#/Db/D/Eb/E/F/F#/G/Ab/A/Bb/B；也可写成合成串（如 \"E minor\"），调式会一并解析" },
+      {
+        name: "scale",
+        type: "string",
+        required: false,
+        description:
+          "调式/音阶。合法取值: major / minor（=natural_minor）/ harmonic_minor / melodic_minor / ionian / dorian / phrygian / lydian / mixolydian / aeolian / locrian / pentatonic_major / pentatonic_minor / blues。" +
+          "也接受自然语言写法（\"E minor\"、\"Natural Minor\"、\"自然小调\"），大小写与空格无关。缺省 major。",
+      },
+      {
+        name: "mode",
+        type: "string",
+        required: false,
+        description: "调式的别名参数（minor/natural_minor/harmonic_minor/...）。与 scale 等价，二者都给时以 scale 为准。",
+      },
     ],
     handler: async (params) => {
       return composer.generateMotif({
@@ -56,8 +69,9 @@ export function registerBuiltinTools(
         styleHint: params.styleHint as string | undefined,
         key: params.key as string | undefined,
         scale: params.scale as string | undefined,
-        // 注意：generateMotif 的调式由 scale 表达（"minor" / "harmonic_minor"），
-        // 不要再传 mode —— 它不读这个字段，传了只会让类型检查红。
+        // v2.8.1：AI 从 suggestHarmony 迁移过来时习惯传 mode，
+        // 以前 generateMotif 不认这个字段，参数被静默丢掉 → 生成大调
+        mode: params.mode as string | undefined,
       });
     },
   });

@@ -44,7 +44,7 @@ Das ist kein Chatbot-Wrapper um eine DAW. Agenten haben Tool-Berechtigungen, Ope
    (Vorschlag → Genehmigung → Write) (Bayes'sches Geschmacksgedächtnis)
 ```
 
-**Project Graph** — 12 Knotentypen, 10 Kantentypen, Versionskontrolle und Zweigverwaltung. Alle Musikdaten leben hier: Noten, Akkorde, Form, Tracks, Effekte, Partituren, ästhetische Evidenz.
+**Project Graph** — 13 Knotentypen, 10 Kantentypen, Versionskontrolle und Zweigverwaltung. Alle Musikdaten leben hier: Noten, Akkorde, Form, Tracks, Effekte, Partituren, ästhetische Evidenz.
 
 **DiffEnvelope** — Das Ausgabeformat jeder Agentenoperation. Enthält Zusammenfassung, Domänerklärungen, Evidenzreferenzen, Risikoflaggen und ein Rollback-Token. Standardberechtigung: `proposal_only` — Agenten schlagen vor, du entscheidest.
 
@@ -95,7 +95,7 @@ pnpm dev              # Alle Dev-Server starten
 pnpm dev:ui           # Nur UI starten (Port 5180)
 pnpm build            # Alle Pakete bauen
 pnpm test             # Unit-Tests (Vitest)
-pnpm test:e2e         # E2E-Tests (Playwright, 84 Fälle)
+pnpm test:e2e         # E2E-Tests (Playwright, 90 Fälle)
 pnpm typecheck        # Typprüfung
 ```
 
@@ -104,8 +104,8 @@ pnpm typecheck        # Typprüfung
 ## Tests
 
 ```
-62+ Unit-Test-Dateien   Alle Modelle, Graph, Diff, Taste, IO, Agenten abgedeckt
-12  E2E-Spec-Dateien    Alle 9 Tabs' Kerninteraktionen abgedeckt
+144 Unit-Test-Dateien   core 51 / agent 19 / ui 74 — Modelle, Graph, Diff, Taste, IO, Agenten
+21  E2E-Spec-Dateien    90 Fälle über alle 9 Tabs' Kerninteraktionen
 5   Integrationstests   Note→Export, Mischkette, Graph→Diff, Form, Agenten-Tools
 2   Suiten              Leistung + Stabilität
 ```
@@ -127,11 +127,13 @@ Vitest · Playwright · JUCE 8 (C++20)
 ```
 Collinx/
 ├── packages/
-│   ├── core/          Domänenmodelle, Graph, Diff, Taste, IO
-│   ├── agent/         8 Agenten + Tool-Registrierung + Agent Bus
-│   ├── ui/            React-Frontend + 15 Komponenten + E2E-Tests
-│   └── audio/         C++20/JUCE Audio-Engine (VST3/CLAP)
-├── docs/              Begriffe, Iterationsplan, Forschung
+│   ├── core/          Domänenmodelle, Graph, Diff, Taste, IO, Tool-Registry
+│   ├── agent/         8 Agenten + 17 Tools
+│   ├── ui/            React-Frontend + 21 Komponenten + E2E-Tests
+│   ├── desktop/       Electron-Shell + native Engine-Bridge (N-API / Ringpuffer / AudioWorklet)
+│   ├── audio-engine/  Engine-Vertrag (nur Typen, noch nicht angebunden)
+│   └── audio/         C++20/JUCE Audio-Engine (VST3/CLAP, nur Desktop)
+├── docs/              Architektur (architecture.md ist maßgeblich), Glossar, Versionshistorie
 └── .github/           CI-Pipeline
 ```
 
