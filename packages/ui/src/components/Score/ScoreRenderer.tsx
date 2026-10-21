@@ -2,7 +2,8 @@ import React, { useRef, useEffect, useMemo, useState, useCallback } from "react"
 import type { NoteEvent, TempoMap } from "@collinx/core";
 import styles from "./ScoreRenderer.module.css";
 import { planBarSlots, barBeatFromX } from "./bar-anchors";
-import type { BarAnchor } from "./bar-anchors";
+import type { BarAnchor, BarSlot } from "./bar-anchors";
+import { planSystems } from "./score-layout";
 import { ScorePlayhead } from "./ScorePlayhead";
 
 const NOTE_NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -56,6 +57,12 @@ export interface StaffConfig {
 export interface ScoreRendererLayout {
   staffConfig: StaffConfig[];
   notationSize?: number;
+  /**
+   * 每行（系统）最多小节数。缺省 `BARS_PER_SYSTEM`（8）。
+   * 超过该值的小节换行到下一系统——此前全部小节被压进同一行 550px，
+   * 48 小节工程每小节仅 ~11px，等于不可读。
+   */
+  barsPerSystem?: number;
 }
 
 export interface ScoreRendererProps {
@@ -65,6 +72,11 @@ export interface ScoreRendererProps {
   width?: number;
   height?: number;
   scale?: number;
+  /**
+   * 本画布首小节的**小节号**（默认 1）。分页渲染第 2 页起必须传入，
+   * 否则每页锚点都会退回「bar 1..N」，播放头/点击定位会指到第一页。
+   */
+  startBar?: number;
   /**
    * 渲染成功后回调小节锚点（`{bar, x0, x1}`）。多谱表共用同一 bar→x，
    * 故只回调一次。渲染失败或被取消时不回调。缺省时零行为变化。
@@ -100,6 +112,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   width,
   height,
   scale = 1,
+  startBar = 1,
   onBarAnchorsChange,
   playheadPosition,
   onSeek,
@@ -143,9 +156,17 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   }, [notes, layout.staffConfig]);
 
   // 渲染小节数沿用既有 maxBars 公式（不从音符推导），保证无音符小节也占槽位。
+  // 下限 4 保留既有「短工程也画满 4 小节」的观感，与改动前一致。
   const renderBars = useMemo(() => {
     return Math.max(...layout.staffConfig.map((s) => s.bars), 4);
   }, [layout.staffConfig]);
+
+  // 系统（行）划分：每行最多 barsPerSystem 小节（缺省 8），超出的换行纵向堆叠。
+  // 单行 / 单系统时几何与改动前逐值一致（锚点仍为 {bar,x0,x1}）。
+  const systems = useMemo(
+    () => planSystems({ bars: renderBars, startBar, barsPerSystem: layout.barsPerSystem }),
+    [renderBars, startBar, layout.barsPerSystem],
+  );
 
   // v2.3.0 S4b (D34-5)：画布**未缩放**布局高提到渲染作用域，成为唯一来源——
   // 既喂给 VexFlow 的 `renderer.resize(_, totalHeight)`，又用于给 `.rendererStack`
@@ -154,9 +175,12 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   // 覆盖层（`ScorePlayhead` 的 `.layer`）靠 `top:0;bottom:0` 撑满 `.rendererStack`，
   // 于是高度**由解析式决定**，不再依赖 `height: ${scale*100}%` 这类相对启发式
   // （旧实现相对的是 `.rendererStack` 的 `min-height:100%`，容器比谱面高时会越出）。
+  //
+  // 多系统：每个系统占「谱表数 × 节距」的纵向块，块与块之间不留额外间距（谱表
+  // 间距已含在节距内）；单系统时该式退化为改动前的 `谱表数 × 节距 + 20`。
   const totalHeight = useMemo(
-    () => layout.staffConfig.length * (STAVE_HEIGHT + STAVE_GAP) + 20,
-    [layout.staffConfig],
+    () => Math.max(1, systems.length) * layout.staffConfig.length * (STAVE_HEIGHT + STAVE_GAP) + 20,
+    [systems.length, layout.staffConfig.length],
   );
 
   // 拍号派生：单行谱面各小节共用同一拍号（tempoMap.meterAt(1)）。
@@ -194,7 +218,17 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
       const rect = el.getBoundingClientRect();
       const scrollLeft = el.scrollLeft || 0;
       const localX = (e.clientX - rect.left) / scale + scrollLeft;
-      const pos = barBeatFromX({ anchors, localX, beatsPerBarAt });
+      const localY = (e.clientY - rect.top) / scale + (el.scrollTop || 0);
+      // 多系统谱面里不同行共享同一批 x 区间：先用纵坐标圈定点击所在的系统，
+      // 否则点第 2 行的「第 2 小节」会被解析成第 1 行的第 2 小节。单系统锚点不带
+      // y/height → 候选集恒为全量，行为与改动前一致。
+      const inSystem = anchors.filter((a) =>
+        a.y !== undefined && a.height !== undefined
+          ? localY >= a.y && localY < a.y + a.height
+          : true,
+      );
+      const pool = inSystem.length > 0 ? inSystem : anchors;
+      const pos = barBeatFromX({ anchors: pool, localX, beatsPerBarAt });
       if (pos) seek(pos);
     },
     [anchors, beatsPerBarAt, scale],
@@ -220,22 +254,17 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         renderer.resize(staveWidth + STAVE_PADDING_LEFT * 2, totalHeight);
         const context = renderer.getContext();
 
-        // 逐小节等宽槽位：按 renderBars 生成全部槽位（含无音符小节）。多谱表
-        // 共用同一 bar→x 映射，故只规划一次。
+        // 逐小节等宽槽位：每个系统按自己的小节数生成槽位（含无音符小节）。
         // 可分配宽 = (staveX + staveWidth) - 首小节左缘 - 右侧留白。
         // 注意 slot.x 是 Stave 片段左缘，而非音符起始——谱号/拍号占位由 VexFlow
         // 在 getNoteStartX 内部处理，此处不额外扣减。
         const staveX = STAVE_PADDING_LEFT;
         const firstBarLeft = STAVE_PADDING_LEFT;
         const availableWidth = staveX + staveWidth - firstBarLeft - STAVE_RIGHT_PADDING;
-        const slots = planBarSlots({
-          startX: firstBarLeft,
-          availableWidth,
-          bars: renderBars,
-        });
-
-        // 每个谱表「第一小节」的 Stave（用于双谱表 BRACE 连接）。
-        const vfStaves: InstanceType<typeof VF.Stave>[] = [];
+        // 系统（行）划分与画布高度同源（renderBars / systems 见组件作用域 memo）。
+        const systemPlans = systems.length > 0 ? systems : planSystems({ bars: renderBars, startBar });
+        const systemHeight = staves.length * (STAVE_HEIGHT + STAVE_GAP);
+        const lastBar = startBar + renderBars - 1;
 
         // D32-5：越界 bar 音符计数。旧实现把所有音符无差别塞进 groupedByBar，
         // 其中 bar <= 0 / 非整数 / bar > renderBars 的音符会被「静默丢弃」（既不
@@ -243,91 +272,122 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         // 使「丢弃」这一旧行为显式化 —— 不新增对外 prop，仅用于诊断。
         let outOfRangeBarCount = 0;
 
-        for (let staffIdx = 0; staffIdx < staves.length; staffIdx++) {
-          const staff = staves[staffIdx];
-          const staffNotes = notesByStaff[staffIdx] ?? [];
-          const yOffset = staffIdx * (STAVE_HEIGHT + STAVE_GAP) + 30;
-
+        // 每个谱表的「小节号 → 音符」索引（跨系统共用，按真实小节号取用）。
+        const notesByStaffAndBar: Record<number, NoteEvent[]>[] = staves.map((_, staffIdx) => {
           const groupedByBar: Record<number, NoteEvent[]> = {};
-          for (const note of staffNotes) {
+          for (const note of notesByStaff[staffIdx] ?? []) {
             const bar = note.bar;
-            // D32-5 显式忽略：bar < 1 / 非整数 / 超出 renderBars 的音符不属于任何
-            // 槽位，保留在 groupedByBar 中也只会被后续 `groupedByBar[slot.bar]` 取
-            // 不到而丢弃；此处提前剔除并把丢弃行为显式化（计数 + 末尾 warn）。
-            if (bar < 1 || !Number.isInteger(bar) || bar > renderBars) {
+            // D32-5 显式忽略：bar < 1 / 非整数 / 超出本画布小节范围（分页时为
+            // [startBar, startBar+renderBars-1]）的音符不属于任何槽位。
+            if (bar < 1 || !Number.isInteger(bar) || bar > lastBar) {
               outOfRangeBarCount++;
               continue;
             }
             if (!groupedByBar[bar]) groupedByBar[bar] = [];
             groupedByBar[bar].push(note);
           }
+          return groupedByBar;
+        });
 
-          for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-            const slot = slots[slotIdx];
-            // 每个小节一个独立 Stave 片段（x/y/width 取槽位），首尾相接拼成一行。
-            const barStave = new VF.Stave(slot.x, yOffset, slot.width);
+        // 全部系统的小节槽位（按小节号顺序展平）+ 所属系统的纵向起点，
+        // 用于上报锚点；单系统时不带纵向信息（锚点形状与改动前一致）。
+        const allSlots: (BarSlot & { systemTop: number })[] = [];
+        const multiSystem = systemPlans.length > 1;
 
-            // 小节线由 Stave 自带：首小节左缘无（BRACE/谱号所在），末小节右缘收尾，
-            // 中间为单线。BarlineType 从 vexflow 命名空间取，禁止写死魔数。
-            barStave.setBegBarType(slotIdx === 0 ? VF.BarlineType.NONE : VF.BarlineType.SINGLE);
-            barStave.setEndBarType(
-              slotIdx === slots.length - 1 ? VF.BarlineType.END : VF.BarlineType.SINGLE,
-            );
+        for (const system of systemPlans) {
+          const systemTop = system.index * systemHeight;
+          const slots = planBarSlots({
+            startX: firstBarLeft,
+            availableWidth,
+            bars: system.bars,
+            startBar: system.startBar,
+          });
+          allSlots.push(...slots.map((slot) => ({ ...slot, systemTop })));
 
-            // 首谱表首小节挂谱号 + 拍号（其余不加），与既有行为一致。
-            if (staffIdx === 0 && slotIdx === 0) {
-              barStave.addClef(staff.clef);
-              barStave.addTimeSignature(`${meter.numerator}/${meter.denominator}`);
-            }
+          // 本系统内每个谱表「第一小节」的 Stave（用于双谱表 BRACE 连接）。
+          const vfStaves: InstanceType<typeof VF.Stave>[] = [];
 
-            barStave.setContext(context).draw();
-            if (slotIdx === 0) vfStaves.push(barStave);
+          for (let staffIdx = 0; staffIdx < staves.length; staffIdx++) {
+            const staff = staves[staffIdx];
+            const groupedByBar = notesByStaffAndBar[staffIdx] ?? {};
+            const yOffset = systemTop + staffIdx * (STAVE_HEIGHT + STAVE_GAP) + 30;
 
-            // 空小节只画 Stave、不建 Voice；落在 bar > renderBars 的音符自然被跳过。
-            const barNotes = (groupedByBar[slot.bar] ?? [])
-              .slice()
-              .sort((a, b) => a.beat - b.beat);
-            if (barNotes.length === 0) continue;
+            for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+              const slot = slots[slotIdx];
+              // 每个小节一个独立 Stave 片段（x/y/width 取槽位），首尾相接拼成一行。
+              const barStave = new VF.Stave(slot.x, yOffset, slot.width);
 
-            const vfNotes: InstanceType<typeof VF.StaveNote>[] = [];
-            for (const note of barNotes) {
-              const vfKey =
-                MIDI_TO_VF_KEY[note.pitchMidi] ?? `c/${Math.floor(note.pitchMidi / 12) - 1}`;
-              const { duration, isDotted } = durQnToVfDuration(note.durQn);
-              const accidental = getAccidental(note.pitchMidi, note.pitchSpelling);
+              // 小节线由 Stave 自带：首小节左缘无（BRACE/谱号所在），末小节右缘收尾，
+              // 中间为单线。BarlineType 从 vexflow 命名空间取，禁止写死魔数。
+              barStave.setBegBarType(slotIdx === 0 ? VF.BarlineType.NONE : VF.BarlineType.SINGLE);
+              barStave.setEndBarType(
+                slotIdx === slots.length - 1 ? VF.BarlineType.END : VF.BarlineType.SINGLE,
+              );
 
-              const staveNote = new VF.StaveNote({
-                clef: staff.clef,
-                keys: [vfKey],
-                duration: duration,
+              // 首谱表的每行首小节挂谱号；整谱仅第一行首小节挂拍号——与既有行为
+              // 一致（单系统时仍是「只有 staff 0 首小节有谱号 + 拍号」）。
+              if (staffIdx === 0 && slotIdx === 0) {
+                barStave.addClef(staff.clef);
+                if (system.index === 0) {
+                  barStave.addTimeSignature(`${meter.numerator}/${meter.denominator}`);
+                }
+              }
+
+              barStave.setContext(context).draw();
+              if (slotIdx === 0) vfStaves.push(barStave);
+
+              // 空小节只画 Stave、不建 Voice；落在本画布范围外的音符已被剔除。
+              const barNotes = (groupedByBar[slot.bar] ?? [])
+                .slice()
+                .sort((a, b) => a.beat - b.beat);
+              if (barNotes.length === 0) continue;
+
+              const vfNotes: InstanceType<typeof VF.StaveNote>[] = [];
+              for (const note of barNotes) {
+                const vfKey =
+                  MIDI_TO_VF_KEY[note.pitchMidi] ?? `c/${Math.floor(note.pitchMidi / 12) - 1}`;
+                const { duration, isDotted } = durQnToVfDuration(note.durQn);
+                const accidental = getAccidental(note.pitchMidi, note.pitchSpelling);
+
+                const staveNote = new VF.StaveNote({
+                  clef: staff.clef,
+                  keys: [vfKey],
+                  duration: duration,
+                });
+
+                if (accidental) {
+                  staveNote.addModifier(new VF.Accidental(accidental));
+                }
+                if (isDotted) {
+                  VF.Dot.buildAndAttach([staveNote]);
+                }
+
+                vfNotes.push(staveNote);
+              }
+
+              // 每小节独立 Voice + Formatter（不再把全曲音符展平进单个 Voice）。
+              const voice = new VF.Voice({
+                numBeats: meter.numerator,
+                beatValue: meter.denominator,
               });
+              voice.setStrict(false);
+              voice.addTickables(vfNotes);
 
-              if (accidental) {
-                staveNote.addModifier(new VF.Accidental(accidental));
-              }
-              if (isDotted) {
-                VF.Dot.buildAndAttach([staveNote]);
-              }
+              new VF.Formatter().joinVoices([voice]).format([voice], slot.width - 20);
+              voice.draw(context, barStave);
 
-              vfNotes.push(staveNote);
+              // 梁只在本小节音符内生成。
+              const beams = VF.Beam.generateBeams(vfNotes, {
+                groups: [new VF.Fraction(meter.numerator, meter.denominator)],
+              });
+              beams.forEach((b) => b.setContext(context).draw());
             }
+          }
 
-            // 每小节独立 Voice + Formatter（不再把全曲音符展平进单个 Voice）。
-            const voice = new VF.Voice({
-              numBeats: meter.numerator,
-              beatValue: meter.denominator,
-            });
-            voice.setStrict(false);
-            voice.addTickables(vfNotes);
-
-            new VF.Formatter().joinVoices([voice]).format([voice], slot.width - 20);
-            voice.draw(context, barStave);
-
-            // 梁只在本小节音符内生成。
-            const beams = VF.Beam.generateBeams(vfNotes, {
-              groups: [new VF.Fraction(meter.numerator, meter.denominator)],
-            });
-            beams.forEach((b) => b.setContext(context).draw());
+          if (staves.length >= 2 && vfStaves.length >= 2) {
+            const connector = new VF.StaveConnector(vfStaves[0], vfStaves[1]);
+            connector.setType(VF.StaveConnector.type.BRACE);
+            connector.setContext(context).draw();
           }
         }
 
@@ -336,14 +396,8 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         if (outOfRangeBarCount > 0) {
           console.warn(
             `[ScoreRenderer] 忽略 ${outOfRangeBarCount} 个越界 bar 音符` +
-              `（bar < 1 或非整数或 > renderBars=${renderBars}）。`,
+              `（bar < 1 或非整数或 > ${lastBar}）。`,
           );
-        }
-
-        if (staves.length >= 2 && vfStaves.length >= 2) {
-          const connector = new VF.StaveConnector(vfStaves[0], vfStaves[1]);
-          connector.setType(VF.StaveConnector.type.BRACE);
-          connector.setContext(context).draw();
         }
 
         // 渲染成功后上报小节锚点（多谱表共用同一 bar→x，只上报一次）。
@@ -353,11 +407,20 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         // 否则「父组件用 state 接收锚点 → layout 身份变化 → 重排版 → 再回调」
         // 会形成永不收敛的自触发循环（S0 验证者实测 300ms 内 15 次回调）。
         if (!cancelled && currentRenderId === renderIdRef.current) {
-          const nextAnchors = slots.map((s) => ({
-            bar: s.bar,
-            x0: s.x,
-            x1: s.x + s.width,
-          }));
+          const nextAnchors: BarAnchor[] = allSlots.map((s) => {
+            const anchor: BarAnchor = {
+              bar: s.bar,
+              x0: s.x,
+              x1: s.x + s.width,
+            };
+            // 多系统：补上纵向区间，播放头才能落到正确那一行；单系统不填，
+            // 保持 {bar,x0,x1} 的既有锚点形状（既有消费方逐字段读取，安全）。
+            if (multiSystem) {
+              anchor.y = s.systemTop;
+              anchor.height = systemHeight;
+            }
+            return anchor;
+          });
           const key = JSON.stringify(nextAnchors);
           if (key !== lastAnchorsKeyRef.current) {
             lastAnchorsKeyRef.current = key;
@@ -383,7 +446,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [notes, layout, meter, notesByStaff, renderBars, totalHeight]);
+  }, [notes, layout, meter, notesByStaff, renderBars, totalHeight, startBar, systems]);
 
   const containerStyle: React.CSSProperties = {
     transform: `scale(${scale})`,

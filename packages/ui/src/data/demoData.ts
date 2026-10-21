@@ -68,7 +68,21 @@ export const demoMotifs = [
   { id: "motif_c", name: "Harmony Progression", notes: [] },
 ];
 
-export function createDefaultLayout(): Layout {
+/** 未显式传入小节数时的默认长度（保持既有「4 小节」观感，仅作缺省值）。 */
+export const DEFAULT_LAYOUT_BARS = 4;
+
+/**
+ * 创建默认排版。
+ *
+ * @param bars 全曲小节数。**必须由调用方按实际工程长度传入**——此前该值被硬编码
+ *             为 4，导致 48 小节的工程在乐谱页只画出前 4 小节（后面 44 小节既不
+ *             占槽位也不渲染）。缺省值仅用于无工程上下文的场景（示例 / 单测）。
+ */
+export function createDefaultLayout(bars: number = DEFAULT_LAYOUT_BARS): Layout {
+  // 非有限值 / 小于 1 → 回落缺省；小数向下取整（小节号是整数）。
+  const barCount =
+    Number.isFinite(bars) && bars >= 1 ? Math.floor(bars) : DEFAULT_LAYOUT_BARS;
+
   return {
     id: randomUUID(),
     name: "Default Layout",
@@ -83,8 +97,8 @@ export function createDefaultLayout(): Layout {
     stavesPerPage: 10,
     staffDistance: 12,
     staffConfig: [
-      { clef: "treble", name: i18n.t("app.tracks.melody"), bars: 4 },
-      { clef: "bass", name: i18n.t("common.track"), bars: 4 },
+      { clef: "treble", name: i18n.t("app.tracks.melody"), bars: barCount },
+      { clef: "bass", name: i18n.t("common.track"), bars: barCount },
     ],
   };
 }

@@ -62,6 +62,15 @@ export const ScorePlayhead: React.FC<ScorePlayheadProps> = ({
   const x = playheadX(anchors, position, beatsPerBarAt, scale);
   if (x === null) return null;
 
+  // 多系统谱面：锚点带纵向区间（y / height）时把竖线限制在所在那一行系统内，
+  // 否则竖线会横穿全部系统、指不清是哪一行。单系统锚点不带这两个字段 → 沿用
+  // CSS 的 `.line { top:0; bottom:0 }`（铺满画布），行为与改动前完全一致。
+  const anchor = anchors.find((a) => a.bar === position.bar);
+  const systemStyle: React.CSSProperties | undefined =
+    anchor && anchor.y !== undefined && anchor.height !== undefined
+      ? { top: `${anchor.y * scale}px`, height: `${anchor.height * scale}px` }
+      : undefined;
+
   // v2.3.0 S4b (D34-5)：覆盖层高度**不再由本组件猜测**。旧实现内联
   // `height: scale === 1 ? '100%' : `${scale*100}%``——两个分支值相等（1*100 === 100）
   // 属死代码，且相对的是 `.rendererStack` 的 `min-height:100%`（可能等于容器而非
@@ -73,7 +82,7 @@ export const ScorePlayhead: React.FC<ScorePlayheadProps> = ({
     <div className={styles.layer} data-testid="score-playhead-layer">
       <div
         className={styles.line}
-        style={{ left: `${x}px` }}
+        style={{ left: `${x}px`, ...systemStyle }}
         data-testid="score-playhead"
       />
     </div>

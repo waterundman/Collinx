@@ -104,6 +104,17 @@ const oneStaffLayout: ScoreRendererLayout = {
 };
 
 /**
+ * 48 小节双谱表（用户实测的「导出 48 小节，谱面只有 4 个区」场景）。
+ * 每行最多 8 小节 → 6 个系统；2 谱表 × 140px 节距 → 画布高 6×280+20。
+ */
+const fortyEightBarLayout: ScoreRendererLayout = {
+  staffConfig: [
+    { clef: "treble", name: "Treble", bars: 48 },
+    { clef: "bass", name: "Bass", bars: 48 },
+  ],
+};
+
+/**
  * 每个谱表占的纵向节距 = STAVE_HEIGHT(120) + STAVE_GAP(20)，见
  * `ScoreRenderer.tsx` 顶部常量（`STAVE_HEIGHT = 120`、`STAVE_GAP = 20`）。
  * 基准高公式 = 谱表数 × 节距 + 20（尾部留白）——故 1 vs 2 谱表的**差**恰为一个节距，
@@ -295,6 +306,81 @@ describe("ScoreRenderer 真实渲染 (S4b · D34-4)", () => {
     const expected44 = a1.x0 + ((2 - 1) / 4) * (a1.x1 - a1.x0);
     expect(Math.abs(expected34 - expected44)).toBeGreaterThan(1e-6);
     expect(Math.abs(left - expected44)).toBeGreaterThan(1e-6);
+
+    h.cleanup();
+  });
+
+  it("T58g: 48 小节 → 48 个锚点覆盖 1..48、分 6 个系统、每小节宽度不再被压缩 (critical)", async () => {
+    const calls: BarAnchor[][] = [];
+    const h = mount(
+      <ScoreRenderer
+        notes={[]}
+        layout={fortyEightBarLayout}
+        onBarAnchorsChange={(a) => calls.push(a)}
+      />
+    );
+    await waitForSvg(h.container);
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(1), {
+      timeout: 5000,
+    });
+
+    const anchors = calls[calls.length - 1];
+    // 数量与全序：48 小节一个不少（旧实现只有 4 个）。
+    expect(anchors).toHaveLength(48);
+    expect(anchors.map((a) => a.bar)).toEqual(
+      Array.from({ length: 48 }, (_, i) => i + 1),
+    );
+
+    // 每小节宽度 = 可分配宽 540 / 每行 8 小节 = 67.5px；旧实现是 540/48 = 11.25px
+    // （11px 连一个小节线间距都放不下，等于不可读）。
+    const barWidth = 540 / 8;
+    for (const a of anchors) {
+      expect(a.x1 - a.x0).toBeCloseTo(barWidth, 9);
+    }
+    expect(barWidth).toBeGreaterThan(60);
+
+    // 6 个系统（行）：每 8 小节换行，纵向按「2 谱表 × 140px 节距」堆叠。
+    expect(new Set(anchors.map((a) => a.y)).size).toBe(6);
+    expect(anchors[0].y).toBe(0);
+    expect(anchors[7].y).toBe(0);
+    expect(anchors[8].y).toBe(PER_STAVE_PITCH * 2);
+    expect(anchors[47].y).toBe(PER_STAVE_PITCH * 2 * 5);
+
+    // 画布高随系统数增长：6 系统 × 2 谱表 × 140 + 20。
+    expect(stackHeight(h.container)).toBe(6 * 2 * PER_STAVE_PITCH + 20);
+
+    // 同一系统内 x0 递增（行内连续），跨行则回到行首 —— 这两点共同证明「换行而非压缩」。
+    expect(anchors[1].x0).toBeGreaterThan(anchors[0].x0);
+    expect(anchors[8].x0).toBeCloseTo(anchors[0].x0, 9);
+
+    h.cleanup();
+  });
+
+  it("T58h: startBar 生效（分页第 2 页）→ 锚点从第 41 小节起，x 从行首重新开始 (critical)", async () => {
+    const calls: BarAnchor[][] = [];
+    const h = mount(
+      <ScoreRenderer
+        notes={[]}
+        layout={{
+          staffConfig: [
+            { clef: "treble", name: "Treble", bars: 8 },
+            { clef: "bass", name: "Bass", bars: 8 },
+          ],
+        }}
+        startBar={41}
+        onBarAnchorsChange={(a) => calls.push(a)}
+      />
+    );
+    await waitForSvg(h.container);
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(1), {
+      timeout: 5000,
+    });
+
+    const anchors = calls[calls.length - 1];
+    expect(anchors.map((a) => a.bar)).toEqual([41, 42, 43, 44, 45, 46, 47, 48]);
+    // 单系统页面不带纵向字段（锚点形状与改动前一致）。
+    expect(anchors[0].y).toBeUndefined();
+    expect(stackHeight(h.container)).toBe(2 * PER_STAVE_PITCH + 20);
 
     h.cleanup();
   });

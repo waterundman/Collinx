@@ -18,6 +18,13 @@ export interface BarAnchor {
   bar: number;
   x0: number;
   x1: number;
+  /**
+   * 多系统（多行）谱面时才提供的纵向区间（未缩放 VexFlow 坐标）。
+   * 单系统谱面**不填**这两个字段——保持既有 `{bar,x0,x1}` 锚点形状不变，
+   * 既有消费方（ScorePlayhead / 点击反演）在缺省时行为与改动前完全一致。
+   */
+  y?: number;
+  height?: number;
 }
 
 export interface BarSlot {
@@ -33,18 +40,21 @@ export interface BarSlot {
  *                            左缘而非音符起始——谱号/拍号占位由 VexFlow 内部处理。
  * @param opts.availableWidth 可分配总宽（已扣除左侧谱号/拍号占位与右侧留白）。
  * @param opts.bars           小节数（>= 1）。
+ * @param opts.startBar       首小节的**小节号**（默认 1）。分页渲染第 2 页起需要
+ *                            以真实小节号编号，否则锚点/点击反演会退回第 1 小节。
  */
 export function planBarSlots(opts: {
   startX: number;
   availableWidth: number;
   bars: number;
+  startBar?: number;
 }): BarSlot[] {
-  const { startX, availableWidth, bars } = opts;
+  const { startX, availableWidth, bars, startBar = 1 } = opts;
   const barWidth = availableWidth / bars;
   const slots: BarSlot[] = [];
   for (let k = 0; k < bars; k++) {
     // 用乘法而非逐次累加：保证全部落点共享同一浮点前缀，避免累加漂移。
-    slots.push({ bar: k + 1, x: startX + k * barWidth, width: barWidth });
+    slots.push({ bar: startBar + k, x: startX + k * barWidth, width: barWidth });
   }
   return slots;
 }

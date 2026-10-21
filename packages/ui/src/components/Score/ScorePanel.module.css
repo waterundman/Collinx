@@ -287,6 +287,39 @@
   color: var(--text-muted);
 }
 
+/* 分页控件（多页时才渲染）：谱面不再把全部小节压进一行，超出每页系统数的小节
+   由这里翻页查看。 */
+.pageNav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.pageBtn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1;
+  width: 20px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.pageBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pageIndicator {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  min-width: 48px;
+  text-align: center;
+}
+
 .previewCanvas {
   flex: 1;
   display: flex;

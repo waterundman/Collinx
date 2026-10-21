@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type {
   NoteEvent,
   TempoMap,
@@ -9,6 +9,7 @@ import { useI18n } from "../../i18n";
 import { ScoreRenderer } from "./ScoreRenderer";
 import type { ScoreRendererLayout } from "./ScoreRenderer";
 import type { BarAnchor } from "./bar-anchors";
+import { pageIndexForBar, planScorePages } from "./score-layout";
 import styles from "./ScorePanel.module.css";
 
 export interface CollisionWarning {
@@ -105,24 +106,75 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
     });
   }, [staffConfig, notes]);
 
+  // 全曲小节数：与 ScoreRenderer 的 renderBars 同一规则（staffConfig.bars 的最大值，
+  // 下限 4）。此前该值恒为 4 —— 工程有 48 小节时谱面只有 4 个槽位，用户看到的就是
+  // 「五线谱怎么就四个区」。
+  const renderBars = useMemo(
+    () => Math.max(...staffConfig.map((s) => s.bars), 4),
+    [staffConfig],
+  );
+
+  // 分页：每行最多 BARS_PER_SYSTEM(8) 小节（超出换行到下一系统），
+  // 每页系统数 = floor(stavesPerPage / 谱表数) —— 复用 Layout 既有的「每页谱表」字段。
+  const pages = useMemo(
+    () =>
+      planScorePages({
+        bars: renderBars,
+        staffCount: staffConfig.length,
+        stavesPerPage: layout.stavesPerPage,
+      }),
+    [renderBars, staffConfig.length, layout.stavesPerPage],
+  );
+
+  const [requestedPage, setRequestedPage] = useState(0);
+  // 稿件变短（如删小节）时以派生值钳制，不额外用 effect 纠正 state。
+  const pageIndex = Math.min(requestedPage, Math.max(0, pages.length - 1));
+  const page = pages[pageIndex];
+  const pageBars = page?.bars ?? renderBars;
+  const pageStartBar = page?.startBar ?? 1;
+
+  // 播放头走到别的页时自动翻页：否则播到第 41 小节时谱面停在第一页，游标直接消失。
+  const playheadBar = playheadPosition?.bar;
+  useEffect(() => {
+    if (playheadBar === undefined) return;
+    const target = pageIndexForBar(pages, playheadBar);
+    setRequestedPage((prev) => (prev === target ? prev : target));
+  }, [pages, playheadBar]);
+
   // ScoreRenderer 的 layout 必须 memo 化：内联对象字面量每次渲染换身份，而它是
   // ScoreRenderer 渲染 effect 的 dep → 每次父渲染都触发重排版；若父组件用 state
   // 接收锚点（playheadPosition 的常见接线），会形成永不收敛的循环（S0 验证者实测
   // 300ms 内 15 次回调）。deps 用 layout.staffConfig 与 houseStyle?.notationSize。
+  //
+  // 分页（v2.4.1）：一页只渲染本页的小节区间，故 `bars` 取**本页**小节数，
+  // 首小节号经 ScoreRenderer 的 `startBar` 传给画布（否则第 2 页锚点会退回 bar 1）。
+  // deps 里的 pageBars / 分页对象均为数值或稳定 memo，不引入身份抖动。
   const rendererLayout = useMemo<ScoreRendererLayout>(
     () => ({
       staffConfig: (layout.staffConfig ?? []).map((s) => ({
         clef: s.clef as "treble" | "bass",
         name: s.name,
-        bars: s.bars,
+        bars: pageBars,
       })),
       notationSize: houseStyle?.notationSize,
     }),
-    [layout.staffConfig, houseStyle?.notationSize],
+    [layout.staffConfig, houseStyle?.notationSize, pageBars],
   );
 
   return (
-    <div className={styles.scorePanel} data-testid="score-panel">
+    <div
+      className={styles.scorePanel}
+      data-testid="score-panel"
+      // v2.8.0：把当前页的小节范围暴露成 data 属性。
+      // 断言「翻页后内容真的换了」时，依赖 VexFlow 的渲染回调（onBarAnchors）
+      // 在 jsdom 里跑不完（无 canvas，20s+ 仍不返回）——那不是产品缺陷
+      // （真实浏览器已验证 startBar 会从 1 变 41），而是测试环境的限制。
+      // 组件状态是同步可靠的断言面。
+      data-page-index={pageIndex}
+      data-page-start-bar={pageStartBar}
+      data-page-bars={pageBars}
+      data-page-count={pages.length}
+    >
       <div className={styles.toolbar}>
         {onAutoLayout && (
           <button className={styles.toolbarBtn} onClick={onAutoLayout}>
@@ -314,6 +366,34 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
         <div className={styles.previewArea}>
           <div className={styles.previewHeader}>
             <span className={styles.previewHeaderTitle}>{t('score.preview')}</span>
+            {pages.length > 1 && (
+              <div className={styles.pageNav}>
+                <button
+                  className={styles.pageBtn}
+                  data-testid="score-page-prev"
+                  title={t('score.prevPage')}
+                  disabled={pageIndex === 0}
+                  onClick={() => setRequestedPage(Math.max(0, pageIndex - 1))}
+                >
+                  ‹
+                </button>
+                <span className={styles.pageIndicator} data-testid="score-page-indicator">
+                  {t('score.pageIndicator', {
+                    current: pageIndex + 1,
+                    total: pages.length,
+                  })}
+                </span>
+                <button
+                  className={styles.pageBtn}
+                  data-testid="score-page-next"
+                  title={t('score.nextPage')}
+                  disabled={pageIndex >= pages.length - 1}
+                  onClick={() => setRequestedPage(Math.min(pages.length - 1, pageIndex + 1))}
+                >
+                  ›
+                </button>
+              </div>
+            )}
             <span className={styles.previewHeaderInfo}>
               {layout.pageWidth}×{layout.pageHeight}mm
             </span>
@@ -325,6 +405,7 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
                 layout={rendererLayout}
                 tempoMap={tempoMap}
                 scale={1}
+                startBar={pageStartBar}
                 playheadPosition={playheadPosition}
                 onBarAnchorsChange={onBarAnchorsChange}
                 onSeek={onSeek}

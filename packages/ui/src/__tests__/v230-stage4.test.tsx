@@ -35,15 +35,26 @@ import { ProjectProvider } from "../providers/ProjectProvider";
 import { ScoreRenderer } from "../components/Score/ScoreRenderer";
 import type { ScoreRendererLayout } from "../components/Score/ScoreRenderer";
 import { ScorePanel } from "../components/Score/ScorePanel";
-import { createDefaultLayout, defaultHouseStyle } from "../data/demoData";
+import { createDefaultLayout, createDemoNotes, defaultHouseStyle, demoPhrases } from "../data/demoData";
 import type { BarAnchor } from "../components/Score/bar-anchors";
 
 // ---------------------------------------------------------------------------
 // harness
 // ---------------------------------------------------------------------------
 
-/** App 默认 layout 的 staffConfig.bars = 4 → renderBars = max(4, 4) = 4。 */
-const EXPECTED_BARS = 4;
+/**
+ * App 里的 defaultLayout 现在按**工程实际小节数**创建（此前内部硬编码 4，导致
+ * 48 小节工程只画出前 4 小节）。App 的 totalBars = max(16, 最深音符小节, 最深乐句
+ * endBar)，示例工程即 16。锚点捕获必须用同一小节数，否则点到的 x 会落在别的
+ * 小节上（夹具与 App 不同源 → 断言失去意义）。
+ */
+const APP_TOTAL_BARS = Math.max(
+  16,
+  ...createDemoNotes().map((n) => n.bar),
+  ...demoPhrases.map((p) => p.endBar),
+);
+/** 谱面覆盖的小节数（= App 的 totalBars，下限 4）。 */
+const EXPECTED_BARS = APP_TOTAL_BARS;
 /**
  * 点击在小节内的相对位置。取 0.6（而非 0.5）是**刻意**的：0.5 恰好落在 4/4 下
  * beat=3.0 的 floor 边界上，浮点舍入可能使 floor 得到 2（伪红）。0.6 使两种拍号
@@ -135,7 +146,7 @@ function clickRenderedView(container: HTMLElement) {
 /** 与 App 内 ScorePanel 等价的 rendererLayout（staffConfig 几何与 notes 无关）。 */
 function appEquivalentRendererLayout(): ScoreRendererLayout {
   return {
-    staffConfig: (createDefaultLayout().staffConfig ?? []).map((s) => ({
+    staffConfig: (createDefaultLayout(APP_TOTAL_BARS).staffConfig ?? []).map((s) => ({
       clef: s.clef as "treble" | "bass",
       name: s.name,
       bars: s.bars,

@@ -284,7 +284,16 @@ export function App() {
   // → ScoreRenderer 渲染 effect（dep 含 layout）反复触发 → 配合父组件用 state 接收
   // onBarAnchorsChange 会形成永不收敛的渲染循环（S0 期实测 300ms 内 15 次回调）。
   // defaultHouseStyle 是 ./data/demoData 的模块级导出，身份天然稳定；禁止内联。
-  const defaultLayout = useMemo(() => createDefaultLayout(), []);
+  //
+  // 小节数必须跟随工程实际长度：此前 createDefaultLayout() 内部把 staffConfig.bars
+  // 硬编码为 4，48 小节工程在乐谱页只画出前 4 小节（用户：「五线谱怎么就四个区」）。
+  // 依赖刻意用 `totalBars` 这个**数字**而非 notes 数组：notes 每次编辑都会换新数组，
+  // 用数组做 dep 会让 layout 在「内容长度未变」时也换身份 —— 那正是上面这条注释
+  // 禁止的渲染循环诱因。数字只有真的变长/变短时才变，等价于「内容变化次数」。
+  const defaultLayout = useMemo(
+    () => createDefaultLayout(totalBars),
+    [totalBars],
+  );
   const analyzer = useMemo(() => new ExportAnalyzer(), []);
   const generator = useMemo(() => new ReportGenerator(), []);
 
