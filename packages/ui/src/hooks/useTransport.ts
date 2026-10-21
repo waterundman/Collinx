@@ -44,6 +44,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { NoteEvent, TempoMap } from "@collinx/core";
 import { encodeNoteOn, encodeNoteOff } from "../services/midi-output";
 import { AudioPreview } from "../services/audio-preview";
+import { instrumentForTrack } from "../services/instruments";
 import {
   buildPlaybackEvents,
   buildClickEvents,
@@ -405,7 +406,14 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       const delaySec = Math.max(0, (timestamp - performance.now()) / 1000);
       const voiceKey = `${ev.pitchMidi}:${evChannel}`;
       if (ev.kind === "on") {
-        preview?.noteOn(voiceKey, ev.pitchMidi, ev.velocity, delaySec);
+        preview?.noteOn(
+          voiceKey,
+          ev.pitchMidi,
+          ev.velocity,
+          delaySec,
+          // 按来源轨道选音色：旋律明亮、贝斯饱满、和弦铺底
+          instrumentForTrack(ev.trackId),
+        );
       } else {
         preview?.noteOff(voiceKey, delaySec);
       }

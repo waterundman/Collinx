@@ -45,12 +45,12 @@ describe('buildPlaybackEvents (S0-T01~T03)', () => {
     //       note2 on@0.5 / off@0.5+1*0.5=1.0
     //       note3 on@1.0 / off@1.0+0.5*0.5=1.25
     expect(events).toEqual([
-      { atSeconds: 0 * BEAT_SECONDS, kind: 'on', pitchMidi: 60, velocity: v60 },
-      { atSeconds: 1 * BEAT_SECONDS, kind: 'off', pitchMidi: 60, velocity: v60 },
-      { atSeconds: 1 * BEAT_SECONDS, kind: 'on', pitchMidi: 62, velocity: v62 },
-      { atSeconds: 2 * BEAT_SECONDS, kind: 'off', pitchMidi: 62, velocity: v62 },
-      { atSeconds: 2 * BEAT_SECONDS, kind: 'on', pitchMidi: 64, velocity: v64 },
-      { atSeconds: 2.5 * BEAT_SECONDS, kind: 'off', pitchMidi: 64, velocity: v64 },
+      { atSeconds: 0 * BEAT_SECONDS, kind: 'on', pitchMidi: 60, velocity: v60, trackId: 't' },
+      { atSeconds: 1 * BEAT_SECONDS, kind: 'off', pitchMidi: 60, velocity: v60, trackId: 't' },
+      { atSeconds: 1 * BEAT_SECONDS, kind: 'on', pitchMidi: 62, velocity: v62, trackId: 't' },
+      { atSeconds: 2 * BEAT_SECONDS, kind: 'off', pitchMidi: 62, velocity: v62, trackId: 't' },
+      { atSeconds: 2 * BEAT_SECONDS, kind: 'on', pitchMidi: 64, velocity: v64, trackId: 't' },
+      { atSeconds: 2.5 * BEAT_SECONDS, kind: 'off', pitchMidi: 64, velocity: v64, trackId: 't' },
     ]);
 
     // 单调不减
@@ -134,9 +134,9 @@ describe('buildPlaybackEvents (S0-T01~T03)', () => {
     const events = buildPlaybackEvents([ended, crossing, atStart], tempoMap, { bar: 2, beat: 1 });
 
     expect(events).toEqual([
-      { atSeconds: 4 * BEAT_SECONDS, kind: 'on', pitchMidi: 64, velocity: 102 },
-      { atSeconds: 5 * BEAT_SECONDS, kind: 'off', pitchMidi: 64, velocity: 102 },
-      { atSeconds: 8 * BEAT_SECONDS, kind: 'off', pitchMidi: 62, velocity: 102 },
+      { atSeconds: 4 * BEAT_SECONDS, kind: 'on', pitchMidi: 64, velocity: 102, trackId: 't' },
+      { atSeconds: 5 * BEAT_SECONDS, kind: 'off', pitchMidi: 64, velocity: 102, trackId: 't' },
+      { atSeconds: 8 * BEAT_SECONDS, kind: 'off', pitchMidi: 62, velocity: 102, trackId: 't' },
     ]);
     // 已结束音符（pitch 60）零事件
     expect(events.some((e) => e.pitchMidi === 60)).toBe(false);
@@ -158,12 +158,16 @@ describe('buildPlaybackEvents (S0-T01~T03)', () => {
       kind: 'off',
       pitchMidi: 60,
       velocity: 102,
+      // v2.8.0：事件新增 trackId（供内部合成器选音色），MIDI 编码不读它，
+      // 因此 MIDI 字节输出不变；这里按严格相等补上，保持断言不放宽
+      trackId: 't',
     });
     expect(events[2]).toEqual({
       atSeconds: BEAT_SECONDS,
       kind: 'on',
       pitchMidi: 62,
       velocity: 102,
+      trackId: 't',
     });
   });
 });

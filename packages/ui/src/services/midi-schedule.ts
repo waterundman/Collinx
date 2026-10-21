@@ -44,6 +44,12 @@ export interface ScheduledEvent {
   /** 已换算为 MIDI 原始 0-127 的力度（下限 1，见文件头） */
   velocity: number;
   /**
+   * v2.8.0：来源轨道 id（如 melody / bass / chords）。
+   * 供内部合成器选音色用 —— MIDI 侧不需要它（通道已足够）。
+   * 可选：count-in click 事件没有轨道。
+   */
+  trackId?: string;
+  /**
    * 目标 MIDI 通道（0-15，可选）。
    * - count-in click 事件显式带 9（GM 打击乐通道 10，A1 决策，独立于
    *   settings.midi.midiChannel），使调用方无需隐式编码即可断言"通道 10"
@@ -106,6 +112,10 @@ export function buildPlaybackEvents(
         kind: "off",
         pitchMidi: note.pitchMidi,
         velocity,
+        // v2.8.0：跨起点分支也要带 trackId —— 漏了会让这条音符在播放时
+        // 用兜底音色（lead）而不是它自己的音色，听感上"从中间开始的那条
+        // 长音突然换了音色"。测试 T03 专门守这一点。
+        trackId: note.trackId,
       });
       continue;
     }
@@ -116,12 +126,14 @@ export function buildPlaybackEvents(
       kind: "on",
       pitchMidi: note.pitchMidi,
       velocity,
+      trackId: note.trackId,
     });
     events.push({
       atSeconds: offSeconds,
       kind: "off",
       pitchMidi: note.pitchMidi,
       velocity,
+      trackId: note.trackId,
     });
   }
 

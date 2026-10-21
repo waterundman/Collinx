@@ -48,6 +48,7 @@ import { useSettings } from "./hooks/useSettings";
 import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
 import { convertTakeToNotes } from "./services/recorded-take";
 import { renderNotesToWav } from "./services/wav-export";
+import { instrumentForTrack } from "./services/instruments";
 import type {
   ArrangerConfigInput,
   ArrangerRunResult,
@@ -841,6 +842,8 @@ export function App() {
             velocity: n.velocity,
             startSec,
             durSec,
+            // 与播放侧同一份映射 —— 导出的音色必须与听到的一致
+            instrumentId: instrumentForTrack(n.trackId),
           };
         });
 

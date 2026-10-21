@@ -19,6 +19,8 @@
  *   绝不抛错打断播放
  */
 
+import { getInstrument, notePeakGain } from "./instruments";
+
 /** MIDI 音高 → 频率（A4 = 69 = 440Hz） */
 export function midiToFrequency(pitchMidi: number): number {
   return 440 * Math.pow(2, (pitchMidi - 69) / 12);
@@ -104,37 +106,51 @@ export class AudioPreview {
    * @param velocity 0..1
    * @param whenSec 相对 AudioContext.currentTime 的延迟（秒），默认立即
    */
-  noteOn(voiceId: string, pitchMidi: number, velocity = 0.8, whenSec = 0): void {
+  noteOn(
+    voiceId: string,
+    pitchMidi: number,
+    velocity = 0.8,
+    whenSec = 0,
+    /** 音色 id（见 instruments.ts）；省略时用 DEFAULT_INSTRUMENT */
+    instrumentId?: string,
+  ): void {
     if (!this.ctx || !this.master || this.ctx.state !== "running") return;
 
     // 同一个 voiceId 重复触发时先停旧的，避免叠音
     this.noteOff(voiceId);
 
+    // v2.8.0：包络与振荡器都取自音色表 —— 播放与 WAV 导出读同一份 spec，
+    // 否则"听到的"和"导出的"会是两个声音。
+    const spec = getInstrument(instrumentId);
     const t0 = this.ctx.currentTime + Math.max(0, whenSec);
-    const peak = velocityToGain(velocity);
+    const peak = notePeakGain(velocity, spec);
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t0 + this.attack);
-    // 轻微衰减到 70%，模拟自然衰减（不做完整 ADSR 的 sustain 段，
-    // 因为本项目音符长度由 noteOff 决定，不需要额外的 gate）
-    gain.gain.exponentialRampToValueAtTime(Math.max(peak * 0.7, 0.0002), t0 + this.attack + 0.15);
+    gain.gain.exponentialRampToValueAtTime(peak, t0 + spec.attack);
+    // 从峰值衰减到音色的稳态电平（< 1 表示有自然衰减，如拨弦）
+    gain.gain.exponentialRampToValueAtTime(
+      Math.max(peak * spec.sustain, 0.0002),
+      t0 + spec.attack + 0.15,
+    );
     gain.connect(this.master);
 
     const freq = midiToFrequency(pitchMidi);
     const oscs: OscillatorNode[] = [];
 
-    // 两个略微失谐的振荡器（锯齿 + 方波）比纯正弦更像"乐器"，
-    // 也让和弦更容易被听清。失谐 4 cents 产生轻微 chorus。
-    for (const [type, detune] of [
-      ["sawtooth", 0],
-      ["square", 4],
-    ] as const) {
+    for (const o of spec.oscillators) {
       const osc = this.ctx.createOscillator();
-      osc.type = type;
+      osc.type = o.type;
       osc.frequency.value = freq;
-      osc.detune.value = detune;
-      osc.connect(gain);
+      osc.detune.value = o.detune;
+
+      // 每个振荡器单独一个增益节点：spec.gain 是相对权重，
+      // 用来控制音色的"厚薄"比例（如 bass 用正弦打底 + 少量锯齿给音头）
+      const oscGain = this.ctx.createGain();
+      oscGain.gain.value = o.gain;
+      osc.connect(oscGain);
+      oscGain.connect(gain);
+
       osc.start(t0);
       oscs.push(osc);
     }

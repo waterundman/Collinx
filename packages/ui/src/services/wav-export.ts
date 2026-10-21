@@ -14,6 +14,8 @@
  */
 
 /** 16-bit PCM WAV 的固定头长度：44 字节 */
+import { getInstrument, notePeakGain } from "./instruments";
+
 export const WAV_HEADER_BYTES = 44;
 
 export interface WavOptions {
@@ -130,6 +132,8 @@ export interface RenderableNote {
   startSec: number;
   /** 持续秒数 */
   durSec: number;
+  /** 音色 id（见 instruments.ts）；与播放时用的同一份 spec */
+  instrumentId?: string;
 }
 
 export interface RenderOptions {
@@ -174,31 +178,42 @@ export async function renderNotesToWav(
   for (const note of notes) {
     if (note.durSec <= 0) continue;
 
+    // 音色与播放侧共用同一份 spec —— 否则"听到的"和"导出的"是两个声音
+    const spec = getInstrument(note.instrumentId);
     const t0 = Math.max(0, note.startSec);
-    const peak = Math.max(0.0002, Math.min(1, note.velocity) ** 2 * 0.35);
+    const peak = notePeakGain(note.velocity, spec);
 
     const env = ctx.createGain();
-    // 5ms 起音防爆音；音符结束前 80ms 释音（与 AudioPreview 的 release 一致）
-    const release = 0.08;
-    const attack = 0.005;
+    const attack = spec.attack;
+    const release = spec.release;
     const end = t0 + Math.max(note.durSec, attack + release + 0.001);
 
     env.gain.setValueAtTime(0.0001, t0);
     env.gain.exponentialRampToValueAtTime(peak, t0 + attack);
-    env.gain.setValueAtTime(peak, Math.max(t0 + attack, end - release));
+    // 峰值 → 稳态（sustain < 1 的音色有自然衰减，如拨弦）
+    env.gain.exponentialRampToValueAtTime(
+      Math.max(peak * spec.sustain, 0.0002),
+      Math.min(t0 + attack + 0.15, Math.max(t0 + attack + 0.002, end - release)),
+    );
+    env.gain.setValueAtTime(
+      Math.max(peak * spec.sustain, 0.0002),
+      Math.max(t0 + attack, end - release),
+    );
     env.gain.exponentialRampToValueAtTime(0.0001, end);
     env.connect(master);
 
     const freq = 440 * Math.pow(2, (note.pitchMidi - 69) / 12);
-    for (const [type, detune] of [
-      ["sawtooth", 0],
-      ["square", 4],
-    ] as const) {
+    for (const o of spec.oscillators) {
       const osc = ctx.createOscillator();
-      osc.type = type;
+      osc.type = o.type;
       osc.frequency.value = freq;
-      osc.detune.value = detune;
-      osc.connect(env);
+      osc.detune.value = o.detune;
+
+      const oscGain = ctx.createGain();
+      oscGain.gain.value = o.gain;
+      osc.connect(oscGain);
+      oscGain.connect(env);
+
       osc.start(t0);
       osc.stop(end + 0.01);
     }
