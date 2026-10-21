@@ -99,6 +99,28 @@ export interface ScoreRendererProps {
 }
 
 const STAVE_WIDTH = 550;
+/**
+ * v2.8.0：每小节的**最小可读宽度**。
+ *
+ * 此前谱表宽度固定 550px，8 个小节挤在里面 → 每小节只有 68px。
+ * 一个八分音符的符头 + 符干 + 符尾约需 30px，4~8 个音符同小节时
+ * 必然糊成一片（用户原话：「这些音符怎么还是堆在一起」）。
+ *
+ * 现在谱表宽度随**该行实际小节数**增长，每小节至少 110px ——
+ * 这是普通乐谱的排版惯例：宁可加宽加横向滚动，也不压扁音符。
+ */
+const MIN_BAR_WIDTH = 110;
+
+/**
+ * 谱表宽度（按该行实际小节数）。
+ *
+ * 导出是为了让测试用**同一份算法**复算锚点几何 —— 此前测试硬编码 540，
+ * 宽度一改就全线飘红，而那不是产品缺陷，是基准没跟着走。
+ */
+export function computeStaveWidth(barsInSystem: number): number {
+  const n = Number.isFinite(barsInSystem) ? Math.max(1, Math.floor(barsInSystem)) : 1;
+  return Math.max(STAVE_WIDTH, n * MIN_BAR_WIDTH);
+}
 const STAVE_PADDING_LEFT = 10;
 const STAVE_HEIGHT = 120;
 const STAVE_GAP = 20;
@@ -247,7 +269,12 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         container.innerHTML = "";
 
         const staves = layout.staffConfig;
-        const staveWidth = STAVE_WIDTH;
+        // 系统（行）划分与画布高度同源（renderBars / systems 见组件作用域 memo）。
+        // ⚠️ 必须早于 staveWidth 计算 —— 宽度依赖本行实际小节数。
+        const systemPlans = systems.length > 0 ? systems : planSystems({ bars: renderBars, startBar });
+        // 谱表宽度按「本行实际小节数」计算：每小节至少 MIN_BAR_WIDTH。
+        // 末行可能不满（按实际小节数算，不按名义值），避免最后一页被拉宽。
+        const staveWidth = computeStaveWidth(systemPlans[0]?.bars ?? renderBars);
         // totalHeight 由渲染作用域的 useMemo 提供（唯一来源，见其注释）。
 
         const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
@@ -261,8 +288,6 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         const staveX = STAVE_PADDING_LEFT;
         const firstBarLeft = STAVE_PADDING_LEFT;
         const availableWidth = staveX + staveWidth - firstBarLeft - STAVE_RIGHT_PADDING;
-        // 系统（行）划分与画布高度同源（renderBars / systems 见组件作用域 memo）。
-        const systemPlans = systems.length > 0 ? systems : planSystems({ bars: renderBars, startBar });
         const systemHeight = staves.length * (STAVE_HEIGHT + STAVE_GAP);
         const lastBar = startBar + renderBars - 1;
 

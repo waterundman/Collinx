@@ -20,13 +20,16 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ScoreRenderer } from "../ScoreRenderer";
+import { ScoreRenderer, computeStaveWidth } from "../ScoreRenderer";
 import type { ScoreRendererLayout } from "../ScoreRenderer";
 import { barBeatFromX } from "../bar-anchors";
 import { planBarSlots } from "../bar-anchors";
 import type { BarAnchor } from "../bar-anchors";
 import { playheadX } from "../ScorePlayhead";
 import type { NoteEvent } from "@collinx/core";
+
+/** 可用宽度 = 谱表宽 - 右留白(10)；谱表宽随每行小节数自适应（v2.8.0） */
+const AVAIL_WIDTH_7 = computeStaveWidth(7) - 10;
 
 // ---------------------------------------------------------------------------
 // harness
@@ -126,7 +129,7 @@ function sampleNotes(): NoteEvent[] {
 
 /** 与 ScoreRenderer 内部一致的锚点来源（startX=10, availableWidth=540, bars=7）。 */
 function anchors7(): BarAnchor[] {
-  return planBarSlots({ startX: 10, availableWidth: 540, bars: 7 }).map((s) => ({
+  return planBarSlots({ startX: 10, availableWidth: AVAIL_WIDTH_7, bars: 7 }).map((s) => ({
     bar: s.bar,
     x0: s.x,
     x1: s.x + s.width,

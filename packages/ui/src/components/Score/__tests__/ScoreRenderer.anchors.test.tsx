@@ -6,7 +6,7 @@
  * vexflow 5 SVG 后端；无 @testing-library/react，手写 createRoot + act，样板见
  * src/__tests__/v200-stage1.test.tsx）：
  *   T46b 成功路径：双谱表 7 小节 → 回调恰好 1 次、7 锚点、bar 1..7、x0 严格递增、
- *        x1 > x0，且与 planBarSlots({startX:10, availableWidth:540, bars:7}) 逐值相等。
+ *        x1 > x0，且与 planBarSlots({startX:10, availableWidth:AVAIL_WIDTH_7, bars:7}) 逐值相等。
  *   T46c 失败路径：vexflow Renderer 抛错 → 回调 0 次 + 出现「VexFlow 渲染失败」占位。
  *   T46d 取消/竞态：上一次动态 import 未 resolve 前换入参 → 无过期回调覆盖新值。
  *   T46e 缺省回调：不传 onBarAnchorsChange → 不抛错且 SVG 结构零变化。
@@ -20,11 +20,14 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ScoreRenderer } from "../ScoreRenderer";
+import { ScoreRenderer, computeStaveWidth } from "../ScoreRenderer";
 import { planBarSlots } from "../bar-anchors";
 import type { BarAnchor } from "../bar-anchors";
 import type { ScoreRendererLayout } from "../ScoreRenderer";
 import type { NoteEvent } from "@collinx/core";
+
+/** 可用宽度 = 谱表宽 - 右留白(10)；谱表宽随每行小节数自适应（v2.8.0） */
+const AVAIL_WIDTH_7 = computeStaveWidth(7) - 10;
 
 // vi.mock 被提升至 import 之上，故控制开关经 vi.hoisted 一并提升。
 const vexflowMock = vi.hoisted(() => ({ fail: false }));
@@ -195,9 +198,9 @@ describe("ScoreRenderer onBarAnchorsChange 真实渲染护栏（Stage 0 收口�
       expect(a.x1).toBeGreaterThan(a.x0);
     }
 
-    // 逐值相等：与 planBarSlots({startX:10, availableWidth:540, bars:7}) 映射结果一致。
-    // availableWidth = staveX(10) + staveWidth(550) - firstBarLeft(10) - rightPad(10) = 540。
-    const expected = planBarSlots({ startX: 10, availableWidth: 540, bars: 7 }).map(
+    // 逐值相等：与 planBarSlots({startX:10, availableWidth:AVAIL_WIDTH_7, bars:7}) 映射结果一致。
+    // availableWidth = staveX(10) + staveWidth - firstBarLeft(10) - rightPad(10) = 540。
+    const expected = planBarSlots({ startX: 10, availableWidth: AVAIL_WIDTH_7, bars: 7 }).map(
       (s) => ({ bar: s.bar, x0: s.x, x1: s.x + s.width }),
     );
     expect(expected).toHaveLength(7);

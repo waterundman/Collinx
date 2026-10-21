@@ -28,7 +28,7 @@ import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { TempoMap } from "@collinx/core";
-import { ScoreRenderer } from "../ScoreRenderer";
+import { ScoreRenderer, computeStaveWidth } from "../ScoreRenderer";
 import type { ScoreRendererLayout } from "../ScoreRenderer";
 import type { BarAnchor } from "../bar-anchors";
 import type { NoteEvent } from "@collinx/core";
@@ -331,9 +331,9 @@ describe("ScoreRenderer 真实渲染 (S4b · D34-4)", () => {
       Array.from({ length: 48 }, (_, i) => i + 1),
     );
 
-    // 每小节宽度 = 可分配宽 540 / 每行 8 小节 = 67.5px；旧实现是 540/48 = 11.25px
+    // 每小节宽度 = 可分配宽 / 每行 8 小节；旧实现固定 550px 谱表 → 67.5px/8，且被压到 11.25px/48
     // （11px 连一个小节线间距都放不下，等于不可读）。
-    const barWidth = 540 / 8;
+    const barWidth = (computeStaveWidth(8) - 10) / 8;
     for (const a of anchors) {
       expect(a.x1 - a.x0).toBeCloseTo(barWidth, 9);
     }

@@ -22,7 +22,7 @@ import React, { act, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { Layout, NoteEvent } from "@collinx/core";
 import { TempoMap } from "@collinx/core";
-import { ScoreRenderer } from "../ScoreRenderer";
+import { ScoreRenderer, computeStaveWidth } from "../ScoreRenderer";
 import type { ScoreRendererLayout } from "../ScoreRenderer";
 import { ScorePlayhead, playheadX } from "../ScorePlayhead";
 import { planBarSlots } from "../bar-anchors";
@@ -30,6 +30,9 @@ import type { BarAnchor } from "../bar-anchors";
 import { ScorePanel } from "../ScorePanel";
 import type { CollisionWarning } from "../ScorePanel";
 import { I18nProvider } from "../../../providers/I18nProvider";
+
+/** 可用宽度 = 谱表宽 - 右留白(10)；谱表宽随每行小节数自适应（v2.8.0） */
+const AVAIL_WIDTH_7 = computeStaveWidth(7) - 10;
 
 // ---------------------------------------------------------------------------
 // harness
@@ -111,7 +114,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** 与 ScoreRenderer 内部一致的锚点来源（startX=10, availableWidth=540）。 */
 function anchors7(): BarAnchor[] {
-  return planBarSlots({ startX: 10, availableWidth: 540, bars: 7 }).map((s) => ({
+  return planBarSlots({ startX: 10, availableWidth: AVAIL_WIDTH_7, bars: 7 }).map((s) => ({
     bar: s.bar,
     x0: s.x,
     x1: s.x + s.width,
@@ -229,7 +232,7 @@ describe("ScorePlayhead 覆盖层（Stage 1）", () => {
     const beatsPerBarAt = () => 4;
     const fraction = (3 - 1) / 4; // beat=3, 4/4
     // 独立复算（与 planBarSlots 同一算术）：每小节宽 = 540/7。
-    const barWidth = 540 / 7;
+    const barWidth = AVAIL_WIDTH_7 / 7;
     const expectedScale1 = 10 + barWidth /* a2.x0 */ + fraction * barWidth;
     const expectedScale05 = expectedScale1 * 0.5;
 
@@ -296,7 +299,7 @@ describe("ScorePlayhead 覆盖层（Stage 1）", () => {
   it("T48c: 拍号派生 —— beatsPerBarAt=()=>3 时 fraction=(2.5-1)/3，支持小数 beat (critical)", () => {
     const anchors = anchors7();
     const a2 = anchors[1];
-    const barWidth = 540 / 7;
+    const barWidth = AVAIL_WIDTH_7 / 7;
 
     const x3 = playheadX(anchors, { bar: 2, beat: 2.5 }, () => 3, 1);
     const x4 = playheadX(anchors, { bar: 2, beat: 2.5 }, () => 4, 1);
@@ -484,7 +487,7 @@ describe("T48b 锚点上报循环防护（D31-6）", () => {
     await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(1));
     await wait(100);
 
-    // 透传 onBarAnchorsChange：恰好 1 次，且与 planBarSlots(10,540,7) 逐值相等。
+    // 透传 onBarAnchorsChange：恰好 1 次，且与 planBarSlots(10,AVAIL_WIDTH_7,7) 逐值相等。
     expect(calls.length).toBe(1);
     const anchors = calls[0];
     expect(anchors).toHaveLength(7);
