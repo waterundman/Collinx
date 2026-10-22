@@ -39,3 +39,6 @@ docs/*
 # Agent workspace memory
 .workbuddy/
 /resources/
+
+# 保留文档索引（上面的 README.md 规则意图是忽略各包生成的说明）
+!docs/README.md
