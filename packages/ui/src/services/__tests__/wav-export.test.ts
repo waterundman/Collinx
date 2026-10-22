@@ -36,21 +36,40 @@ describe("encodeWav", () => {
     expect(view.getInt16(WAV_HEADER_BYTES + 2, true)).toBe(Math.round(-0.5 * 0x8000));
   });
 
-  it("T04: 超出 ±1 的采样被钳制，不产生回绕爆音", () => {
-    // 总线叠加后出现 +3 / -2 很常见；不钳制会让 Int16 溢出回绕，
-    // 听感上是刺耳的"炸裂"，但文件本身仍是合法 WAV —— 最难排查的一类 bug
+  it("T04: 超出 ±1 的采样经归一化后不产生回绕爆音（v2.8.0 改为峰值归一）", () => {
+    // 总线叠加后出现 +3 / -2 很常见。**v2.8.0 起不再硬钳制**：
+    // 整段先缩放到 -1 dBFS（0.891），保留动态且不产生失真 ——
+    // 「不产生回绕爆音」这个用户可见的保证更强了，而不是被削弱。
     const wav = encodeWav(new Float32Array([3, -2]), { channels: 2 });
     const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
-    expect(view.getInt16(WAV_HEADER_BYTES, true)).toBe(0x7fff);
-    expect(view.getInt16(WAV_HEADER_BYTES + 2, true)).toBe(-0x8000);
+    const hi = view.getInt16(WAV_HEADER_BYTES, true);
+    const lo = view.getInt16(WAV_HEADER_BYTES + 2, true);
+
+    // 关键不变量：绝不回绕（+3 不能变成负数，-2 不能变成正数）
+    expect(hi).toBeGreaterThan(0);
+    expect(lo).toBeLessThan(0);
+    // 峰值被规整到 -1 dBFS 附近（0.891 × 0x7fff ≈ 28543）
+    expect(hi).toBeCloseTo(Math.round(0.891 * 0x7fff), -2);
+    // 正负比例保持（3 : 2）
+    expect(Math.abs(hi / lo)).toBeCloseTo(1.5, 1);
   });
 
-  it("T05: 满幅 +1 不会溢出成负数（正负区间不对称处理）", () => {
+  it("T05: 满幅 +1 归一化到 -1 dBFS 且不会溢出成负数", () => {
+    // 满幅也要降到 0.891 留 headroom：导出后整体不过载，
+    // 用户再拿去加效果或转码时不会立刻爆
     const wav = encodeWav(new Float32Array([1, 0]), { channels: 2 });
     const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
     const v = view.getInt16(WAV_HEADER_BYTES, true);
     expect(v).toBeGreaterThan(0);
-    expect(v).toBe(0x7fff);
+    expect(v).toBeCloseTo(Math.round(0.891 * 0x7fff), -2);
+  });
+
+  it("T05b: 安静的作品不会被硬拉响（peak < 0.891 时不放大）", () => {
+    const wav = encodeWav(new Float32Array([0.2, -0.1]), { channels: 2 });
+    const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
+    // 0.2 原样缩放，不乘 4.45 拉满
+    expect(view.getInt16(WAV_HEADER_BYTES, true)).toBe(Math.round(0.2 * 0x7fff));
+    expect(view.getInt16(WAV_HEADER_BYTES + 2, true)).toBe(Math.round(-0.1 * 0x8000));
   });
 
   it("T06: 采样数不是声道整数倍时报错，而不是写出坏文件", () => {

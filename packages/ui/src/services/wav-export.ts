@@ -70,12 +70,24 @@ export function encodeWav(interleaved: Float32Array, opts: WavOptions = {}): Uin
   writeAscii(view, 36, "data");
   view.setUint32(40, dataBytes, true);
 
+  // ── 峰值归一化（v2.8.0）──
+  // 此前只做硬钳制：总线叠加超过 ±1 的采样被直接削平 → 听感上是
+  // 「糊、炸、没有起伏」（实测 5 轨 × 466 音符导出时削波率极高）。
+  // 现在先把整段缩放到 -1 dBFS（≈0.891），留 headroom 且不产生失真；
+  // 只降不升（peak <= 1 时不动），避免把安静的作品硬拉响。
+  let peak = 0;
+  for (let i = 0; i < interleaved.length; i++) {
+    const a = Math.abs(interleaved[i]);
+    if (a > peak) peak = a;
+  }
+  const TARGET_PEAK = 0.891; // -1 dBFS
+  const normGain = peak > TARGET_PEAK ? TARGET_PEAK / peak : 1;
+
   // ── 采样：Float32 [-1,1] → Int16 ──
   let offset = WAV_HEADER_BYTES;
   for (let i = 0; i < interleaved.length; i++) {
-    // 钳制：超出 ±1 的采样（总线叠加时常见）必须截断，否则会因整数回绕
-    // 变成刺耳的爆音 —— 这是音频导出最典型的翻车点
-    const s = Math.max(-1, Math.min(1, interleaved[i]));
+    // 归一化后再钳制：残余超幅（浮点误差）仍要截断，否则整数回绕成爆音
+    const s = Math.max(-1, Math.min(1, interleaved[i] * normGain));
     // 正负区间不对称：Int16 是 -32768..32767。负数用 0x8000 缩放（-1 → -32768），
     // 正数用 0x7fff（+1 → +32767）。若正数也用 0x8000，满幅信号会溢出成 -32768
     // —— 听感上是突然反相的爆音，而文件本身仍是合法 WAV，极难排查。

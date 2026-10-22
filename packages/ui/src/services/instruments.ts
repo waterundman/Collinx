@@ -27,6 +27,8 @@ export interface OscillatorSpec {
 }
 
 export interface InstrumentSpec {
+  /** 展示名（混音台音色下拉用）；缺省时调用方回落显示 id */
+  label?: string;
   /** 振荡器叠加（音色的"厚薄"由数量与波形决定） */
   oscillators: OscillatorSpec[];
   /** 起音秒数（越长越"软"） */
@@ -51,6 +53,7 @@ export interface InstrumentSpec {
  */
 export const INSTRUMENTS: Record<string, InstrumentSpec> = {
   lead: {
+    label: "主奏 Lead",
     oscillators: [
       { type: "sawtooth", detune: 0, gain: 1 },
       { type: "square", detune: 4, gain: 0.5 },
@@ -61,6 +64,7 @@ export const INSTRUMENTS: Record<string, InstrumentSpec> = {
     level: 0.35,
   },
   bass: {
+    label: "贝斯 Bass",
     oscillators: [
       { type: "sine", detune: 0, gain: 1 },
       { type: "sawtooth", detune: -4, gain: 0.35 },
@@ -71,6 +75,7 @@ export const INSTRUMENTS: Record<string, InstrumentSpec> = {
     level: 0.45,
   },
   pad: {
+    label: "铺底 Pad",
     oscillators: [
       { type: "triangle", detune: 0, gain: 1 },
       { type: "sawtooth", detune: 7, gain: 0.3 },
@@ -82,6 +87,7 @@ export const INSTRUMENTS: Record<string, InstrumentSpec> = {
     level: 0.22,
   },
   keys: {
+    label: "键盘 Keys",
     oscillators: [
       { type: "square", detune: 0, gain: 1 },
       { type: "sine", detune: 7, gain: 0.4 },
@@ -92,6 +98,7 @@ export const INSTRUMENTS: Record<string, InstrumentSpec> = {
     level: 0.28,
   },
   pluck: {
+    label: "拨弦 Pluck",
     oscillators: [
       { type: "sawtooth", detune: 0, gain: 1 },
       { type: "triangle", detune: -7, gain: 0.4 },
@@ -124,6 +131,32 @@ export function instrumentForTrack(trackId: string | undefined): string {
   if (id.includes("melody") || id.includes("lead")) return "lead";
 
   return DEFAULT_INSTRUMENT;
+}
+
+/**
+ * 解析一个轨道实际该用的音色（v2.8.0）。
+ *
+ * 优先级：**MixerTrack 上显式指定的 instrument** > 按 trackId 名称推断 > 默认。
+ *
+ * 为什么要这个函数而不是直接用 instrumentForTrack：后者只看名称，
+ * 用户无法改变（「无法选音色」正是最初可行性报告的 ❌ 项之一）。
+ * MixerTrack.instrument 是可选字段，老工程没有 → 自动回落到名称推断，
+ * 行为与改动前完全一致。
+ *
+ * @param explicit 轨道上显式指定的音色 id（MixerTrack.instrument）
+ * @param trackId  音符的 trackId（回落用）
+ */
+export function resolveInstrument(
+  explicit: string | undefined,
+  trackId: string | undefined,
+): string {
+  const want = (explicit ?? "").trim();
+  if (want) {
+    const spec = INSTRUMENTS[want as keyof typeof INSTRUMENTS];
+    // 只接受真实存在的音色 id —— 脏数据不该让整条轨道静音
+    if (spec) return want;
+  }
+  return instrumentForTrack(trackId);
 }
 
 /** 取音色 spec（未知 id 兜底，避免调用方到处判空） */

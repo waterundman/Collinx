@@ -10,6 +10,7 @@ import {
 } from "@collinx/core";
 import { useI18n } from "../../i18n";
 import { Icon } from "../Icon/Icon";
+import { INSTRUMENTS, instrumentForTrack } from "../../services/instruments";
 import styles from "./MixerConsole.module.css";
 
 interface MixerConsoleProps {
@@ -522,6 +523,30 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
           {track.name}
         </div>
         <span className={styles.trackType}>{track.busType}</span>
+
+        {!isMaster && (
+          /**
+           * 音色选择（v2.8.0）。
+           *
+           * 此前音色只按 trackId 名称自动推断（instrumentForTrack），
+           * 用户改不了 —— 「无法选音色」是最初可行性报告的 ❌ 项之一。
+           * 现在落到 MixerTrack.instrument（可选字段），随 .agentmusic 一起持久化；
+           * 未显式选择时仍走名称推断，老工程行为不变。
+           */
+          <select
+            className={styles.instrumentSelect}
+            data-testid={`mixer-instrument-${track.id}`}
+            value={track.instrument ?? instrumentForTrack(track.sourceTrackId)}
+            onChange={(e) => onTrackChange?.(track.id, { instrument: e.target.value })}
+            title="音色"
+          >
+            {Object.entries(INSTRUMENTS).map(([id, spec]) => (
+              <option key={id} value={id}>
+                {spec.label ?? id}
+              </option>
+            ))}
+          </select>
+        )}
 
         {renderFader(track)}
         {renderMeter(track)}

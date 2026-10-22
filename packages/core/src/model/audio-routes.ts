@@ -48,6 +48,17 @@ export interface MixerTrack {
   fxChain: FXChain;
   sends: SendConfig[];
   meterLevel: string;
+  /**
+   * 音色 id（见 ui/src/services/instruments.ts，如 "lead" / "bass" / "pad"）。
+   *
+   * **可选，向后兼容**：老工程没有这个字段 → 消费方回落到「按 trackId 名称推断」
+   * （`instrumentForTrack`）。显式指定后即以它为准，不再看名称。
+   *
+   * 放在 MixerTrack 而不是引入独立字段，是因为 MixerState 已经整体进
+   * `.agentmusic`（agentmusic-bridge.ts:60）—— 加在这里持久化自动生效，
+   * 不需要另开一条序列化路径。
+   */
+  instrument?: string;
 }
 
 export interface MixerState {

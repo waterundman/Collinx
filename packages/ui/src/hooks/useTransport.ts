@@ -98,6 +98,14 @@ export interface UseTransportOptions {
   metronome?: boolean;
   /** v2.2.0 S0 (D21)：录制 take 自动提交回调（stop/pause 防丢） */
   onRecordingCommit?: (take: RecordedTake) => void;
+  /**
+   * 轨道 → 音色 id 的解析器（v2.8.0）。
+   *
+   * 由 App 注入，读 MixerTrack.instrument（用户在混音台选的）。
+   * 未注入时回落 `instrumentForTrack`（按 trackId 名称推断），
+   * 行为与改动前完全一致 —— 老调用方与测试无需修改。
+   */
+  instrumentOfTrack?: (trackId: string | undefined) => string;
 }
 
 export interface UseTransportResult {
@@ -197,6 +205,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     lookaheadMs,
     metronome,
     onRecordingCommit,
+    instrumentOfTrack,
   } = options;
 
   // ── 最新入参经 ref 读取：使 play/pause/seek 等回调引用稳定（不随渲染重建） ──
@@ -425,8 +434,9 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
           ev.pitchMidi,
           ev.velocity,
           delaySec,
-          // 按来源轨道选音色：旋律明亮、贝斯饱满、和弦铺底
-          instrumentForTrack(ev.trackId),
+          // 按来源轨道选音色。优先用 App 注入的解析器（读 MixerTrack.instrument，
+          // 用户可在混音台手动选）；未注入时回落名称推断，行为与改动前一致。
+          (instrumentOfTrack ?? instrumentForTrack)(ev.trackId),
           // 同时告诉合成器这条音属于哪条轨道 —— 它决定汇入哪条轨道总线，
           // 推子与电平才能按轨独立（重构前的核心缺口）
           ev.trackId,

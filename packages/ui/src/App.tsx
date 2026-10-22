@@ -48,7 +48,7 @@ import { useSettings } from "./hooks/useSettings";
 import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
 import { convertTakeToNotes } from "./services/recorded-take";
 import { renderNotesToWav } from "./services/wav-export";
-import { instrumentForTrack } from "./services/instruments";
+import { instrumentForTrack, resolveInstrument } from "./services/instruments";
 import type {
   ArrangerConfigInput,
   ArrangerRunResult,
@@ -575,6 +575,24 @@ export function App() {
     [tempoMap, recording]
   );
 
+  /**
+   * 轨道 → 音色 id 的统一解析（v2.8.0）。
+   *
+   * 播放（AudioPreview）与导出（WAV）必须用**同一个**解析结果，
+   * 否则"听到的"和"导出的"会是两个声音。此前两处各写一遍
+   * `instrumentForTrack(trackId)`（只看名称、用户改不了）。
+   */
+  const instrumentOfTrack = useCallback(
+    (trackId: string | undefined): string => {
+      if (!trackId) return resolveInstrument(undefined, undefined);
+      const strip =
+        mixer.tracks.find((t) => t.sourceTrackId === trackId) ??
+        mixer.tracks.find((t) => t.id === trackId);
+      return resolveInstrument(strip?.instrument, trackId);
+    },
+    [mixer.tracks],
+  );
+
   const transport = useTransport({
     notes,
     tempoMap,
@@ -584,6 +602,7 @@ export function App() {
     metronome: settings.midi.playback.metronome,
     // v2.2.0 S0 (D21)：录制 take 自动提交（stop/pause 防丢）→ 换算 → 批量落盘
     onRecordingCommit: handleRecordingCommit,
+    instrumentOfTrack,
   });
 
   // v2.2.0 S2 (D23-2)：录制捕获 ref 回填（handleMidiNoteOn/Off 在上方经此调用）
@@ -897,8 +916,8 @@ export function App() {
             velocity: n.velocity,
             startSec,
             durSec,
-            // 与播放侧同一份映射 —— 导出的音色必须与听到的一致
-            instrumentId: instrumentForTrack(n.trackId),
+            // 与播放侧同一个解析器 —— 导出的音色必须与听到的一致
+            instrumentId: instrumentOfTrack(n.trackId),
           };
         });
 
