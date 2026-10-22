@@ -149,8 +149,10 @@ export interface RenderOptions {
  * 为什么用离线渲染而不是录音：导出必须是**样本级确定**的产物，
  * 实时录音会受设备缓冲与调度抖动影响，同一工程两次导出长度都不同。
  *
- * 音色配置与 AudioPreview 保持一致（锯齿 + 方波，失谐 4 cents），
- * 这样"听到的"与"导出的"是同一个声音。
+ * 音色配置走 instruments.ts 的同一份 spec（`getInstrument`），
+ * 与播放用的 AudioPreview 共用 —— 这样"听到的"与"导出的"是同一个声音。
+ * （早期实现写死"锯齿 + 方波、失谐 4 cents"，那是单音色的时代；
+ * 现在每种轨道可按音色 id 取到不同的振荡器/包络参数。）
  */
 export async function renderNotesToWav(
   notes: RenderableNote[],

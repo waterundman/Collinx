@@ -138,15 +138,15 @@
 | 文件 | 问题 | 建议 |
 |---|---|---|
 | `docs/architecture.md` | 长期资产，无版本号（合理） | 保留；已顺带把 `ARCHITECTURE.md` 改为全小写以匹配其它文件名 |
-| `docs/CONTEXT.md` | 同上，但全大写 | 建议改 `context.md`（纯改名，未执行） |
-| `docs/ITERATION-PLAN.md` | 内容是 **v1.1.0**（2026-06-12）的计划，文件名无版本 | 建议 `v1.1.0-iteration-plan.md` 移入 `docs/archive/` |
+| `docs/context.md` | 同上，但全大写 | 建议改 `context.md`（纯改名，未执行） |
+| `docs/archive/v1.1.0-iteration-plan.md` | 内容是 **v1.1.0**（2026-06-12）的计划，文件名无版本 | 建议 `v1.1.0-iteration-plan.md` 移入 `docs/archive/` |
 | `docs/deep-research-report.md` | 56KB 研究报告，无版本无日期（正文有） | 同上 |
 | `docs/ui/STAGE3_COMPLETE.md` | 内容是 **v1.2.0 Stage 3**，文件名不含版本，且与根目录 `v2.*` 体系不同 | 建议 `v1.2.0-stage3-settings.md` |
 | `docs/audio/soundfont-integration-plan.md`、`soundfont-research.md` | 内容标注 **v1.7.0 Stage 4**，文件名是主题式 | 建议加版本前缀 |
 | `docs/bayesian-history/v1.2.0-stage-0.md`、`v1.2.0-stage-5.md` | 用 `stage-N` 而非主题 | 可接受（快照性质），或补主题 |
 
 **附带发现（已修）**：`.gitignore:33` 是 `docs/*` + 白名单，白名单只放行了
-`ARCHITECTURE.md` / `CONTEXT.md` / `v2.*.md`，其余 7 个文档全部游离在版本库之外
+`ARCHITECTURE.md` / `context.md` / `v2.*.md`，其余 7 个文档全部游离在版本库之外
 （`git check-ignore` 确认）。已把白名单改为放行 `architecture.md` 与
 `architecture-review.md`。归档文档是否入库由你决定（它们是过程材料，不入库也合理）。
 
@@ -158,7 +158,7 @@
 2. **没有改上面 4 处代码注释** —— 属代码改动，应与对应功能提交一起改，避免混入文档 PR：
    `useTransport.ts:8-9`、`wav-export.ts:152`、`desktop/README.md:25,59-74`、
    `audio-bridge.ts:23`。其中第 1 条最该先改，它是错误结论的源头。
-3. **没有移动/重命名归档文档**（`ITERATION-PLAN.md`、`deep-research-report.md`、
+3. **没有移动/重命名归档文档**（`archive/v1.1.0-iteration-plan.md`、`deep-research-report.md`、
    `docs/ui/`、`docs/audio/`、`docs/bayesian-history/`）。
 4. **`audio-engine` 契约与 `audio-preview` 实现的分叉**未处置 —— 只在新架构书
    §一 与 §六 标注为「已知债务」。合并两者是一轮独立工作。

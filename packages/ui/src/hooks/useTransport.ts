@@ -5,10 +5,16 @@
  * 从"可编辑 + 可试听"跃迁到"可播放"。
  *
  * 时钟域（D0-5）：
- * - 统一使用 now() 域（生产默认 performance.now()，DOMHighResTimeStamp，
- *   页面加载基准的毫秒）。绝不可与 AudioContext.currentTime 混用 —— 跨时钟域
- *   混用是经典 bug。本实现不引入 AudioContext（Web MIDI 自带 timestamp 调度器，
- *   精度来自 MIDIOutput.send(data, ts)，JS 定时器只需粗粒度 lookahead）。
+ * - **调度时钟**统一使用 now() 域（生产默认 performance.now()，DOMHighResTimeStamp，
+ *   页面加载基准的毫秒）。这是事件排程的唯一时间基准。
+ * - **音频时钟**由 AudioPreview 持有的 AudioContext 自己维护 —— 两者不可混用，
+ *   也不会混用：本 hook 只把「相对开始时刻的毫秒偏移」交给各自的下游
+ *   （Web MIDI 交给 MIDIOutput.send(data, ts)；内部合成器交给 AudioPreview 排程）。
+ *   跨时钟域直接相减才是经典 bug，接口边界处只传相对量即规避。
+ * - 出声道有两条，按设备存在与否自动选择（v2.8.0）：
+ *   ① 有 MIDI 输出 → MIDIOutput 自带 timestamp 调度，精度来自硬件
+ *   ② 无 MIDI 设备 → AudioPreview 内部合成器出声（此前这条路缺失，
+ *      用户按播放键完全听不到声音，实测 AudioContext 创建 0 次）
  * - timestamp = startPerfNow + (event.atSeconds - startSeconds) * 1000
  *   其中 startPerfNow = play() 时刻的 now()，startSeconds = 该刻的谱面秒。
  *
