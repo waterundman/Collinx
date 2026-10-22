@@ -1061,6 +1061,17 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       clearToolCalls: (): void => {
         dispatch({ type: "CLEAR_TOOL_CALLS" } satisfies ProjectStoreAction);
       },
+      /**
+       * v2.8.0：Chord Track 的写入入口（graph-native，走 SET_CHORD）。
+       * chord 传 null 删除该小节和弦。
+       */
+      setChord: (bar: number, chord: { root: string; quality: string; bass?: string } | null): void => {
+        dispatch({
+          type: "SET_CHORD",
+          bar,
+          chord: chord ? { root: chord.root, quality: chord.quality, ...(chord.bass ? { bass: chord.bass } : {}) } : null,
+        } satisfies ProjectStoreAction);
+      },
       // Stage 0 (.agentmusic): collect the live store state, serialize via
       // AgentMusicIO, and trigger a Blob download as project.agentmusic.
       // v1.17.0 Stage 1: snapshot collection is shared with the autosave

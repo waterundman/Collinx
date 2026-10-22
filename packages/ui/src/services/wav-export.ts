@@ -15,6 +15,7 @@
 
 /** 16-bit PCM WAV 的固定头长度：44 字节 */
 import { getInstrument, notePeakGain } from "./instruments";
+import { createMasterChain } from "./master-chain";
 
 export const WAV_HEADER_BYTES = 44;
 
@@ -187,7 +188,9 @@ export async function renderNotesToWav(
 
   const master = ctx.createGain();
   master.gain.value = masterGain;
-  master.connect(ctx.destination);
+  // v2.8.0：master 不再直连 destination，中间补上母带压缩 + 限幅。
+  // 与实时播放（AudioPreview）共用同一份实现，保证"听到的"="导出的"。
+  createMasterChain(ctx, master, ctx.destination);
 
   for (const note of notes) {
     if (note.durSec <= 0) continue;

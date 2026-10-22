@@ -20,6 +20,7 @@
  */
 
 import { getInstrument, notePeakGain } from "./instruments";
+import { createMasterChain } from "./master-chain";
 import { dbToLinear } from "./gain";
 
 /** MIDI 音高 → 频率（A4 = 69 = 440Hz） */
@@ -146,7 +147,11 @@ export class AudioPreview {
         this.analyser.fftSize = 512;
         this.levelBuffer = new Float32Array(this.analyser.fftSize);
 
-        this.master.connect(this.analyser);
+        // v2.8.0：母带链插在 master 与 analyser 之间 ——
+        // ① 与 WAV 导出共用同一份实现（听到的 = 导出的）
+        // ② analyser 接在母带之后，电平表显示的是**母线真实电平**
+        //    （此前是压缩前的电平，用户看到的峰值会比导出实际更"炸"）
+        createMasterChain(this.ctx, this.master, this.analyser);
         this.analyser.connect(this.ctx.destination);
       }
       if (this.ctx.state === "suspended") await this.ctx.resume();

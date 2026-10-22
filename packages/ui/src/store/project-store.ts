@@ -141,6 +141,7 @@ export type ProjectStoreAction =
   | { type: "RESIZE_NOTE"; id: string; durQn: number }
   | { type: "DELETE_NOTE"; id: string }
   | { type: "UPDATE_MIXER_TRACK"; trackId: string; changes: Partial<MixerTrack>; pushUndo?: boolean }
+  | { type: "SET_CHORD"; bar: number; chord: { root: string; quality: string; bass?: string } | null }
   | { type: "APPLY_MIXER_DIFF"; diff: DiffEnvelope }
   | { type: "REVERT_MIXER_TO"; mixer: MixerState }
   | { type: "ADD_MIXER_TRACK"; name: string; sourceId: string }
@@ -590,6 +591,8 @@ export function convertAgentCollisions(data: unknown): UiCollisionWarning[] {
 
 export interface ProjectStoreActions {
   applyDiff: (diff: DiffEnvelope) => string;
+  /** v2.8.0：设置/删除某小节的和弦（Chord Track 用；graph-native） */
+  setChord: (bar: number, chord: { root: string; quality: string; bass?: string } | null) => void;
   rejectDiff: (diffId: string) => void;
   rollbackDiff: (rollbackToken: string) => void;
   addNote: (note: NoteEvent) => void;
@@ -1332,6 +1335,32 @@ export function createProjectReducer(
             ? [...state.pendingDiffs, rolledBack]
             : state.pendingDiffs,
         };
+      }
+
+      /**
+       * 设置某小节的和弦（v2.8.0 Chord Track）。
+       *
+       * graph-native：写 ChordEvent 节点，与 ADD_PHRASE 同一模式。
+       * 同一 bar 只保留一个和弦 —— 先清掉该 bar 的旧 ChordEvent 再写，
+       * 避免"同一小节两个和弦"这种图里合法但语义混乱的状态。
+       * chord 传 null 表示删除该小节的和弦。
+       */
+      case "SET_CHORD": {
+        const graph = state.graph.snapshot();
+        for (const n of graph.getAllNodes()) {
+          if (n.type !== "ChordEvent") continue;
+          if (Number(n.data.bar) !== action.bar) continue;
+          graph.removeNode(n.id);
+        }
+        if (action.chord) {
+          graph.addNode("ChordEvent", {
+            bar: action.bar,
+            beat: 1,
+            durationQn: 4,
+            chord: action.chord,
+          });
+        }
+        return withUndo(state, { graph });
       }
 
       case "ADD_PHRASE": {

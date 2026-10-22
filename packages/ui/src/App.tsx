@@ -14,6 +14,7 @@ import {
   midiToSpelling,
   notesToHarmonyEntries,
 } from "@collinx/core";
+import { ChordTrack } from "./components/ChordTrack/ChordTrack";
 import { PianoRollView } from "./components/PianoRoll/PianoRollView";
 import { TransportBar } from "./components/Transport/TransportBar";
 import { ScorePanel } from "./components/Score";
@@ -574,6 +575,22 @@ export function App() {
     },
     [tempoMap, recording]
   );
+
+  /**
+   * 和弦轨数据（v2.8.0）：从图的 ChordEvent 节点投影出来。
+   * graph → 视图的单向投影，与 notes/phrases 同源，不做第二份真相。
+   */
+  const chordsByBar = useMemo(() => {
+    const map = new Map<number, { root: string; quality: string }>();
+    for (const n of graph.getAllNodes()) {
+      if (n.type !== "ChordEvent") continue;
+      const bar = Number(n.data.bar);
+      const chord = n.data.chord as { root?: string; quality?: string } | undefined;
+      if (!Number.isFinite(bar) || !chord?.root) continue;
+      map.set(bar, { root: chord.root, quality: chord.quality ?? "maj" });
+    }
+    return map;
+  }, [graph]);
 
   /**
    * 轨道 → 音色 id 的统一解析（v2.8.0）。
@@ -1248,6 +1265,11 @@ export function App() {
               emptyHint={t("app.arrange.emptyPhrases")}
               onSectionDoubleClick={handleSectionDoubleClick}
               onCreatePhrase={handleCreatePhrase}
+            />
+            <ChordTrack
+              totalBars={totalBars}
+              chordsByBar={chordsByBar}
+              onSetChord={actions.setChord}
             />
           </div>
 

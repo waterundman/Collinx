@@ -14,6 +14,16 @@ export const NodeType = z.enum([
   "TasteEvidence",
   "ExportVersion",
   "AgentDecision",
+  /**
+   * 和弦事件（v2.8.0）。
+   *
+   * data 形状对齐 `HarmonyEntry`（core/src/model/harmony-plan.ts）：
+   * `{ bar, beat, durationQn, chord: { root, quality, bass?, extensions? }, romanNumeral? }`。
+   *
+   * 为什么进图而不是塞进 mixer/settings：和弦是**作品内容**，不是混音设置；
+   * 进图后 diff/undo/审批/.agentmusic 全链路自动生效，无需另开序列化路径。
+   */
+  "ChordEvent",
 ]);
 
 export type NodeType = z.infer<typeof NodeType>;
