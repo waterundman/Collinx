@@ -16,6 +16,9 @@
 /** 16-bit PCM WAV 的固定头长度：44 字节 */
 import { getInstrument, notePeakGain } from "./instruments";
 import { createMasterChain } from "./master-chain";
+import { MixerGraph, DEFAULT_BUS_KEY, masterGainDb } from "./mixer-graph";
+import { dbToLinear } from "./gain";
+import type { MixerState } from "@collinx/core";
 
 export const WAV_HEADER_BYTES = 44;
 
@@ -147,6 +150,13 @@ export interface RenderableNote {
   durSec: number;
   /** 音色 id（见 instruments.ts）；与播放时用的同一份 spec */
   instrumentId?: string;
+  /**
+   * 来源轨道（v2.9.0）。
+   *
+   * 缺了它，导出只能把音符直连 master —— 推子/静音/独奏/声像/FX 全部丢失，
+   * 「混完再导出 = 没混」。老调用方不传时落到默认总线（0dB/居中）。
+   */
+  trackId?: string;
 }
 
 export interface RenderOptions {
@@ -154,6 +164,8 @@ export interface RenderOptions {
   /** 总时长（秒）；默认取最后一个音符的结束时间 + 1.5s 尾巴 */
   durationSec?: number;
   masterGain?: number;
+  /** 混音状态（v2.9.0）。与播放侧共用同一份 MixerGraph，保证「听到的=导出的」。 */
+  mixer?: MixerState;
 }
 
 /**
@@ -187,10 +199,15 @@ export async function renderNotesToWav(
   const ctx = new Ctor(2, Math.ceil(durationSec * sampleRate), sampleRate);
 
   const master = ctx.createGain();
-  master.gain.value = masterGain;
+  // v2.9.0：master 推子也要进导出（此前只用了固定的 0.8 常量）
+  master.gain.value = masterGain * (opts.mixer ? dbToLinear(masterGainDb(opts.mixer)) : 1);
   // v2.8.0：master 不再直连 destination，中间补上母带压缩 + 限幅。
   // 与实时播放（AudioPreview）共用同一份实现，保证"听到的"="导出的"。
   createMasterChain(ctx, master, ctx.destination);
+
+  // v2.9.0：混音图与播放侧共用 —— 推子/静音/独奏/声像/FX 全部进导出
+  const mixGraph = new MixerGraph(ctx, master, { withAnalysers: false, instantParams: true });
+  if (opts.mixer) mixGraph.apply(opts.mixer);
 
   for (const note of notes) {
     if (note.durSec <= 0) continue;
@@ -217,7 +234,8 @@ export async function renderNotesToWav(
       Math.max(t0 + attack, end - release),
     );
     env.gain.exponentialRampToValueAtTime(0.0001, end);
-    env.connect(master);
+    // 走轨道混音总线（推子/声像/FX），而不是直连 master
+    env.connect(mixGraph.bus(note.trackId && note.trackId.length > 0 ? note.trackId : DEFAULT_BUS_KEY).sum);
 
     const freq = 440 * Math.pow(2, (note.pitchMidi - 69) / 12);
     for (const o of spec.oscillators) {

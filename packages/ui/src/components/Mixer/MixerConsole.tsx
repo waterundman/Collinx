@@ -568,6 +568,23 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
             >
               S
             </button>
+            {onRemoveTrack && (
+              /**
+               * v2.9.0：删轨。此前 `onRemoveTrack` 只声明、没人传，
+               * 也没有按钮 —— 加错的轨删不掉。最后一条轨禁删（与 reducer 同一条规则）。
+               */
+              <button
+                className={styles.muteBtn}
+                data-testid={`mixer-remove-${track.id}`}
+                onClick={() => onRemoveTrack(track.id)}
+                disabled={mixer.tracks.length <= 1}
+                title={t("mixer.removeTrackHint")}
+                aria-label={t("mixer.removeTrack")}
+                style={{ fontSize: "11px" }}
+              >
+                ×
+              </button>
+            )}
           </div>
         )}
 

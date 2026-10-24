@@ -1328,7 +1328,9 @@
     "sourceId": "源轨道 ID",
     "sourceIdPlaceholder": "例如: melody",
     "suggestFxChain": "AI 建议 FX 链",
-    "suggestFxChainHint": "让 Mixing Agent 建议 FX 链/混音设置,提案将出现在 Agent 面板供审阅。"
+    "suggestFxChainHint": "让 Mixing Agent 建议 FX 链/混音设置,提案将出现在 Agent 面板供审阅。",
+    "removeTrack": "删除轨道",
+    "removeTrackHint": "删除该轨及其全部音符（可撤销）"
   },
   "orchestrator": {
     "title": "编制器",

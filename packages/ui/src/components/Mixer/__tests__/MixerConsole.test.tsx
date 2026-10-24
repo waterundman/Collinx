@@ -228,3 +228,82 @@ describe("MixerConsole single-track FX suggestion (v1.15 Stage 1)", () => {
     cleanup();
   });
 });
+
+// ── v2.9.0：删轨按钮 ───────────────────────────────────────────────────────
+describe("MixerConsole remove track (v2.9.0)", () => {
+  const baseTrack = {
+    busType: "group" as const,
+    gainDb: "0",
+    pan: "0",
+    mute: false,
+    solo: false,
+    sends: [],
+    meterLevel: "0",
+  };
+  const mixerWithTwo = {
+    tracks: [
+      { ...baseTrack, id: "t1", name: "Melody", sourceTrackId: "melody", fxChain: { id: "fx-1", name: "FX", slots: [] } },
+      { ...baseTrack, id: "t2", name: "Bass", sourceTrackId: "bass", fxChain: { id: "fx-2", name: "FX", slots: [] } },
+    ],
+    masterTrack: {
+      ...baseTrack,
+      id: "master",
+      name: "Master",
+      sourceTrackId: "master",
+      busType: "master" as const,
+      fxChain: { id: "fx-master", name: "FX", slots: [] },
+    },
+    routingMatrix: {},
+  };
+
+  function renderConsole(mixer: typeof mixerWithTwo, onRemoveTrack?: (id: string) => void) {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    let root: Root;
+    act(() => {
+      root = createRoot(container);
+      root.render(
+        <I18nProvider>
+          <MixerConsole mixer={mixer} onRemoveTrack={onRemoveTrack} />
+        </I18nProvider>
+      );
+    });
+    return {
+      container,
+      cleanup() {
+        act(() => {
+          root.unmount();
+          container.remove();
+        });
+      },
+    };
+  }
+
+  function click(el: Element | null) {
+    if (!el) throw new Error("click target not found");
+    act(() => {
+      el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+  }
+
+  it("每条非 master 轨都有删除按钮，点击带该轨 id 触发回调", () => {
+    const spy = vi.fn();
+    const { container, cleanup } = renderConsole(mixerWithTwo, spy);
+
+    expect(container.querySelector('[data-testid="mixer-remove-master"]')).toBeNull();
+    click(container.querySelector('[data-testid="mixer-remove-t2"]'));
+    expect(spy).toHaveBeenCalledWith("t2");
+
+    cleanup();
+  });
+
+  it("只剩一条轨时删除按钮禁用（与 reducer 的保护规则一致）", () => {
+    const single = { ...mixerWithTwo, tracks: [mixerWithTwo.tracks[0]] };
+    const { container, cleanup } = renderConsole(single, vi.fn());
+
+    const btn = container.querySelector('[data-testid="mixer-remove-t1"]') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+
+    cleanup();
+  });
+});

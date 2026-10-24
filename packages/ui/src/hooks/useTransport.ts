@@ -125,6 +125,12 @@ export interface UseTransportResult {
   getAudioLevel: () => number;
   /** v2.8.0：设置某轨音量（dB）—— 推子必须走这里才能影响声音 */
   setTrackGain: (trackId: string, db: number) => void;
+  /** v2.9.0：设置某轨声像（-1 左 .. 1 右） */
+  setTrackPan: (trackId: string, pan: number) => void;
+  /** v2.9.0：设置某轨 FX 链（结构变化才重建） */
+  setTrackFx: (trackId: string, slots: import("@collinx/core").FXSlot[]) => void;
+  /** v2.9.0：删轨后释放该轨总线 */
+  removeTrackAudio: (trackId: string) => void;
   /** v2.8.0：某轨的实时电平（0..1） */
   getTrackLevel: (trackId: string) => number;
   /** v2.8.0：Master 推子 → 总输出音量 */
@@ -831,6 +837,24 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     [],
   );
 
+  /** v2.9.0：声像 —— 此前旋钮可转但音频路径没有 panner */
+  const setTrackPan = useCallback((trackId: string, pan: number): void => {
+    previewRef.current?.setTrackPan(trackId, pan);
+  }, []);
+
+  /** v2.9.0：FX 链 —— 此前 FX 编辑器齐全但音频路径完全不读 */
+  const setTrackFx = useCallback(
+    (trackId: string, slots: import("@collinx/core").FXSlot[]): void => {
+      previewRef.current?.setTrackFx(trackId, slots);
+    },
+    [],
+  );
+
+  /** v2.9.0：删轨后释放总线 */
+  const removeTrackAudio = useCallback((trackId: string): void => {
+    previewRef.current?.removeTrack(trackId);
+  }, []);
+
   /** v2.8.0：Master 推子 → 总输出音量 */
   const setMasterGain = useCallback((db: number): void => {
     previewRef.current?.setMasterGain(db);
@@ -846,6 +870,9 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     stop,
     getAudioLevel,
     setTrackGain,
+    setTrackPan,
+    setTrackFx,
+    removeTrackAudio,
     getTrackLevel,
     setMasterGain,
     seek,

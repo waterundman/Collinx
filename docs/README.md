@@ -23,6 +23,8 @@
 | [v2.8.0-song-feasibility.md](./v2.8.0-song-feasibility.md) | 作曲可行性 |
 | [v2.8.0-song-session.md](./v2.8.0-song-session.md) | 作曲会话记录 |
 | [v2.8.0-capability-diff.md](./v2.8.0-capability-diff.md) | **能力对比**：当前实现 vs 最初判断（九项能力逐条） |
+| [v2.9.0-iteration-plan.md](./v2.9.0-iteration-plan.md) | v2.9.0 迭代方案：混音闭环 |
+| [v2.9.0-mixer.md](./v2.9.0-mixer.md) | **v2.9.0 交付**：M/S/P + FX + 导出同源 + 删轨 + AI 读混音（含数值验收） |
 | [deep-research-report.md](./deep-research-report.md) | 深度调研 |
 
 ## 归档

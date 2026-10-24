@@ -133,6 +133,39 @@ export function registerBuiltinTools(
   });
 
   /**
+   * mixer.inspect —— 让 AI 看见混音台（v2.9.0）。
+   *
+   * 此前 `project.stats` 只有 notes/tracks/bars/bpm：混音状态（增益/声像/
+   * 静音/独奏/FX）完全在图外，模型对「把贝斯静音」「整体太亮」这类请求
+   * 只能空谈。只读、不产生 diff —— 与所有读工具一致。
+   */
+  registry.register({
+    name: "mixer.inspect",
+    description:
+      "读取混音台状态：每轨增益(dB)/声像/静音/独奏/实际是否静音/音色/FX 链，以及 master 增益。混音相关的建议或修改前应先调用它",
+    permission: "read_only",
+    parameters: [],
+    handler: async (_params, ctx) => {
+      const mixer = ctx?.readMixer?.();
+      if (!mixer) {
+        return {
+          status: "error",
+          requiresUserConfirmation: false,
+          auditRef: randomUUID(),
+          data: "缺少混音上下文（readMixer），无法读取混音台",
+        };
+      }
+      return {
+        status: "ok",
+        resultType: "data",
+        requiresUserConfirmation: false,
+        auditRef: randomUUID(),
+        data: mixer,
+      };
+    },
+  });
+
+  /**
    * transport.setTempo —— 让 AI 能改速度。
    *
    * 真实点击验收发现：用户说「把速度改成 90 BPM」，AI 答「我没有改 BPM 的工具，

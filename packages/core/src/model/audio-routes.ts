@@ -67,6 +67,59 @@ export interface MixerState {
   routingMatrix: Record<string, string[]>;
 }
 
+/**
+ * 只读混音快照（v2.9.0）——给 Agent 工具层读混音状态用。
+ *
+ * 为什么不直接把 `MixerState` 交给工具：工具是只读的，不需要（也不应该）
+ * 拿到可变的 FX 链引用；快照同时把「独奏是否生效」这种派生语义固定下来，
+ * 避免模型自己推算 `solo` 与 `mute` 的优先级。
+ */
+export interface MixerSnapshotTrack {
+  id: string;
+  name: string;
+  sourceTrackId: string;
+  gainDb: number;
+  pan: number;
+  mute: boolean;
+  solo: boolean;
+  /** 实际是否静音（已计入独奏并集与 mute 优先） */
+  effectiveMute: boolean;
+  instrument?: string;
+  fx: { type: string; enabled: boolean }[];
+}
+
+export interface MixerSnapshot {
+  anySolo: boolean;
+  tracks: MixerSnapshotTrack[];
+  master: { gainDb: number };
+}
+
+function parseDb(raw: string): number {
+  const n = Number.parseFloat(raw);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+/** 从可变混音状态生成只读快照。 */
+export function toMixerSnapshot(mixer: MixerState): MixerSnapshot {
+  const anySolo = mixer.tracks.some((t) => t.solo);
+  return {
+    anySolo,
+    tracks: mixer.tracks.map((t) => ({
+      id: t.id,
+      name: t.name,
+      sourceTrackId: t.sourceTrackId,
+      gainDb: parseDb(t.gainDb),
+      pan: Number.isNaN(Number.parseFloat(t.pan)) ? 0 : Number.parseFloat(t.pan),
+      mute: t.mute,
+      solo: t.solo,
+      effectiveMute: t.mute || (anySolo && !t.solo),
+      instrument: t.instrument,
+      fx: t.fxChain.slots.map((s) => ({ type: s.type, enabled: s.enabled })),
+    })),
+    master: { gainDb: parseDb(mixer.masterTrack.gainDb) },
+  };
+}
+
 export function createTrack(
   name: string,
   sourceId: string,

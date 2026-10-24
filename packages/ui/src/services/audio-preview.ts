@@ -21,7 +21,9 @@
 
 import { getInstrument, notePeakGain } from "./instruments";
 import { createMasterChain } from "./master-chain";
+import { MixerGraph, DEFAULT_BUS_KEY, peakOf } from "./mixer-graph";
 import { dbToLinear } from "./gain";
+import type { FXSlot, MixerState } from "@collinx/core";
 
 /** MIDI 音高 → 频率（A4 = 69 = 440Hz） */
 export function midiToFrequency(pitchMidi: number): number {
@@ -51,39 +53,9 @@ export interface AudioPreviewOptions {
   release?: number;
 }
 
-/**
- * 读一个 AnalyserNode 的时域峰值（0..1）。
- *
- * 用峰值而不是 RMS：削波是峰值造成的。RMS 会让已经爆掉的信号
- * 看起来还有余量，混音时容易误判。
- */
-function readPeak(analyser: AnalyserNode): number {
-  const buf = new Float32Array(analyser.fftSize);
-  try {
-    analyser.getFloatTimeDomainData(buf as Float32Array<ArrayBuffer>);
-  } catch {
-    return 0;
-  }
-  let peak = 0;
-  for (let i = 0; i < buf.length; i++) {
-    const v = Math.abs(buf[i]);
-    if (v > peak) peak = v;
-  }
-  return Math.min(1, peak);
-}
-
 interface Voice {
   oscillators: OscillatorNode[];
   gain: GainNode;
-}
-
-/** 单条轨道的总线：入口增益（推子）→ 电平分析 → master */
-interface TrackBus {
-  /** 该轨所有 voice 汇入这里；gain 由混音台推子（gainDb）控制 */
-  entry: GainNode;
-  analyser: AnalyserNode;
-  /** 当前线性增益对应的 dB，用于避免重复设置 */
-  gainDb: number;
 }
 
 export class AudioPreview {
@@ -91,18 +63,13 @@ export class AudioPreview {
   private master: GainNode | null = null;
   private voices = new Map<string, Voice>();
   /**
-   * v2.8.0 重构：**轨道级总线**。
+   * 轨道级混音图（v2.9.0 由 `MixerGraph` 接管）。
    *
-   * 重构前所有音符直接连 master —— 于是混音台的推子只改了 `gainDb` 数字，
-   * 声音完全不受影响（实测：gainDb 从未出现在音频路径里）。
-   * 推子转了、电平没动，混音形同虚设。
-   *
-   * 现在每条轨道有自己的 GainNode（电平由推子控制）与 AnalyserNode
-   * （独立电平显示），voice 先连轨道总线再汇入 master。
+   * 演进史：v2.8.0 之前所有音符直连 master（推子只是数字）；
+   * v2.8.0 加了轨道总线（推子生效）；v2.9.0 把总线升级成
+   * 「FX → 推子 → 声像 → 电平」并抽成与导出共用的 MixerGraph。
    */
-  private trackBuses = new Map<string, TrackBus>();
-  /** trackId 缺失时的兜底总线键 —— 不能让没有 trackId 的音符失去音量控制 */
-  private static readonly DEFAULT_BUS = "__default__";
+  private mixerGraph: MixerGraph | null = null;
   /**
    * v2.8.0：电平分析器（接在 master 之后、destination 之前）。
    * 混音台此前没有电平显示 —— 用户拖推子时无法判断是否削波，
@@ -153,6 +120,10 @@ export class AudioPreview {
         //    （此前是压缩前的电平，用户看到的峰值会比导出实际更"炸"）
         createMasterChain(this.ctx, this.master, this.analyser);
         this.analyser.connect(this.ctx.destination);
+
+        // v2.9.0：轨道总线升级为混音图（FX → 推子 → 声像 → 电平）。
+        // 与 WAV 导出共用同一个类 —— 否则「听到的」和「导出的」又是两个声音。
+        this.mixerGraph = new MixerGraph(this.ctx, this.master, { withAnalysers: true });
       }
       if (this.ctx.state === "suspended") await this.ctx.resume();
       return this.ctx.state === "running";
@@ -161,38 +132,39 @@ export class AudioPreview {
     }
   }
 
-  /** 取（必要时创建）轨道总线 */
-  private ensureTrackBus(trackId?: string): TrackBus | null {
-    if (!this.ctx || !this.master) return null;
-    const key = trackId && trackId.length > 0 ? trackId : AudioPreview.DEFAULT_BUS;
-
-    const existing = this.trackBuses.get(key);
-    if (existing) return existing;
-
-    const entry = this.ctx.createGain();
-    const analyser = this.ctx.createAnalyser();
-    analyser.fftSize = 256;
-
-    entry.connect(analyser);
-    analyser.connect(this.master);
-
-    const bus: TrackBus = { entry, analyser, gainDb: 0 };
-    this.trackBuses.set(key, bus);
-    return bus;
+  /** 归一化总线键：没有 trackId 的音符也要有自己的总线 */
+  private static busKey(trackId?: string): string {
+    return trackId && trackId.length > 0 ? trackId : DEFAULT_BUS_KEY;
   }
 
   /**
-   * 设置某轨道的音量（dB）。混音台推子改  后必须调它，
-   * 否则推子只是个数字 —— 这正是重构前的问题。
+   * 设置某轨道的音量（dB）。混音台推子改了必须调它，
+   * 否则推子只是个数字 —— 这正是 v2.8.0 之前的问题。
+   *
+   * `db = -Infinity`（静音）交给 `dbToLinear` 得到 0，是**真静音**。
    */
   setTrackGain(trackId: string, db: number): void {
-    if (!this.ctx) return;
-    const bus = this.ensureTrackBus(trackId);
-    if (!bus) return;
-    const linear = dbToLinear(db);
-    // 用 setTargetAtTime 平滑过渡，避免拖动推子时产生 zipper noise（拉链噪声）
-    bus.entry.gain.setTargetAtTime(linear, this.ctx.currentTime, 0.01);
-    bus.gainDb = db;
+    this.mixerGraph?.setGain(AudioPreview.busKey(trackId), db);
+  }
+
+  /** 设置某轨道的声像（-1 左 .. 1 右）。此前旋钮可转但音频路径没有 panner。 */
+  setTrackPan(trackId: string, pan: number): void {
+    this.mixerGraph?.setPan(AudioPreview.busKey(trackId), pan);
+  }
+
+  /** 设置某轨道的 FX 链（结构变化才重建，只改参数不重建）。 */
+  setTrackFx(trackId: string, slots: FXSlot[]): void {
+    this.mixerGraph?.setFx(AudioPreview.busKey(trackId), slots);
+  }
+
+  /** 一次应用整份混音状态（静音/独奏/声像/FX） */
+  applyMixer(mixer: MixerState): void {
+    this.mixerGraph?.apply(mixer);
+  }
+
+  /** 删轨后释放该轨总线，避免死节点继续挂在 master 上 */
+  removeTrack(trackId: string): void {
+    this.mixerGraph?.removeBus(AudioPreview.busKey(trackId));
   }
 
   /** 设置总输出音量（dB）。Mixer 的 Master 推子必须走这里。 */
@@ -203,10 +175,7 @@ export class AudioPreview {
 
   /** 某轨道的当前电平（0..1 峰值） */
   getTrackLevel(trackId: string): number {
-    const key = trackId && trackId.length > 0 ? trackId : AudioPreview.DEFAULT_BUS;
-    const bus = this.trackBuses.get(key);
-    if (!bus) return 0;
-    return readPeak(bus.analyser);
+    return this.mixerGraph?.getLevel(AudioPreview.busKey(trackId)) ?? 0;
   }
 
   /**
@@ -246,10 +215,12 @@ export class AudioPreview {
       Math.max(peak * spec.sustain, 0.0002),
       t0 + spec.attack + 0.15,
     );
-    // 连到**轨道总线**而不是 master —— 这样推子才能影响这条轨的声音
-    const bus = this.ensureTrackBus(trackId);
-    if (bus) gain.connect(bus.entry);
-    else gain.connect(this.master);
+    // 连到**轨道总线**而不是 master —— 这样推子/声像/FX 才能影响这条轨的声音
+    if (this.mixerGraph) {
+      gain.connect(this.mixerGraph.bus(AudioPreview.busKey(trackId)).sum);
+    } else {
+      gain.connect(this.master);
+    }
 
     const freq = midiToFrequency(pitchMidi);
     const oscs: OscillatorNode[] = [];
@@ -302,7 +273,7 @@ export class AudioPreview {
    */
   getLevel(): number {
     if (!this.analyser) return 0;
-    return readPeak(this.analyser);
+    return peakOf(this.analyser);
   }
 
   /** 停止全部发声（stop / 切歌 / 卸载时调用） */
@@ -313,11 +284,9 @@ export class AudioPreview {
   /** 关闭并释放 AudioContext */
   async dispose(): Promise<void> {
     this.allNotesOff();
-    // 断开并丢弃所有轨道总线，避免 AudioContext 关闭后仍持有节点引用
-    for (const bus of this.trackBuses.values()) {
-      try { bus.entry.disconnect(); bus.analyser.disconnect(); } catch { /* ignore */ }
-    }
-    this.trackBuses.clear();
+    // 断开并丢弃所有混音总线，避免 AudioContext 关闭后仍持有节点引用
+    this.mixerGraph?.dispose();
+    this.mixerGraph = null;
     if (this.ctx) {
       try {
         await this.ctx.close();

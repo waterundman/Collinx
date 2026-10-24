@@ -49,6 +49,14 @@ export type ReadonlyGraphView = Pick<
  */
 export interface ToolContext {
   readGraph?: () => ReadonlyGraphView;
+  /**
+   * v2.9.0：只读混音快照。
+   *
+   * 混音状态（推子/静音/独奏/声像/FX）不在 ProjectGraph 里，只存在于
+   * UI 的 `MixerState`。此前工具层拿不到它，AI 对混音完全盲——
+   * 用户说「把贝斯静音」，模型只能凭猜测回答。
+   */
+  readMixer?: () => import("../model/audio-routes").MixerSnapshot;
 }
 
 export interface ToolDefinition {

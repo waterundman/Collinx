@@ -1,6 +1,6 @@
 # Collinx 架构（现行）
 
-> 更新：2026-10-21 ｜ 本文是**唯一权威**的架构描述。
+> 更新：2026-10-24（v2.9.0）｜ 本文是**唯一权威**的架构描述。
 > `docs/v2.*` 是历史版本存档，与本文冲突时以本文为准；存档里的过期结论见
 > `docs/architecture-review.md`。
 > 每条结论都注明核对位置；任何没能核实的都会显式标「未核实」，不写成事实。
@@ -76,9 +76,9 @@ rejectedDiffs                          DiffEngine.apply(diff, graph)
 
 **图模型规模**（`core/src/schema/graph-schema.ts:3,21`）：13 种节点类型、10 种边类型。
 
-**实测缺口**：实际工程里几乎没有边 —— 只有 diff 里的 `add_edge` op
-（`diff-engine.ts:257`）和一条 agent 决策证据边（`project-store.ts:1167`）会建边。
-所以 Graph 标签页基本是「孤立节点散点图」，不表达结构。这是设计问题，不是渲染 bug。
+**视图层派生边**（v2.8.0）：真实图里仍几乎没有边（只有 diff 的 `add_edge` 与 agent 证据边），
+因此 `App.tsx` 在**视图层**派生「同轨音列」边（同一 `trackId` 的音符按 bar/beat 顺序相连），
+Graph 页从散点变成三条清晰的音列线。派生逻辑在 UI，不污染图模型。
 
 ---
 
@@ -96,9 +96,10 @@ ScheduledEvent[]（atSeconds = TempoMap 绝对秒）
    └──────────────▶ ② AudioPreview（内部合成器，AudioContext 时钟域）
                         │ noteOn(pitch, vel, delaySec, 音色, trackId)
                         ▼
-                  轨道总线（每轨一个 GainNode = 推子，一个 AnalyserNode = 电平）
+                  MixerGraph（ui/src/services/mixer-graph.ts，v2.9.0）
+                  每轨：sum → FX 链 → fader(推子/静音) → panner → analyser
                         ▼
-                  master GainNode → master AnalyserNode → destination
+                  master GainNode → 母带链 → master AnalyserNode → destination
 ```
 
 | 事实 | 位置 |
@@ -110,15 +111,19 @@ ScheduledEvent[]（atSeconds = TempoMap 绝对秒）
 | 5 种音色：`lead` / `bass` / `pad` / `keys` / `pluck`，数据驱动（振荡器叠加 + ADSR + sustain + level） | `services/instruments.ts:52` |
 | 音色按 `trackId` **名称**自动映射（`bass`→bass、`chord/harmony/pad`→pad…），未知兜底 `lead` | `instruments.ts:116` |
 | 播放与导出读同一份音色 spec（否则「听到的」≠「导出的」） | `audio-preview.ts:232`、`wav-export.ts:182` |
+| v2.9.0：**混音图是播放与导出的共用实现**（`MixerGraph`），推子/静音/独奏/声像/FX 六类全部进链路 | `services/mixer-graph.ts`、`services/fx-chain.ts` |
+| 静音 = fader 0（不是断开节点）；独奏是并集、mute 优先 | `services/mix-resolver.ts` |
+| FX 结构签名不变时只改参数不重建；重建必须先断开直通支路 | `services/fx-chain.ts` |
 | 节拍器 / count-in / 量化 / MIDI 录制 | `useTransport.ts`、`midi-quantize.ts`、`recorded-take.ts` |
 
 ### 3.2 离线渲染与导出
 
 ```
-ProjectGraph → notes → RenderableNote[]（带 instrumentId）
-   │ renderNotesToWav(notes)          OfflineAudioContext，2ch / 44.1kHz
+ProjectGraph → notes → RenderableNote[]（带 instrumentId + trackId）
+   │ renderNotesToWav(notes, { mixer })   OfflineAudioContext，2ch / 44.1kHz
+   │   └─ 同一份 MixerGraph（instantParams=true：写静态终值，静音为真 0）
    ▼
-Float32 采样 → encodeWav() → 16-bit PCM WAV → Blob 下载
+Float32 采样 → 母带链 → encodeWav() → 16-bit PCM WAV → Blob 下载
 ```
 
 | 事实 | 位置 |
@@ -126,6 +131,7 @@ Float32 采样 → encodeWav() → 16-bit PCM WAV → Blob 下载
 | 用离线渲染而不是录音：导出必须样本级确定 | `wav-export.ts:146-154` |
 | Int16 正负区间不对称 + 显式四舍五入（否则满幅反相爆音） | `wav-export.ts:78-88` |
 | 导出入口在 Score 面板：WAV / MIDI / PDF / MusicXML + 工程存档 `.agentmusic` | `App.tsx:1366-1369`、`ScorePanel.tsx:154` |
+| v2.9.0：导出带混音（此前混完再导出 = 没混） | `wav-export.ts` `RenderOptions.mixer` |
 
 ---
 
@@ -149,12 +155,12 @@ pendingDiffs → 审批 → DiffEngine.apply → 图
 
 | 事实 | 位置 |
 |---|---|
-| 工具总数 **17**：9 个 `proposal_only` + 8 个 `read_only` | `packages/agent/src/tools.ts` |
+| 工具总数 **18**：9 个 `proposal_only` + 9 个 `read_only` | `packages/agent/src/tools.ts` |
 | system prompt **不含**工具清单，只声明「本次 tools 就是全部能力」 | `services/llm/agent-loop.ts:110` |
-| 只读工具靠 `ToolContext.readGraph()` 读图，不写图 | `core/src/agent/tool-registry.ts:47` |
+| 只读工具靠 `ToolContext.readGraph()` 读图 / `readMixer()` 读混音，不写状态 | `core/src/agent/tool-registry.ts` |
 | 工具结果回灌模型时标注「提案已入队，用户确认后才写入」 | `agent-loop.ts:147` |
 | 提案从工具结果到队列：`ToolResult` 只类型化单数 `diff`，部分工具挂 `diffs`（复数，未类型化）；`runAgentTool` 两者都取 | `ProjectProvider.tsx:862-871` |
-| 覆盖：作曲 2 · 编排 1 · 配器 1 · 混音 2 · 记谱 3 · 教学 3 · 品味 2 · 工程 2 · 规划 1 | 同上 |
+| 覆盖：作曲 2 · 编排 1 · 配器 1 · 混音 3（含 `mixer.inspect`） · 记谱 3 · 教学 3 · 品味 2 · 工程 2 · 规划 1 | 同上 |
 
 **已知行为缺陷（不是工具缺陷）**：对「给个建议」这类措辞，模型有时只讨论不调用工具
 （`docs/v2.8.0-song-session.md:45-52` 实测）。属模型行为选择，可被更明确的指令绕过。
@@ -198,19 +204,22 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 | 钢琴卷编辑、双击加音符、量化、MIDI 录制 | ✅ | `PianoRollView.tsx`、`usePianoRollInteraction.ts`、`recorded-take.ts` |
 | 播放**真的出声**（内部合成器，5 音色） | ✅ | `audio-preview.ts`；实测「播放 6s → AudioContext 1 / 振荡器 92 / 4 种波形」（`v2.8.0-full-song.md:33`） |
 | 节拍器 / count-in / loop / seek | ✅ | `useTransport.ts` |
-| 每轨推子**真的改变声音** + 实时电平表 | ✅ | `audio-preview.ts:183`、`getTrackLevel` |
-| 加轨道（不限 3 条） | ✅ | `ADD_MIXER_TRACK`（`project-store.ts:1466`）；配器后实测 5 轨 |
-| 删轨道 | ❌ | `MixerConsole` 声明了 `onRemoveTrack`，`App.tsx:1335` 未传入 |
-| 手动选音色 | ❌ | 按 `trackId` 名称自动映射，设置页无音色项 |
-| FX 链**影响声音** | ❌ | FX 只是 `MixerState` 里的数据；音频路径无 `createBiquadFilter` / `createConvolver` / `createDynamicsCompressor`（全仓 grep 为 0） |
+| 每轨推子**真的改变声音** + 实时电平表 | ✅ | `mixer-graph.ts` `setGain`、`getLevel` |
+| 静音 / 独奏 / 声像**真的改变声音** | ✅ | `mix-resolver.ts` 判定 → `MixerGraph`；实测静音 0、全左 R=0、居中 L=R（`v2.9.0-mixer.md`） |
+| FX 链**影响声音**（EQ/压缩/混响/延迟/饱和/限幅） | ✅ | `services/fx-chain.ts`；实测 EQ −12dB@100Hz 在 50Hz 测到 −11.1dB |
+| 加轨道（不限 3 条） | ✅ | `ADD_MIXER_TRACK`（`project-store.ts`）；配器后实测 5 轨 |
+| 删轨道（级联删音符 + undo） | ✅ | `REMOVE_MIXER_TRACK`（`project-store.ts`）、`MixerConsole` × 按钮、App 传 `onRemoveTrack` |
+| 手动选音色 | ✅ | 混音台每轨下拉 → `MixerTrack.instrument`（随 `.agentmusic` 持久化） |
 | 导出 WAV / MIDI / MusicXML / PDF / `.agentmusic` | ✅ | `App.tsx:780,830`、`ScorePanel`；实测 121.5s WAV（`v2.8.0-full-song.md:13`） |
+| 导出**带混音**（推子/静音/独奏/声像/FX） | ✅ | `renderNotesToWav(notes, { mixer })`；静音轨导出能量 = 0（`v2.9.0-mixer.md`） |
 | 自动保存 + 损坏快照降级 | ✅ | `services/autosave.ts`、`persistence.ts` |
-| AI 读统计 / 改速度 / 生成动机 / 和声 / 配器 / 混音建议 / 记谱 / 讲解 | ✅ | 17 工具，见 §四 |
+| AI 读统计 / 改速度 / 生成动机 / 和声 / 配器 / 混音建议 / 记谱 / 讲解 / **读混音台** | ✅ | 18 工具，见 §四 |
 | AI 对「建议」措辞偶尔只讨论不执行 | ⚠️ | 模型行为，见 §四 末 |
-| Graph 视图表达工程结构 | ❌ | 无边、力导向退化为散点（§二 末） |
+| Graph 视图表达工程结构 | ✅ | 视图层派生「同轨音列」边（§二 末） |
 | VST3 / CLAP 插件、SF2 / SFZ 采样 | ❌ | C++ 侧有宿主实现，UI 通路未接；`packages/ui` 无 SF2 加载器 |
 | 桌面原生引擎发声 | ❌ | 见 §五 |
-| 混响 / 压缩 / 母带处理 | ❌ | 无实现 |
+| 母带压缩 / 限幅 | ✅ | `services/master-chain.ts`（播放与导出共用） |
+| 和弦轨**发声** / AI 读和弦 | ❌ | ChordEvent 只投影成格子；不进播放、不进工具（v3.0.0 候选） |
 
 ---
 
@@ -225,6 +234,9 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 | 5 | 推子必须落在音频路径上（轨道总线），不能只改数字 | 混音台形同虚设（v2.8.0 前真实存在） |
 | 6 | system prompt 不得硬编码工具清单 | 与 tools schema 成为双真相源，AI 会否认自己有的工具 |
 | 7 | 判死代码看「规格里有没有它」，不看「当前有没有 import」 | v2.7.0 曾误删 9 个 Stage 交付组件 |
+| 8 | 播放与导出必须共用 `MixerGraph`（不许另写一套混音连接） | 混完导出 = 没混（v2.9.0 前真实存在） |
+| 9 | 重建 FX 链前必须先断开直通支路（`input.disconnect()`） | 干湿两路并联，信号叠加 +6dB（实测 4kHz 翻倍） |
+| 10 | 静音必须是**真 0**（`setValueAtTime(0)`），不能用 `setTargetAtTime` 逼近 0 | 指数逼近永远差一点，导出漏出 −52dBFS 底噪 |
 
 ---
 
@@ -232,19 +244,21 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 
 ```bash
 # 分层与规模
-find packages/core/src -name "*.test.ts" | wc -l      # 51
-find packages/agent/src -name "*.test.ts" | wc -l     # 19
-find packages/ui/src -name "*.test.ts*" | wc -l       # 74
+find packages/core/src -name "*.test.ts" | wc -l      # 52
+find packages/agent/src -name "*.test.ts" | wc -l     # 20
+find packages/ui/src -name "*.test.ts*" | wc -l       # 82
 
 # 工具清单与权限
 grep -n 'name: "\|permission:' packages/agent/src/tools.ts
 
 # 音频链路
-grep -rn "AudioPreview\|buildPlaybackEvents\|renderNotesToWav" packages/ui/src --include=*.ts* | grep -v __tests__
+grep -rn "AudioPreview\|MixerGraph\|buildPlaybackEvents\|renderNotesToWav" packages/ui/src --include=*.ts* | grep -v __tests__
 
 # 未接线的证据（应当只有声明、没有调用方）
 grep -rn "startPlayback" packages/ui/src
-grep -rn "createBiquadFilter\|createConvolver" packages/ui/src
+
+# 混音数值验收（真浏览器 + OfflineAudioContext）
+node .audit/scripts/mix-acceptance.mjs            # 输出 .audit/acceptance/mix/evidence.json
 
 # 全量校验
 pnpm typecheck && pnpm test

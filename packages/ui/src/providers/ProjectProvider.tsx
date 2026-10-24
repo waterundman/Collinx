@@ -32,6 +32,7 @@ import {
   mixerToDiff,
   type NewToolCallRecord,
   type HarmonyEntry,
+  toMixerSnapshot,
 } from "@collinx/core";
 import type { AgentToolDefinitionLike, AgentToolOutcome } from "../services/llm";
 import {
@@ -616,6 +617,9 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       addMixerTrack: (name: string, sourceId: string): void => {
         dispatch({ type: "ADD_MIXER_TRACK", name, sourceId } satisfies ProjectStoreAction);
       },
+      removeMixerTrack: (trackId: string): void => {
+        dispatch({ type: "REMOVE_MIXER_TRACK", trackId } satisfies ProjectStoreAction);
+      },
       // Stage 2: Mixing Agent closed loop. Generates a mix proposal
       // (gainDb/pan/fxChain for every track + master) via the real
       // MixingAgent and enqueues it into pendingDiffs, where the Agent Panel
@@ -857,6 +861,9 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
               // 用 stateRef 而非闭包里的 state —— 工具可能在异步回调里执行，
               // 闭包捕获的 state 会过期，统计结果就不准了。
               readGraph: () => stateRef.current.graph,
+              // v2.9.0：混音状态不在图里（见 MixerState），单独注入只读快照，
+              // 让 mixer.inspect 能回答「哪条轨静音了/现在多响」。
+              readMixer: () => toMixerSnapshot(stateRef.current.mixer),
             },
           );
           // 工具约定把 DiffEnvelope[] 挂在 ToolResult.diffs 上（ToolResult 只

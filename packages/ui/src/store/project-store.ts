@@ -146,6 +146,13 @@ export type ProjectStoreAction =
   | { type: "REVERT_MIXER_TO"; mixer: MixerState }
   | { type: "ADD_MIXER_TRACK"; name: string; sourceId: string }
   /**
+   * v2.9.0：删除混音轨。
+   *
+   * 级联：该轨的音符（NoteSpan.data.trackId 命中 sourceTrackId 或混音条 id）
+   * 一并从图里删除；master 与「最后一条轨」受保护。整步可 undo。
+   */
+  | { type: "REMOVE_MIXER_TRACK"; trackId: string }
+  /**
    * Stage 2: the provider's taste action creators mutate the shared TasteStore
    * before dispatching, so the reducer only advances the re-render counter.
    * `beforeGenome` carries the pre-edit genome captured by the action creator
@@ -616,6 +623,8 @@ export interface ProjectStoreActions {
   applyMixerDiff: (diff: DiffEnvelope) => void;
   revertMixerTo: (prevMixer: MixerState) => void;
   addMixerTrack: (name: string, sourceId: string) => void;
+  /** v2.9.0：删除混音轨（级联删该轨音符，可 undo） */
+  removeMixerTrack: (trackId: string) => void;
   /**
    * Stage 2: generate a Mixing Agent mix proposal and enqueue it into
    * pendingDiffs.
@@ -1499,6 +1508,40 @@ export function createProjectReducer(
             ...state.mixer,
             tracks: [...state.mixer.tracks, track],
           },
+        });
+      }
+
+      case "REMOVE_MIXER_TRACK": {
+        // master 不可删；至少保留一条轨（否则混音台空掉且无法再选中任何轨）
+        if (action.trackId === state.mixer.masterTrack.id) return state;
+        const target = state.mixer.tracks.find((t) => t.id === action.trackId);
+        if (!target) return state;
+        if (state.mixer.tracks.length <= 1) return state;
+
+        // 级联删该轨音符：音频侧按 note.trackId 分组，混音侧按 sourceTrackId，
+        // 两个键都可能出现（旧工程 / 直接写条 id 的数据），故都匹配。
+        const graph = state.graph.snapshot();
+        const keys = new Set(
+          [target.sourceTrackId, target.id].filter((k): k is string => typeof k === "string" && k.length > 0),
+        );
+        for (const node of graph.getNodesByType("NoteSpan")) {
+          const trackId = (node.data as { trackId?: unknown }).trackId;
+          if (typeof trackId === "string" && keys.has(trackId)) {
+            graph.removeNode(node.id);
+          }
+        }
+
+        const tracks = state.mixer.tracks.filter((t) => t.id !== action.trackId);
+        const routingMatrix = Object.fromEntries(
+          Object.entries(state.mixer.routingMatrix)
+            .filter(([key]) => key !== target.id)
+            .map(([key, targets]) => [key, targets.filter((id) => id !== target.id)]),
+        );
+
+        return withUndo(state, {
+          graph,
+          notes: deriveNotes(graph),
+          mixer: { ...state.mixer, tracks, routingMatrix },
         });
       }
 

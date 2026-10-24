@@ -1328,7 +1328,9 @@
     "sourceId": "Source Track ID",
     "sourceIdPlaceholder": "e.g. melody",
     "suggestFxChain": "AI Suggest FX Chain",
-    "suggestFxChainHint": "Ask the Mixing Agent to propose an FX chain / mix setting. The proposal will appear in the Agent Panel for review."
+    "suggestFxChainHint": "Ask the Mixing Agent to propose an FX chain / mix setting. The proposal will appear in the Agent Panel for review.",
+    "removeTrack": "Remove Track",
+    "removeTrackHint": "Delete this track and all its notes (undoable)"
   },
   "orchestrator": {
     "title": "Orchestrator",
