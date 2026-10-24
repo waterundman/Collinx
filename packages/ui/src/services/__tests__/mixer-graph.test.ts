@@ -201,3 +201,104 @@ describe("默认总线与释放", () => {
     expect(graph.bus("melody").fader.gain.value).toBe(1);
   });
 });
+
+// ── v2.9.1：送出发送（Sends）真的接到音频 ─────────────────────────────────
+describe("MixerGraph.setSends —— 送出", () => {
+  const withSend = (over: Partial<MixerTrack> = {}) =>
+    mixer([
+      track({
+        sends: [{ targetBusId: "reverb", level: "0.5", preFader: false }],
+        ...over,
+      }),
+    ]);
+
+  it("创建送增益，推子后接目标总线", () => {
+    const { graph, detailedConnections } = build(withSend());
+    const bus = graph.bus("melody");
+    const send = bus.sends.get("reverb");
+    expect(send).toBeTruthy();
+    expect(send!.gain.gain.value).toBeCloseTo(0.5, 6);
+
+    const fromFader = detailedConnections.filter(
+      (c) => c.fromNode === (bus.fader as unknown),
+    );
+    expect(fromFader.some((c) => c.toNode === (send!.gain as unknown))).toBe(true);
+    expect(
+      detailedConnections.some(
+        (c) => c.fromNode === (send!.gain as unknown) && c.toNode === (graph.bus("reverb").sum as unknown),
+      ),
+    ).toBe(true);
+  });
+
+  it("重复 apply 不会重复接线（并联会让送出翻倍）", () => {
+    const state = withSend();
+    const { graph, detailedConnections } = build(state);
+    const bus = graph.bus("melody");
+    const send = bus.sends.get("reverb")!;
+
+    graph.apply(state);
+    graph.apply(state);
+
+    const links = detailedConnections.filter(
+      (c) => c.fromNode === (bus.fader as unknown) && c.toNode === (send.gain as unknown),
+    );
+    expect(links).toHaveLength(1);
+  });
+
+  it("移除送出后节点与连接都清掉", () => {
+    const { graph } = build(withSend());
+    const bus = graph.bus("melody");
+    expect(bus.sends.size).toBe(1);
+
+    graph.apply(mixer([track()]));
+    expect(bus.sends.size).toBe(0);
+  });
+
+  it("preFader 从 sum 取信号（静音不切断送出）", () => {
+    const { graph, detailedConnections } = build(
+      mixer([
+        track({ sends: [{ targetBusId: "reverb", level: "1", preFader: true }] }),
+      ]),
+    );
+    const bus = graph.bus("melody");
+    const send = bus.sends.get("reverb")!;
+    expect(
+      detailedConnections.some(
+        (c) => c.fromNode === (bus.sum as unknown) && c.toNode === (send.gain as unknown),
+      ),
+    ).toBe(true);
+  });
+
+  it("自送与 A↔B 环路被丢弃", () => {
+    const { graph } = build(
+      mixer([
+        track({ sends: [{ targetBusId: "melody", level: "1", preFader: false }] }),
+        track({
+          id: "b",
+          sourceTrackId: "bass",
+          sends: [{ targetBusId: "melody", level: "1", preFader: false }],
+        }),
+      ]),
+    );
+    expect(graph.bus("melody").sends.size).toBe(0);
+    expect(graph.bus("bass").sends.size).toBe(1);
+
+    // 反向再设：melody → bass 应被拒绝（bass → melody 已存在）
+    graph.apply(
+      mixer([
+        track({ sends: [{ targetBusId: "bass", level: "1", preFader: false }] }),
+        track({
+          id: "b",
+          sourceTrackId: "bass",
+          sends: [{ targetBusId: "melody", level: "1", preFader: false }],
+        }),
+      ]),
+    );
+    expect(graph.bus("melody").sends.size).toBe(0);
+  });
+
+  it("结构签名包含送出（导出/播放同构的证据）", () => {
+    const { graph } = build(withSend());
+    expect(graph.signature()).toContain("reverb=0.5");
+  });
+});

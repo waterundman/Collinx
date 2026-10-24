@@ -50,6 +50,7 @@ import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
 import { convertTakeToNotes } from "./services/recorded-take";
 import { renderNotesToWav } from "./services/wav-export";
 import { applyMixerToAudio } from "./services/mix-resolver";
+import { renderStems, stemFileName } from "./services/stem-export";
 import { resolveInstrument } from "./services/instruments";
 import { trackByBusKey } from "./services/mix-resolver";
 import type {
@@ -933,29 +934,34 @@ export function App() {
    * 用 OfflineAudioContext 离线渲染（样本级确定），不用实时录音 ——
    * 后者受设备缓冲与调度抖动影响，同一工程两次导出长度都不同。
    */
+  /** 音符 → 离线渲染输入（WAV 与分轨共用，避免两处换算逻辑分叉） */
+  const buildRenderableNotes = useCallback(
+    () =>
+      notes.map((n) => {
+        const startSec = tempoMap.timeAt(n.bar, n.beat);
+        // durQn 是四分音符数；用当前位置的 BPM 换算秒数。
+        // 不直接 timeAt(bar, beat + durQn) —— 那个 API 的 beat 是小节内
+        // 1-based 位置，跨小节时语义不成立。
+        const bpm = tempoMap.bpmAt(n.bar, n.beat);
+        const durSec = Math.max(0.05, (n.durQn * 60) / Math.max(1, bpm));
+        return {
+          pitchMidi: n.pitchMidi,
+          velocity: n.velocity,
+          startSec,
+          durSec,
+          // 与播放侧同一个解析器 —— 导出的音色必须与听到的一致
+          instrumentId: instrumentOfTrack(n.trackId),
+          // v2.9.0：导出也要走混音总线（推子/静音/独奏/声像/FX）
+          trackId: n.trackId,
+        };
+      }),
+    [notes, tempoMap, instrumentOfTrack],
+  );
+
   const handleExportWAV = useCallback(() => {
     void (async () => {
       try {
-        const renderable = notes.map((n) => {
-          const startSec = tempoMap.timeAt(n.bar, n.beat);
-          // durQn 是四分音符数；用当前位置的 BPM 换算秒数。
-          // 不直接 timeAt(bar, beat + durQn) —— 那个 API 的 beat 是小节内
-          // 1-based 位置，跨小节时语义不成立。
-          const bpm = tempoMap.bpmAt(n.bar, n.beat);
-          const durSec = Math.max(0.05, (n.durQn * 60) / Math.max(1, bpm));
-          return {
-            pitchMidi: n.pitchMidi,
-            velocity: n.velocity,
-            startSec,
-            durSec,
-            // 与播放侧同一个解析器 —— 导出的音色必须与听到的一致
-            instrumentId: instrumentOfTrack(n.trackId),
-            // v2.9.0：导出也要走混音总线（推子/静音/独奏/声像/FX）
-            trackId: n.trackId,
-          };
-        });
-
-        const wav = await renderNotesToWav(renderable, { mixer });
+        const wav = await renderNotesToWav(buildRenderableNotes(), { mixer });
         const blob = new Blob([wav as unknown as BlobPart], { type: "audio/wav" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -968,7 +974,31 @@ export function App() {
         console.error("导出 WAV 失败", err);
       }
     })();
-  }, [notes, tempoMap, instrumentOfTrack, mixer]);
+  }, [buildRenderableNotes, mixer]);
+
+  /**
+   * v2.9.1：分轨导出 —— 每轨一个 WAV，走与整曲相同的 MixerGraph
+   * （推子/声像/FX/送出都在各自轨道里生效）。
+   */
+  const handleExportStems = useCallback(() => {
+    void (async () => {
+      try {
+        const stems = await renderStems(buildRenderableNotes(), mixer);
+        for (const stem of stems) {
+          const blob = new Blob([stem.wav as unknown as BlobPart], { type: "audio/wav" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = stemFileName(stem.name, stem.trackId);
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("分轨导出失败", err);
+      }
+    })();
+  }, [buildRenderableNotes, mixer]);
 
   /**
    * 混音台 → 音频图（v2.8.0 推子；v2.9.0 扩到静音/独奏/声像/FX）。
@@ -1470,6 +1500,7 @@ export function App() {
             onExportMIDI={handleExportMIDI}
             onExportPDF={handleExportPDF}
             onExportWAV={handleExportWAV}
+            onExportStems={handleExportStems}
           />
         </div>
       )}

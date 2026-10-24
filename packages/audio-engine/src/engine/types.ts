@@ -67,8 +67,18 @@ export interface OscillatorLayer {
 /** 音色来源：纯合成，或采样（SF2）。 */
 export type InstrumentSource = "synth" | "soundfont";
 
-/** 音色定义 —— **数据驱动**，新增音色只加一条，不改引擎代码。 */
-export interface InstrumentSpec {
+/**
+ * 引擎侧音色契约（v2.9.1 由 `InstrumentSpec` 改名）。
+ *
+ * 为什么改名：`packages/ui/src/services/instruments.ts` 也有一个 `InstrumentSpec`，
+ * 但那是**播放参数**（当前 5 个合成音色的振荡器/包络/响度），本接口则是
+ * **引擎契约**（含 SF2 采样、滤波、瞬态噪声、回退音色）。两者同名不同义，
+ * 曾被误记为「重复定义」。改名后一眼可辨，避免将来接线时拿错类型。
+ *
+ * 「音乐元数据」的第三套定义在 core：`Instrument`（音域/家族/移调），
+ * 那是谱面与配器用的，与发声无关。
+ */
+export interface EngineInstrumentSpec {
   id: string;
   name: string;
   source: InstrumentSource;
@@ -140,7 +150,7 @@ export interface AudioEngine {
   setInstrument(instrumentId: string): void;
 
   /** 列出可用音色（含未加载采样的合成回退） */
-  listInstruments(): InstrumentSpec[];
+  listInstruments(): EngineInstrumentSpec[];
 
   /**
    * 加载 SF2 音色库。成功后 `soundfont` 类型的音色开始使用真实采样，

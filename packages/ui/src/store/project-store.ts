@@ -14,6 +14,7 @@ import {
   type NewToolCallRecord,
   midiToSpelling,
   nodeToNoteEvent,
+  createNoteEvent,
   createTrack,
   computeMixerDiff,
   mixerToDiff,
@@ -25,6 +26,7 @@ import {
 } from "@collinx/core";
 import { createDemoMixer, createTasteStore } from "../data/demoData";
 import { createBrowserTasteFsAdapter } from "../services/tasteFsAdapter";
+import { chordPitches } from "../services/chord-voicing";
 import type { AgentToolDefinitionLike, AgentToolOutcome } from "../services/llm";
 
 // ---------------------------------------------------------------------------
@@ -1355,11 +1357,24 @@ export function createProjectReducer(
        * chord 传 null 表示删除该小节的和弦。
        */
       case "SET_CHORD": {
+        /**
+         * v2.9.1：写和弦的同时生成真实音符（此前只有 ChordEvent → 只画不响）。
+         *
+         * 生成物打 `chordGenerated: true`，这样重设和弦时只替换**和弦轨生成的
+         * 音符**，不会误删用户自己在和弦轨上手画的声部。
+         */
         const graph = state.graph.snapshot();
         for (const n of graph.getAllNodes()) {
-          if (n.type !== "ChordEvent") continue;
-          if (Number(n.data.bar) !== action.bar) continue;
-          graph.removeNode(n.id);
+          if (n.type === "ChordEvent" && Number(n.data.bar) === action.bar) {
+            graph.removeNode(n.id);
+          }
+          if (
+            n.type === "NoteSpan" &&
+            n.data.chordGenerated === true &&
+            Number(n.data.bar) === action.bar
+          ) {
+            graph.removeNode(n.id);
+          }
         }
         if (action.chord) {
           graph.addNode("ChordEvent", {
@@ -1368,8 +1383,23 @@ export function createProjectReducer(
             durationQn: 4,
             chord: action.chord,
           });
+          for (const pitchMidi of chordPitches(action.chord)) {
+            // 用 createNoteEvent 生成完整 NoteEvent（id/phraseId/tags 都是
+            // deriveNotes → NoteEventSchema 的必填项；手写对象会抛 Zod 校验错）
+            const note = createNoteEvent({
+              trackId: "chords",
+              bar: action.bar,
+              beat: 1,
+              durQn: 4,
+              pitchMidi,
+              pitchSpelling: midiToSpelling(pitchMidi),
+              velocity: 0.6,
+              voice: "lh",
+            });
+            graph.addNode("NoteSpan", { ...note, chordGenerated: true });
+          }
         }
-        return withUndo(state, { graph });
+        return withUndo(state, { graph, notes: deriveNotes(graph) });
       }
 
       case "ADD_PHRASE": {

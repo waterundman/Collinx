@@ -8,8 +8,8 @@ name: CI
 #      这样命名的测试 → grep 退出码 1 → job 必红；
 #    - coverage 依赖未安装的覆盖率插件（`@vitest/coverage-v8`）。
 #    留着它们只会制造「CI 是红的，所以不看 CI」的习惯，比没有 CI 更糟。
-# 3. e2e（Playwright 97 例）暂不在此 workflow：需要浏览器下载 + dev server，
-#    单独一轮接线（见 docs/v2.9.1-debt.md「未消解」）。
+# 3. e2e 在独立 workflow（ci-e2e.yml）：需要浏览器下载 + dev server，
+#    与单测分开放，失败时不影响单测信号。
 on:
   push:
     branches: [master, main, develop]
@@ -22,7 +22,9 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
+        # 18.x 不支持 `node --test --experimental-strip-types`（desktop 包的测试入口），
+        # 且 packages/ui 的 Vite 5 在 18 上已非首选。最低支持线提到 20。
+        node-version: [20.x, 22.x]
 
     steps:
       - uses: actions/checkout@v3

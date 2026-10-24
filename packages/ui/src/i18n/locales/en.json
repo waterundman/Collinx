@@ -1314,6 +1314,7 @@
     "renderingInProgress": "Data view · switch to Rendered view for the full score ({{count}} notes)",
     "noNotes": "No note data",
     "vexflowHint": "Use VexFlow rendering engine for full score rendering",
+    "exportStems": "Export Stems",
     "exportWAV": "Export WAV"
   },
   "mixer": {

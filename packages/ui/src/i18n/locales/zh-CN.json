@@ -1314,6 +1314,7 @@
     "renderingInProgress": "数据视图 · 切换到「渲染视图」查看完整乐谱（{{count}} 个音符）",
     "noNotes": "暂无音符数据",
     "vexflowHint": "使用 VexFlow 渲染引擎进行完整乐谱渲染",
+    "exportStems": "分轨导出",
     "exportWAV": "导出 WAV"
   },
   "mixer": {

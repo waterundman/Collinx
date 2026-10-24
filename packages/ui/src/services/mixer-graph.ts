@@ -22,7 +22,7 @@
  * 断开会让播放中的音符瞬间消失并在重连时爆音。
  */
 
-import type { FXSlot, MixerState } from "@collinx/core";
+import type { FXSlot, MixerState, SendConfig } from "@collinx/core";
 import { createFxChain, type FxChainNodes } from "./fx-chain";
 import { busKeyOf, effectiveGainDb, hasAnySolo, parseGainDb, parsePan } from "./mix-resolver";
 import { dbToLinear } from "./gain";
@@ -41,6 +41,8 @@ export interface TrackBusNodes {
   /** 电平分析（仅播放链路创建；导出不需要） */
   analyser: AnalyserNode | null;
   fx: FxChainNodes;
+  /** 送出发送：目标总线键 → 增益节点与连接状态 */
+  sends: Map<string, { gain: GainNode; level: number; connected: boolean; preFader: boolean }>;
   gainDb: number;
   pan: number;
 }
@@ -76,6 +78,8 @@ export function peakOf(analyser: AnalyserNode): number {
 
 export class MixerGraph {
   private buses = new Map<string, TrackBusNodes>();
+  /** 当前的送出邻接表，用于环路保护（A→B 时若 B→A 已存在则丢弃） */
+  private sendEdges = new Map<string, Set<string>>();
   private readonly withAnalysers: boolean;
   private readonly instantParams: boolean;
 
@@ -119,7 +123,17 @@ export class MixerGraph {
     }
     if (analyser) analyser.connect(this.destination);
 
-    const bus: TrackBusNodes = { key, sum, fader, panner, analyser, fx, gainDb: 0, pan: 0 };
+    const bus: TrackBusNodes = {
+      key,
+      sum,
+      fader,
+      panner,
+      analyser,
+      fx,
+      sends: new Map(),
+      gainDb: 0,
+      pan: 0,
+    };
     this.buses.set(key, bus);
     return bus;
   }
@@ -158,6 +172,79 @@ export class MixerGraph {
   }
 
   /**
+   * 设置某轨的送出发送（v2.9.1）。
+   *
+   * 此前 `MixerTrack.sends` 只是混音台里的展示数据 —— 音频路径完全不读，
+   * 用户/AI 设了发送也听不出任何变化。
+   *
+   * 语义：
+   * - 默认**推子后**（`preFader: false`）从 fader 取信号，静音/推子当然影响送出；
+   *   `preFader: true` 从 sum（推子前）取，静音不切断送出（监听/混响返送的常见做法）
+   * - 电平是 0..1 线性比值（与 `SendConfig.level` 的字符串语义一致）
+   * - 自送与 A↔B 直接环路会被丢弃（Web Audio 环路会静音整条支路）
+   */
+  setSends(key: string, sends: SendConfig[]): void {
+    const bus = this.bus(key);
+    const next = new Map<string, SendConfig>();
+    for (const send of sends) {
+      const target = send.targetBusId;
+      if (!target || target === key) continue;
+      if (this.sendEdges.get(target)?.has(key)) continue; // A→B 已存在时拒绝 B→A
+      if (next.has(target)) continue;
+      next.set(target, send);
+    }
+
+    // 移除不再存在的送出。⚠️ 必须同时断开**源端**：Web Audio 里同一对节点
+    // 重复 connect 会形成并联（信号翻倍），只断增益节点的出边会留下孤儿支路。
+    for (const [target, node] of bus.sends) {
+      if (next.has(target)) continue;
+      try {
+        (node.preFader ? bus.sum : bus.fader).disconnect(node.gain);
+        node.gain.disconnect();
+      } catch {
+        /* ignore */
+      }
+      bus.sends.delete(target);
+    }
+
+    const edges = new Set<string>();
+    for (const [target, send] of next) {
+      let node = bus.sends.get(target);
+      if (!node) {
+        const gain = this.ctx.createGain();
+        bus.sends.set(target, { gain, level: Number.NaN, connected: false, preFader: false });
+        node = bus.sends.get(target)!;
+      }
+      const level = Math.max(0, Math.min(1, Number.parseFloat(send.level)));
+      const safeLevel = Number.isFinite(level) ? level : 0;
+      if (node.level !== safeLevel) {
+        if (this.instantParams) node.gain.gain.setValueAtTime(safeLevel, this.ctx.currentTime);
+        else node.gain.gain.setTargetAtTime(safeLevel, this.ctx.currentTime, 0.01);
+        node.level = safeLevel;
+      }
+
+      // 源端：推子后（默认）或推子前。只在首次连接或切换源端时接线 ——
+      // 每帧重复 connect 会让同一支路叠加多次（实测会变成 +6dB）。
+      if (!node.connected) {
+        (send.preFader ? bus.sum : bus.fader).connect(node.gain);
+        node.gain.connect(this.bus(target).sum);
+        node.connected = true;
+        node.preFader = send.preFader;
+      } else if (node.preFader !== send.preFader) {
+        try {
+          (node.preFader ? bus.sum : bus.fader).disconnect(node.gain);
+        } catch {
+          /* ignore */
+        }
+        (send.preFader ? bus.sum : bus.fader).connect(node.gain);
+        node.preFader = send.preFader;
+      }
+      edges.add(target);
+    }
+    this.sendEdges.set(key, edges);
+  }
+
+  /**
    * 把整份混音状态应用到图（静音/独奏/声像/FX 一次算完）。
    *
    * master 推子不在这里处理：调用方持有 master 节点，
@@ -170,6 +257,7 @@ export class MixerGraph {
       this.setGain(key, effectiveGainDb(track, anySolo));
       this.setPan(key, parsePan(track.pan));
       this.setFx(key, track.fxChain.slots);
+      this.setSends(key, track.sends ?? []);
     }
   }
 
@@ -190,6 +278,10 @@ export class MixerGraph {
       bus.fader.disconnect();
       bus.panner?.disconnect();
       bus.analyser?.disconnect();
+      for (const node of bus.sends.values()) node.gain.disconnect();
+      bus.sends.clear();
+      this.sendEdges.delete(key);
+      for (const edges of this.sendEdges.values()) edges.delete(key);
     } catch {
       /* ignore */
     }
@@ -204,7 +296,11 @@ export class MixerGraph {
       .sort()
       .map((key) => {
         const bus = this.buses.get(key)!;
-        return `${key}:${bus.gainDb}:${bus.pan.toFixed(3)}:${bus.fx.signature}`;
+        const sends = [...bus.sends.entries()]
+          .map(([target, node]) => `${target}=${node.level}`)
+          .sort()
+          .join(",");
+        return `${key}:${bus.gainDb}:${bus.pan.toFixed(3)}:${bus.fx.signature}:${sends}`;
       })
       .join(" || ");
   }

@@ -1,0 +1,50 @@
+name: E2E
+
+# v2.9.1：Playwright 97 例一直只在本机跑。单独成一条 workflow，
+# 与单测分开（e2e 慢且依赖浏览器，红/绿信号不应互相淹没）。
+on:
+  push:
+    branches: [master, main, develop]
+    paths:
+      - 'packages/ui/**'
+      - '.github/workflows/ci-e2e.yml'
+  pull_request:
+    paths:
+      - 'packages/ui/**'
+      - '.github/workflows/ci-e2e.yml'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browser
+        run: pnpm --filter @collinx/ui exec playwright install --with-deps chromium
+
+      - name: Run E2E (Chromium)
+        env:
+          CI: '1'
+        run: pnpm --filter @collinx/ui exec playwright test
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: packages/ui/playwright-report
+          retention-days: 7

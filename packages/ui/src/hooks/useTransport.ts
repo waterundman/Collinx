@@ -46,7 +46,7 @@
  * - port.send / port.clear 抛异常 → 静默 catch
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NoteEvent, TempoMap } from "@collinx/core";
 import { encodeNoteOn, encodeNoteOff } from "../services/midi-output";
 import { AudioPreview } from "../services/audio-preview";
@@ -860,30 +860,63 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     previewRef.current?.setMasterGain(db);
   }, []);
 
-  return {
-    phase,
-    position,
-    positionSeconds,
-    isPlaying: phase === "playing",
-    play,
-    pause,
-    stop,
-    getAudioLevel,
-    setTrackGain,
-    setTrackPan,
-    setTrackFx,
-    removeTrackAudio,
-    getTrackLevel,
-    setMasterGain,
-    seek,
-    loop,
-    setLoop,
-    // ── v2.2.0 S0 (D21)：实时录制 ──
-    isRecording,
-    getPositionSecondsNow,
-    startRecording,
-    stopRecording,
-    captureRecordedNoteOn,
-    captureRecordedNoteOff,
-  };
+  /**
+   * v2.9.1：返回值 memo 化。
+   *
+   * 此前每次渲染都返回一个新的 transport 对象 —— 以它为 prop 的组件（混音台、
+   * 传输条、App 的 effect）都会被迫重渲染；v2.9.0 的混音同步 effect 就因此
+   * 每帧重放（后来改成按字段依赖才规避）。这里按真实依赖收敛一次。
+   */
+  return useMemo(
+    () => ({
+      phase,
+      position,
+      positionSeconds,
+      isPlaying: phase === "playing",
+      play,
+      pause,
+      stop,
+      getAudioLevel,
+      setTrackGain,
+      setTrackPan,
+      setTrackFx,
+      removeTrackAudio,
+      getTrackLevel,
+      setMasterGain,
+      seek,
+      loop,
+      setLoop,
+      // ── v2.2.0 S0 (D21)：实时录制 ──
+      isRecording,
+      getPositionSecondsNow,
+      startRecording,
+      stopRecording,
+      captureRecordedNoteOn,
+      captureRecordedNoteOff,
+    }),
+    [
+      phase,
+      position,
+      positionSeconds,
+      play,
+      pause,
+      stop,
+      getAudioLevel,
+      setTrackGain,
+      setTrackPan,
+      setTrackFx,
+      removeTrackAudio,
+      getTrackLevel,
+      setMasterGain,
+      seek,
+      loop,
+      setLoop,
+      isRecording,
+      getPositionSecondsNow,
+      startRecording,
+      stopRecording,
+      captureRecordedNoteOn,
+      captureRecordedNoteOff,
+    ],
+  );
 }

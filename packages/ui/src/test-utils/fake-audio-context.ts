@@ -120,15 +120,16 @@ export function createFakeAudioContext(opts: { sampleRate?: number } = {}): Fake
         detailedConnections.push({ fromNode: node, toNode: target });
         return target;
       },
-      disconnect() {
-        // 与真实 AudioNode 一致：断开该节点的全部出边。
-        // 必须实现，否则「重建 FX 链时忘了断直通支路」这类 bug 测不出来
-        // （真实浏览器里会变成信号并联叠加）。
+      disconnect(target?: FakeAudioNode) {
+        // 与真实 AudioNode 一致：无参断开全部出边，带参只断到该目标的那条。
+        // 必须实现，否则「重建 FX 链时忘了断直通支路」「送出重复 connect」
+        // 这类 bug 测不出来（真实浏览器里会变成信号并联叠加）。
         for (let i = detailedConnections.length - 1; i >= 0; i--) {
-          if (detailedConnections[i].fromNode === node) {
-            detailedConnections.splice(i, 1);
-            connections.splice(i, 1);
-          }
+          const link = detailedConnections[i];
+          if (link.fromNode !== node) continue;
+          if (target && link.toNode !== target) continue;
+          detailedConnections.splice(i, 1);
+          connections.splice(i, 1);
         }
       },
     };

@@ -133,6 +133,61 @@ export function registerBuiltinTools(
   });
 
   /**
+   * harmony.inspect —— 让 AI 看见和弦轨（v2.9.1）。
+   *
+   * 和弦此前只存在于图的 ChordEvent 节点里：`project.stats` 只数音符与轨道，
+   * 模型看不到「第 3 小节是什么和弦」，也就无法据此改写/配器。
+   */
+  registry.register({
+    name: "harmony.inspect",
+    description: "读取和弦轨：每个小节的和弦（根音/性质/低音）与调性。改写和声或配器前应先调用它",
+    permission: "read_only",
+    parameters: [],
+    handler: async (_params, ctx) => {
+      const graph = ctx?.readGraph?.();
+      if (!graph) {
+        return {
+          status: "error",
+          requiresUserConfirmation: false,
+          auditRef: randomUUID(),
+          data: "缺少图上下文（readGraph），无法读取和弦轨",
+        };
+      }
+      const chords = graph
+        .getNodesByType("ChordEvent")
+        .map((n) => {
+          const data = n.data as {
+            bar?: unknown;
+            chord?: { root?: unknown; quality?: unknown; bass?: unknown };
+          };
+          const root = typeof data.chord?.root === "string" ? data.chord.root : "";
+          if (!root) return null;
+          return {
+            bar: Number(data.bar) || 0,
+            root,
+            quality: typeof data.chord?.quality === "string" ? data.chord.quality : "maj",
+            ...(typeof data.chord?.bass === "string" ? { bass: data.chord.bass } : {}),
+          };
+        })
+        .filter((c): c is { bar: number; root: string; quality: string; bass?: string } => c !== null)
+        .sort((a, b) => a.bar - b.bar);
+
+      const keyMap = graph.getMeta().key_map ?? [];
+      const key = keyMap[0]
+        ? { tonic: keyMap[0].tonic, mode: keyMap[0].mode }
+        : { tonic: "C", mode: "major" };
+
+      return {
+        status: "ok",
+        resultType: "data",
+        requiresUserConfirmation: false,
+        auditRef: randomUUID(),
+        data: { key, chords },
+      };
+    },
+  });
+
+  /**
    * mixer.inspect —— 让 AI 看见混音台（v2.9.0）。
    *
    * 此前 `project.stats` 只有 notes/tracks/bars/bpm：混音状态（增益/声像/

@@ -23,7 +23,7 @@ audio-engine（引擎契约，纯类型）── 当前无任何包引用
 | 包 | 职责 | 关键入口 | 规模（实测） |
 |---|---|---|---|
 | `core` | 领域内核：`ProjectGraph`、`DiffEngine`、`TempoMap`、Taste Genome、IO 导入导出、`ToolRegistry` | `src/index.ts` | 51 个测试文件 |
-| `agent` | 17 个创作工具 + 8 个域实现（composer / arranger / orchestrator / mixing / engraving / teaching / taste-memory / planner） | `src/tools.ts`、`src/index.ts` | 19 个测试文件 |
+| `agent` | 19 个工具 + 8 个域实现（composer / arranger / orchestrator / mixing / engraving / teaching / taste-memory / planner） | `src/tools.ts`、`src/index.ts` | 21 个测试文件 |
 | `ui` | React 应用：9 个标签页、Web Audio 播放、Canvas 钢琴卷与图谱、LLM 对话 | `src/App.tsx` | 74 个测试文件 + 21 个 e2e spec（90 用例） |
 | `desktop` | Electron 外壳：窗口、IPC、原生引擎桥、播放驱动 | `src/main.ts`、`src/preload.ts` | 6 个 .ts + 1 个 worklet + 2 个测试 |
 | `audio` | C++/JUCE 引擎：合成器、VST3/CLAP 宿主、presets、sandbox | `src/audio-engine.h`、`src/napi/` | 10 个 C++ 测试，CI `ci-audio.yml` |
@@ -155,12 +155,12 @@ pendingDiffs → 审批 → DiffEngine.apply → 图
 
 | 事实 | 位置 |
 |---|---|
-| 工具总数 **18**：9 个 `proposal_only` + 9 个 `read_only` | `packages/agent/src/tools.ts` |
+| 工具总数 **19**：9 个 `proposal_only` + 10 个 `read_only`（v2.9.1 增 `harmony.inspect`） | `packages/agent/src/tools.ts` |
 | system prompt **不含**工具清单，只声明「本次 tools 就是全部能力」 | `services/llm/agent-loop.ts:110` |
 | 只读工具靠 `ToolContext.readGraph()` 读图 / `readMixer()` 读混音，不写状态 | `core/src/agent/tool-registry.ts` |
 | 工具结果回灌模型时标注「提案已入队，用户确认后才写入」 | `agent-loop.ts:147` |
 | 提案从工具结果到队列：`ToolResult.diff`（单数）与 `ToolResult.diffs`（复数，v2.9.1 已类型化）；`runAgentTool` 两者都取 | `ProjectProvider.tsx`、`core/src/agent/tool-registry.ts` |
-| 覆盖：作曲 2 · 编排 1 · 配器 1 · 混音 3（含 `mixer.inspect`） · 记谱 3 · 教学 3 · 品味 2 · 工程 2 · 规划 1 | 同上 |
+| 覆盖：作曲 2 · 编排 1 · 配器 1 · 混音 3（含 `mixer.inspect`） · 和声 1（`harmony.inspect`） · 记谱 3 · 教学 3 · 品味 2 · 工程 2 · 规划 1 | 同上 |
 
 **已知行为缺陷（不是工具缺陷）**：对「给个建议」这类措辞，模型有时只讨论不调用工具
 （`docs/v2.8.0-song-session.md:45-52` 实测）。属模型行为选择，可被更明确的指令绕过。
@@ -205,13 +205,15 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 | 播放**真的出声**（内部合成器，5 音色） | ✅ | `audio-preview.ts`；实测「播放 6s → AudioContext 1 / 振荡器 92 / 4 种波形」（`v2.8.0-full-song.md:33`） |
 | 节拍器 / count-in / loop / seek | ✅ | `useTransport.ts` |
 | 每轨推子**真的改变声音** + 实时电平表 | ✅ | `mixer-graph.ts` `setGain`、`getLevel` |
+| 送出（Sends）**真的生效**（推子后/推子前、环路保护） | ✅ | `mixer-graph.ts` `setSends`；数值验收 +6.02dB |
 | 静音 / 独奏 / 声像**真的改变声音** | ✅ | `mix-resolver.ts` 判定 → `MixerGraph`；实测静音 0、全左 R=0、居中 L=R（`v2.9.0-mixer.md`） |
 | FX 链**影响声音**（EQ/压缩/混响/延迟/饱和/限幅） | ✅ | `services/fx-chain.ts`；实测 EQ −12dB@100Hz 在 50Hz 测到 −11.1dB |
 | 加轨道（不限 3 条） | ✅ | `ADD_MIXER_TRACK`（`project-store.ts`）；配器后实测 5 轨 |
 | 删轨道（级联删音符 + undo） | ✅ | `REMOVE_MIXER_TRACK`（`project-store.ts`）、`MixerConsole` × 按钮、App 传 `onRemoveTrack` |
 | 手动选音色 | ✅ | 混音台每轨下拉 → `MixerTrack.instrument`（随 `.agentmusic` 持久化） |
 | 导出 WAV / MIDI / MusicXML / PDF / `.agentmusic` | ✅ | `App.tsx:780,830`、`ScorePanel`；实测 121.5s WAV（`v2.8.0-full-song.md:13`） |
-| 导出**带混音**（推子/静音/独奏/声像/FX） | ✅ | `renderNotesToWav(notes, { mixer })`；静音轨导出能量 = 0（`v2.9.0-mixer.md`） |
+| 导出**带混音**（推子/静音/独奏/声像/FX/送出） | ✅ | `renderNotesToWav(notes, { mixer })`；静音轨导出能量 = 0 |
+| 分轨导出（每轨一个 WAV） | ✅ | `services/stem-export.ts` + Score 面板「分轨导出」 |
 | 自动保存 + 损坏快照降级 | ✅ | `services/autosave.ts`、`persistence.ts` |
 | AI 读统计 / 改速度 / 生成动机 / 和声 / 配器 / 混音建议 / 记谱 / 讲解 / **读混音台** | ✅ | 18 工具，见 §四 |
 | AI 对「建议」措辞偶尔只讨论不执行 | ⚠️ | 模型行为，见 §四 末 |
@@ -219,7 +221,8 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 | VST3 / CLAP 插件、SF2 / SFZ 采样 | ❌ | C++ 侧有宿主实现，UI 通路未接；`packages/ui` 无 SF2 加载器 |
 | 桌面原生引擎发声 | ❌ | 见 §五 |
 | 母带压缩 / 限幅 | ✅ | `services/master-chain.ts`（播放与导出共用） |
-| 和弦轨**发声** / AI 读和弦 | ❌ | ChordEvent 只投影成格子；不进播放、不进工具（v3.0.0 候选） |
+| 和弦轨**发声**（写和弦即生成真实音符） | ✅ | `SET_CHORD` + `chord-voicing.ts`（带 `chordGenerated` 标记） |
+| AI 读和弦 | ✅ | `harmony.inspect` 工具 |
 
 ---
 
@@ -246,9 +249,9 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 
 ```bash
 # 分层与规模
-find packages/core/src -name "*.test.ts" | wc -l      # 52
-find packages/agent/src -name "*.test.ts" | wc -l     # 20
-find packages/ui/src -name "*.test.ts*" | wc -l       # 82
+find packages/core/src -name "*.test.ts" | wc -l      # 48
+find packages/agent/src -name "*.test.ts" | wc -l     # 21
+find packages/ui/src -name "*.test.ts*" | wc -l       # 84
 
 # 工具清单与权限
 grep -n 'name: "\|permission:' packages/agent/src/tools.ts
@@ -264,6 +267,6 @@ node .audit/scripts/mix-acceptance.mjs            # 输出 .audit/acceptance/mix
 
 # 全量校验
 pnpm typecheck && pnpm test
-pnpm test:e2e                                    # Playwright，20 spec / 97 用例（本机实测；CI 未接）
+pnpm test:e2e                                    # Playwright，22 spec / 99 用例（本机实测；CI 见 ci-e2e.yml）
 gh run list --workflow="ci-audio.yml"            # C++ 引擎构建 + ctest + N-API 冒烟
 ```

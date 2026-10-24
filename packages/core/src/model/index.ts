@@ -10,7 +10,6 @@ export * from "./form-templates";
 export * from "./form-analyzer";
 export * from "./audio-routes";
 export * from "./mixer-diff";
-export * from "./dsp-effects";
 export * from "./instrument";
 export * from "./score-model";
 export * from "./engraving-engine";
