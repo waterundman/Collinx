@@ -1333,6 +1333,16 @@
     "removeTrack": "删除轨道",
     "removeTrackHint": "删除该轨及其全部音符（可撤销）"
   },
+  "performance": {
+    "title": "音频性能",
+    "cpu": "CPU",
+    "memory": "内存",
+    "latency": "输出延迟",
+    "underruns": "缓冲欠载",
+    "voices": "活跃声部",
+    "sampleRate": "采样率",
+    "history": "CPU 历史"
+  },
   "orchestrator": {
     "title": "编制器",
     "subtitle": "选择乐器编制并生成配器方案",

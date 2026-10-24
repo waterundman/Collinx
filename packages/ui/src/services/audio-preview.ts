@@ -58,6 +58,26 @@ interface Voice {
   gain: GainNode;
 }
 
+/**
+ * 真实可采集的音频性能指标（v2.9.2）。
+ *
+ * 只报**能真拿到**的东西：浏览器不暴露 CPU 占用与缓冲欠载次数，
+ * 所以这两个字段不在这里出现 —— 调用方显示「—」而不是编一个数字。
+ */
+export interface AudioPerformanceInfo {
+  ready: boolean;
+  state: AudioContextState | "uninitialized";
+  sampleRate: number;
+  /** 输出基础延迟（ms），AudioContext.baseLatency；Safari 可能为 undefined */
+  baseLatencyMs: number;
+  /** 端到端输出延迟（ms），AudioContext.outputLatency；不支持时为 0 */
+  outputLatencyMs: number;
+  /** 当前正在发声的声部数（每轨每音一个） */
+  activeVoices: number;
+  /** master 后的实时峰值（0..1） */
+  level: number;
+}
+
 export class AudioPreview {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -272,6 +292,34 @@ export class AudioPreview {
   getLevel(): number {
     if (!this.analyser) return 0;
     return peakOf(this.analyser);
+  }
+
+  /**
+   * 真实现状快照（v2.9.2）。未启动时返回 ready:false + 全 0，
+   * 调用方可安全轮询（性能面板每秒一次）。
+   */
+  getPerformanceInfo(): AudioPerformanceInfo {
+    if (!this.ctx) {
+      return {
+        ready: false,
+        state: "uninitialized",
+        sampleRate: 0,
+        baseLatencyMs: 0,
+        outputLatencyMs: 0,
+        activeVoices: 0,
+        level: 0,
+      };
+    }
+    const ctx = this.ctx;
+    return {
+      ready: ctx.state === "running",
+      state: ctx.state,
+      sampleRate: ctx.sampleRate,
+      baseLatencyMs: (ctx.baseLatency ?? 0) * 1000,
+      outputLatencyMs: ((ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0) * 1000,
+      activeVoices: this.voices.size,
+      level: this.analyser ? peakOf(this.analyser) : 0,
+    };
   }
 
   /** 停止全部发声（stop / 切歌 / 卸载时调用） */

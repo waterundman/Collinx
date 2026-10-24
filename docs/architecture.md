@@ -214,6 +214,7 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 | 导出 WAV / MIDI / MusicXML / PDF / `.agentmusic` | ✅ | `App.tsx:780,830`、`ScorePanel`；实测 121.5s WAV（`v2.8.0-full-song.md:13`） |
 | 导出**带混音**（推子/静音/独奏/声像/FX/送出） | ✅ | `renderNotesToWav(notes, { mixer })`；静音轨导出能量 = 0 |
 | 分轨导出（每轨一个 WAV） | ✅ | `services/stem-export.ts` + Score 面板「分轨导出」 |
+| 音频性能面板（真实声部/采样率/延迟） | ✅ | 混音页 `PerformanceDashboard` + `usePerformanceMetrics`；不可采集项显示「—」 |
 | 自动保存 + 损坏快照降级 | ✅ | `services/autosave.ts`、`persistence.ts` |
 | AI 读统计 / 改速度 / 生成动机 / 和声 / 配器 / 混音建议 / 记谱 / 讲解 / **读混音台** | ✅ | 18 工具，见 §四 |
 | AI 对「建议」措辞偶尔只讨论不执行 | ⚠️ | 模型行为，见 §四 末 |
@@ -245,6 +246,7 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 
 ---
 
+
 ## 八、怎么验证本文的每条结论
 
 ```bash
@@ -263,10 +265,34 @@ grep -rn "AudioPreview\|MixerGraph\|buildPlaybackEvents\|renderNotesToWav" packa
 grep -rn "startPlayback" packages/ui/src
 
 # 混音数值验收（真浏览器 + OfflineAudioContext）
-node .audit/scripts/mix-acceptance.mjs            # 输出 .audit/acceptance/mix/evidence.json
+node scripts/verify/mix-acceptance.mjs            # 输出 .audit/acceptance/mix/evidence.json
 
 # 全量校验
 pnpm typecheck && pnpm test
 pnpm test:e2e                                    # Playwright，22 spec / 99 用例（本机实测；CI 见 ci-e2e.yml）
 gh run list --workflow="ci-audio.yml"            # C++ 引擎构建 + ctest + N-API 冒烟
 ```
+
+---
+
+## 九、零生产引用清单（v2.9.2 审计）
+
+判定方法：从真实入口（`ui/main.tsx`、各包 `src/index.ts`、`desktop/main.ts`+`preload.ts`）做
+**可达性 BFS**，跟随所有相对 import 与 barrel re-export；脚本 `scripts/verify/zero-ref-audit.mjs`。
+> 只按「当前有没有人 import」判死是错的（v2.8.0 曾误删规格内交付物）——本表列**判定**，不直接删。
+
+当前 **29 个文件零生产引用**（214 个源文件中），分五类：
+
+| 分组 | 文件数 | 判定 | 依据 / 阻塞 |
+|---|---|---|---|
+| 插件宿主簇：`PluginBrowser` / `PluginEditor` / `PresetBrowser` / `CrashRecovery` / `Vst3HostService` | 18 | ⛔ 阻塞 | 需要 C++ 插件宿主（扫描/加载/GUI 窗口/崩溃事件）；挂上只会是「点了没反应」 |
+| `MidiEffect`（面板 + 路由视图 + 类型） | 5 | ⛔ 阻塞 | 生产端没有 `MidiEffectChainState` 的来源，`midi-schedule` 也不应用效果；接入要同时补状态 + 发送前处理 + 持久化 |
+| `Taste/ABPlayerUI` | 1 | ⛔ 阻塞（本身有缺陷） | ①`phase="vote"` 永不置位 ②组件不发声，需外部 A/B 试听通道；详见文件头 |
+| `Score/ScoreView` | 1 | 🗑 重复实现 | 被 `ScoreRenderer`（分页/播放头/小节锚点）取代；确认 vault 规格后整体删除 |
+| `services/desktop-bridge` | 1 | ⛔ 阻塞 | 需要 Electron 壳 + preload 补 `startPlayback` |
+| 桶文件：`src/index.tsx`、`store/index.ts`、`components/Taste/index.ts` | 3 | ℹ️ 保留 | 库导出面/统一出口，无消费者不等于无用途 |
+
+**v2.9.2 新接入**：`components/Performance`（原零引用）→ 挂到混音页，数据只取真实可采集项
+（声部数/采样率/输出延迟/JS 堆）；CPU 与缓冲欠载浏览器不可采集，面板显示「—」而不是造数。
+
+复跑：`node scripts/verify/zero-ref-audit.mjs`

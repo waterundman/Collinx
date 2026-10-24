@@ -1,3 +1,13 @@
+/**
+ * ⚠️ 已被 `ScoreRenderer` 取代（v2.9.2 审计）。
+ *
+ * 这是 v1.x 的 VexFlow 直出版本：单页、无分页/系统规划/播放头/小节锚点。
+ * `ScorePanel → ScoreRenderer`（511 行）已覆盖其全部能力并多出分页与小节点击定位，
+ * 因此本文件在生产代码里零引用。
+ *
+ * 保留而非删除：v2.8.0 曾按「零引用」误删规格内交付物。删除前需在 Obsidian
+ * 规格库确认它不是某次 Stage 的验收物；确认后应整体删除（不要只摘 import）。
+ */
 import React, { useRef, useEffect } from "react";
 import { NoteEvent, TempoMap } from "@collinx/core";
 

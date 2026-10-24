@@ -133,6 +133,8 @@ export interface UseTransportResult {
   removeTrackAudio: (trackId: string) => void;
   /** v2.8.0：某轨的实时电平（0..1） */
   getTrackLevel: (trackId: string) => number;
+  /** v2.9.2：真实音频性能快照（声部数/采样率/延迟/电平） */
+  getAudioPerformance: () => import("../services/audio-preview").AudioPerformanceInfo;
   /** v2.8.0：Master 推子 → 总输出音量 */
   setMasterGain: (db: number) => void;
   pause: () => void;
@@ -837,6 +839,21 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     [],
   );
 
+  /** v2.9.2：性能面板的真实数据源（未启动时返回全 0 快照） */
+  const getAudioPerformance = useCallback(
+    (): import("../services/audio-preview").AudioPerformanceInfo =>
+      previewRef.current?.getPerformanceInfo() ?? {
+        ready: false,
+        state: "uninitialized",
+        sampleRate: 0,
+        baseLatencyMs: 0,
+        outputLatencyMs: 0,
+        activeVoices: 0,
+        level: 0,
+      },
+    [],
+  );
+
   /** v2.9.0：声像 —— 此前旋钮可转但音频路径没有 panner */
   const setTrackPan = useCallback((trackId: string, pan: number): void => {
     previewRef.current?.setTrackPan(trackId, pan);
@@ -882,6 +899,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       setTrackFx,
       removeTrackAudio,
       getTrackLevel,
+      getAudioPerformance,
       setMasterGain,
       seek,
       loop,
@@ -907,6 +925,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       setTrackFx,
       removeTrackAudio,
       getTrackLevel,
+      getAudioPerformance,
       setMasterGain,
       seek,
       loop,

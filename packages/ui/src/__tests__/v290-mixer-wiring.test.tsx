@@ -132,6 +132,18 @@ describe("v2.9.0 App 级混音接线", () => {
     fxSpy.mockRestore();
   });
 
+  it("混音页挂载性能面板（v2.9.2：从零引用组件接上真实指标）", () => {
+    const { container, cleanup } = renderApp();
+    click(container.querySelector('[data-testid="tab-mixer"]'));
+
+    const panel = container.querySelector('[data-testid="performance-dashboard"]');
+    expect(panel).not.toBeNull();
+    // 默认收起，不显示任何数字
+    expect(container.querySelector('[data-testid="perf-voices"]')).toBeNull();
+
+    cleanup();
+  });
+
   it("挂载即把整份混音推给音频（gain/pan/fx 三条都有调用）", () => {
     const { cleanup } = renderApp();
 

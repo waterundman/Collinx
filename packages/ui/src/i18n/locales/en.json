@@ -1333,6 +1333,16 @@
     "removeTrack": "Remove Track",
     "removeTrackHint": "Delete this track and all its notes (undoable)"
   },
+  "performance": {
+    "title": "Audio Performance",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "latency": "Output Latency",
+    "underruns": "Buffer Underruns",
+    "voices": "Active Voices",
+    "sampleRate": "Sample Rate",
+    "history": "CPU History"
+  },
   "orchestrator": {
     "title": "Orchestrator",
     "subtitle": "Select instruments and generate orchestration",

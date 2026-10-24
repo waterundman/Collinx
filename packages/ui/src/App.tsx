@@ -25,6 +25,8 @@ import { ArrangerPanel } from "./components/Arranger";
 import { OrchestratorPanel } from "./components/Orchestrator";
 import type { OrchestratorConfig, RegisterConflict } from "./components/Orchestrator";
 import { MixerConsole } from "./components/Mixer";
+import { PerformanceDashboard } from "./components/Performance";
+import { usePerformanceMetrics } from "./hooks/usePerformanceMetrics";
 import { TasteTimelineView } from "./components/Taste/TasteTimelineView";
 import { TasteLibraryPanel } from "./components/Taste/TasteLibraryPanel";
 import { TasteDiffPanel } from "./components/Taste/TasteDiffPanel";
@@ -1011,6 +1013,15 @@ export function App() {
    * 后者每次渲染都是新引用，会让 effect 每帧重放，白白给 6 类 FX 写参数。
    */
   const { setTrackGain, setTrackPan, setTrackFx, setMasterGain } = transport;
+
+  /**
+   * v2.9.2：音频性能面板的真实数据源。
+   *
+   * 之前 PerformanceDashboard 是零引用组件 —— 它要 CPU/内存/欠载这类数据，
+   * 而浏览器只肯给「声部数 / 采样率 / 延迟 / JS 堆」。这里只喂真实值，
+   * 拿不到的留空（面板显示「—」），不编数字。
+   */
+  const audioPerf = usePerformanceMetrics(transport.getAudioPerformance);
   useEffect(() => {
     applyMixerToAudio(mixer, { setTrackGain, setTrackPan, setTrackFx, setMasterGain });
   }, [mixer, setTrackGain, setTrackPan, setTrackFx, setMasterGain]);
@@ -1464,6 +1475,7 @@ export function App() {
 
       {activeTab === "mixer" && (
         <div className={styles.mixerFill} data-testid="mixer-layout">
+          <PerformanceDashboard metrics={audioPerf.metrics} onRefresh={audioPerf.refresh} />
           <MixerConsole
               audioLevel={transport.getAudioLevel}
               trackLevel={transport.getTrackLevel}

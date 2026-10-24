@@ -1,3 +1,13 @@
+/**
+ * ⚠️ 未挂载（v2.9.2 审计确认）—— 且**自身有两个已知缺陷**，直接挂上会得到坏功能：
+ * 1. `phase="vote"` 永不被设置 → 投票按钮不可达（docs/v2.4.0-audit.md 第 9 条）
+ * 2. 组件不负责发声：它只驱动 `ABPlayer` 的抽签/计票，试听要靠外部播放通道
+ *
+ * 接入前置条件（缺一不可）：
+ * - 一个「A/B 试听通道」：把 `ABVersion.notes` 在 loopRange 内直接送 AudioPreview；
+ * - 版本来源：最自然的是「当前工程」vs「某条提案应用后的快照」；
+ * - 修掉 phase 流转缺陷并补组件测试（现无任何测试）。
+ */
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { ABPlayer, ABVersion, ABTrial, ABTestResult } from "@collinx/core";
 import type { TempoMap } from "@collinx/core";
