@@ -24,7 +24,8 @@ test.describe("Piano Roll", () => {
   test("should have quantize selector", async ({ page }) => {
     const quantize = page.locator('[data-testid="piano-roll-quantize"]');
     await expect(quantize).toBeVisible();
-    await expect(quantize).toHaveValue("1/4");
+    // 选项 value 是量化网格的四分音符数（0 / 0.25 / 0.5 / 1），不是 "1/8" 文案
+    await expect(quantize).toHaveValue("0");
   });
 
   test("should toggle between select and draw modes", async ({ page }) => {
@@ -40,8 +41,9 @@ test.describe("Piano Roll", () => {
 
   test("should change quantize value", async ({ page }) => {
     const quantize = page.locator('[data-testid="piano-roll-quantize"]');
-    await quantize.selectOption("1/8");
-    await expect(quantize).toHaveValue("1/8");
+    // 按文案选 1/8，落盘值应为 0.5（qn）
+    await quantize.selectOption({ label: "1/8" });
+    await expect(quantize).toHaveValue("0.5");
   });
 
   test("should zoom in and out", async ({ page }) => {

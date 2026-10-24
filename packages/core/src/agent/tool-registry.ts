@@ -22,6 +22,14 @@ export interface ToolResult {
   resultType?: "proposal" | "data" | "confirmation";
   data?: unknown;
   diff?: DiffEnvelope;
+  /**
+   * v2.9.1：多提案结果（配器/变体/分谱等一次产出多个 DiffEnvelope）。
+   *
+   * 此前工具层在运行时挂 `diffs`，但类型里没有这个字段 —— UI 侧只能
+   * `(result as { diffs?: unknown }).diffs as DiffEnvelope[]` 强转，
+   * 字段名写错（diffs/diff 混用）编译器完全不管。现在收进契约。
+   */
+  diffs?: DiffEnvelope[];
   artifacts?: { type: string; ref: string }[];
   confidence?: number;
   requiresUserConfirmation: boolean;

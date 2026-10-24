@@ -76,7 +76,6 @@ export class AudioPreview {
    * 混音等于盲调。AnalyserNode 是 pass-through，不影响声音。
    */
   private analyser: AnalyserNode | null = null;
-  private levelBuffer: Float32Array = new Float32Array(512);
   private readonly masterGain: number;
   private readonly attack: number;
   private readonly release: number;
@@ -112,7 +111,6 @@ export class AudioPreview {
         this.analyser = this.ctx.createAnalyser();
         // fftSize 只影响频率分辨率；这里只要时域峰值，取最小值即可
         this.analyser.fftSize = 512;
-        this.levelBuffer = new Float32Array(this.analyser.fftSize);
 
         // v2.8.0：母带链插在 master 与 analyser 之间 ——
         // ① 与 WAV 导出共用同一份实现（听到的 = 导出的）

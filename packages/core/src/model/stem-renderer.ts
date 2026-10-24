@@ -1,3 +1,14 @@
+/**
+ * 分轨离线渲染（StemRenderer）—— **未接线**。
+ *
+ * ⚠️ v2.9.1 审计：`new StemRenderer` 在产品代码里 0 处；只有单测与
+ * `AudioExporter` 这条离线支路在用它。产品当前的导出是
+ * `ui/services/wav-export.ts`（Web Audio 离线渲染 + 混音图）。
+ *
+ * 保留理由：分轨导出（每轨一个 WAV）是 DAW 的常规能力，本实现已覆盖
+ * 音色/增益/声像/FX 的离线版本；接线时应改为复用 Web Audio 的
+ * `MixerGraph`，而不是让两条渲染路径长期并存。
+ */
 import { NoteEvent } from "./note-event";
 import { TempoMap } from "./tempo-map";
 import {

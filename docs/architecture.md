@@ -159,7 +159,7 @@ pendingDiffs → 审批 → DiffEngine.apply → 图
 | system prompt **不含**工具清单，只声明「本次 tools 就是全部能力」 | `services/llm/agent-loop.ts:110` |
 | 只读工具靠 `ToolContext.readGraph()` 读图 / `readMixer()` 读混音，不写状态 | `core/src/agent/tool-registry.ts` |
 | 工具结果回灌模型时标注「提案已入队，用户确认后才写入」 | `agent-loop.ts:147` |
-| 提案从工具结果到队列：`ToolResult` 只类型化单数 `diff`，部分工具挂 `diffs`（复数，未类型化）；`runAgentTool` 两者都取 | `ProjectProvider.tsx:862-871` |
+| 提案从工具结果到队列：`ToolResult.diff`（单数）与 `ToolResult.diffs`（复数，v2.9.1 已类型化）；`runAgentTool` 两者都取 | `ProjectProvider.tsx`、`core/src/agent/tool-registry.ts` |
 | 覆盖：作曲 2 · 编排 1 · 配器 1 · 混音 3（含 `mixer.inspect`） · 记谱 3 · 教学 3 · 品味 2 · 工程 2 · 规划 1 | 同上 |
 
 **已知行为缺陷（不是工具缺陷）**：对「给个建议」这类措辞，模型有时只讨论不调用工具
@@ -237,6 +237,8 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 | 8 | 播放与导出必须共用 `MixerGraph`（不许另写一套混音连接） | 混完导出 = 没混（v2.9.0 前真实存在） |
 | 9 | 重建 FX 链前必须先断开直通支路（`input.disconnect()`） | 干湿两路并联，信号叠加 +6dB（实测 4kHz 翻倍） |
 | 10 | 静音必须是**真 0**（`setValueAtTime(0)`），不能用 `setTargetAtTime` 逼近 0 | 指数逼近永远差一点，导出漏出 −52dBFS 底噪 |
+| 11 | flex 容器里的「大内容预览」必须显式 `min-height: 0` | flex item 默认 `min-height:auto` 会被内容撑开，把兄弟区域压成 0（编曲页钢琴卷曾整体消失） |
+| 12 | CI 触发分支必须包含默认分支 `master` | 写成 `[main, develop]` 时整份 CI 从未运行（v2.9.1 前真实存在） |
 
 ---
 
@@ -262,6 +264,6 @@ node .audit/scripts/mix-acceptance.mjs            # 输出 .audit/acceptance/mix
 
 # 全量校验
 pnpm typecheck && pnpm test
-pnpm test:e2e                                    # Playwright，21 spec / 90 用例
+pnpm test:e2e                                    # Playwright，20 spec / 97 用例（本机实测；CI 未接）
 gh run list --workflow="ci-audio.yml"            # C++ 引擎构建 + ctest + N-API 冒烟
 ```

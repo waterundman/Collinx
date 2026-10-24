@@ -92,7 +92,10 @@ export class AudioContextHolder {
     } catch {
       return false;
     }
-    return ctx.state === "running";
+    // 重新读一次状态：await 之后 TS 仍保留上面的窄化（"interrupted" | "suspended"），
+    // 直接比较会被判为「无重叠类型」。经函数调用读取可打破窄化。
+    const readState = (c: AudioContextLike) => c.state;
+    return readState(ctx) === "running";
   }
 
   async dispose(): Promise<void> {

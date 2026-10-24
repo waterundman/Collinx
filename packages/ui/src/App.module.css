@@ -43,12 +43,24 @@
 }
 
 .composeScore {
-  flex: 0 0 120px;
+  /**
+   * v2.9.1：谱面预览必须可收缩。
+   *
+   * 此前只有 `flex: 0 0 120px`，但 flex item 的 `min-height: auto` 会让
+   * 内容（210×297mm 的整页预览 ≈ 655px）把高度撑开 —— 谱面独占 655px，
+   * 下面的钢琴卷被挤到 **height: 0**（实测 canvas 0×1208），用户完全看不到
+   * 音符编辑区。加 `min-height: 0` 才能真正收起，溢出改为滚动。
+   */
+  flex: 0 0 180px;
+  min-height: 0;
+  max-height: 45%;
+  overflow: auto;
 }
 
 .composePianoRoll {
   flex: 1;
-  min-height: 0;
+  /* 音符编辑是主工作区，给它一个下限，谱面再长也不能把它吃光 */
+  min-height: 140px;
 }
 
 .sectionRow {

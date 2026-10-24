@@ -1,3 +1,14 @@
+/**
+ * 离线 FX DSP（Float32 块处理）—— **非产品导出路径**。
+ *
+ * ⚠️ v2.9.1 审计：没有任何生产代码消费本模块（只有单测）。
+ * 产品导出走 `packages/ui/src/services/fx-chain.ts` 的 Web Audio 节点图
+ * （与实时播放共用同一实现，见 v2.9.0）。本文件保留给「无 Web Audio 环境」
+ * 与算法参考，**不要**再把第二条导出路径接上去 —— 两套 DSP 不可能逐样本一致。
+ *
+ * 参数命名与 UI 的差异：这里用 `lowGainDb`/`thresholdDb` 等，UI 侧用
+ * `lowGain`/`threshold`；`fx-chain.ts` 同时兼容两套键。
+ */
 import type { FXChain } from "./audio-routes";
 
 export interface EQParams {

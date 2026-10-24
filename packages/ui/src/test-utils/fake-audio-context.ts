@@ -61,6 +61,8 @@ export interface FakeAudioContext {
   finalParam(nodeKind: string, param: string): number | undefined;
   /** 所有连向某 kind 的源节点 */
   sourcesInto(kind: string): FakeAudioNode[];
+  /** 直接造一个节点（用于充当 input/output 端点） */
+  makeNode(kind: string): FakeAudioNode;
 }
 
 function createParam(
@@ -205,6 +207,7 @@ export function createFakeAudioContext(opts: { sampleRate?: number } = {}): Fake
     nodesOfKind: (kind: string) => nodes.filter((n) => n.kind === kind),
     sourcesInto: (kind: string) =>
       detailedConnections.filter((c) => c.toNode?.kind === kind).map((c) => c.fromNode),
+    makeNode,
     finalParam: (nodeKind: string, param: string) => {
       const relevant = paramWrites.filter((w) => w.nodeKind === nodeKind && w.param === param);
       const last = relevant[relevant.length - 1];

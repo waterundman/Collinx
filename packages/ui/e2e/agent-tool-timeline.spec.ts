@@ -49,10 +49,9 @@ test.describe("E2E-E: Agent tool-call timeline", () => {
       page.locator('[data-testid="tool-call-name"]').first(),
     ).toHaveText("agent.chat");
 
-    // The chat round-trip completed: the user message is rendered and the
-    // rule-based compose agent answered with a text response.
+    // 用户消息已渲染。v2.4.0 起聊天走真实 LLM（无密钥时只会显示错误提示），
+    // 因此不再断言 "[compose]" 这类本地规则回复 —— 那属于已删除的旧实现。
     const messages = page.locator('[data-testid="agent-chat-messages"]');
     await expect(messages).toContainText("hello");
-    await expect(messages).toContainText("[compose]");
   });
 });

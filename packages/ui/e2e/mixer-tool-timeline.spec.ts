@@ -44,11 +44,12 @@ test.describe("E2E-H: Mixer suggest-fx tool timeline", () => {
     // 3. The provider jumps to the Agent tab automatically.
     await expect(page.locator('[data-testid="agent-layout"]')).toBeVisible();
 
-    // 4. The pending list gains the mixer proposal (2 demo + 1 mixer).
+    // 4. The pending list gains exactly the mixer proposal.
+    //    v2.4.0 起不再预置 demo 提案，此前的 3 条断言已过期（v2.9.1 修正）。
     const pendingCards = page
       .locator('[data-testid="agent-panel-pending"]')
       .locator('[data-testid^="diff-card-"]');
-    await expect(pendingCards).toHaveCount(3);
+    await expect(pendingCards).toHaveCount(1);
     await expect(
       pendingCards.filter({ hasText: "Mix suggestion" }),
     ).toHaveCount(1);

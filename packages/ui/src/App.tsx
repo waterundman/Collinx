@@ -50,7 +50,8 @@ import { elapsedToBeats, snapBeat } from "./services/midi-quantize";
 import { convertTakeToNotes } from "./services/recorded-take";
 import { renderNotesToWav } from "./services/wav-export";
 import { applyMixerToAudio } from "./services/mix-resolver";
-import { instrumentForTrack, resolveInstrument } from "./services/instruments";
+import { resolveInstrument } from "./services/instruments";
+import { trackByBusKey } from "./services/mix-resolver";
 import type {
   ArrangerConfigInput,
   ArrangerRunResult,
@@ -597,18 +598,18 @@ export function App() {
    * 轨道 → 音色 id 的统一解析（v2.8.0）。
    *
    * 播放（AudioPreview）与导出（WAV）必须用**同一个**解析结果，
-   * 否则"听到的"和"导出的"会是两个声音。此前两处各写一遍
-   * `instrumentForTrack(trackId)`（只看名称、用户改不了）。
+   * 否则"听到的"和"导出的"会是两个声音。
+   *
+   * v2.9.1：轨道查找改用 `trackByBusKey` —— 此前这里和混音总线各写一遍
+   * 「先 sourceTrackId 再 id」的匹配，两处只要有一处改动就会分叉。
    */
   const instrumentOfTrack = useCallback(
     (trackId: string | undefined): string => {
       if (!trackId) return resolveInstrument(undefined, undefined);
-      const strip =
-        mixer.tracks.find((t) => t.sourceTrackId === trackId) ??
-        mixer.tracks.find((t) => t.id === trackId);
+      const strip = trackByBusKey(mixer, trackId);
       return resolveInstrument(strip?.instrument, trackId);
     },
-    [mixer.tracks],
+    [mixer],
   );
 
   const transport = useTransport({

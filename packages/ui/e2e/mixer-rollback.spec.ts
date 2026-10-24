@@ -44,19 +44,21 @@ test.describe("E2E-C: Mixer proposal rollback", () => {
     // The provider jumps to the Agent tab automatically.
     await expect(page.locator('[data-testid="agent-layout"]')).toBeVisible();
 
-    // 2. The pending list gains the mixer proposal (2 demo + 1 mixer).
+    // 2. The pending list gains exactly the mixer proposal.
+    //    v2.4.0 起生产代码不再预置 demo 提案（原断言「2 demo + 1 mixer = 3」
+    //    自那时起就是过期断言，v2.9.1 修正为当前真实行为）。
     const pending = page.locator('[data-testid="agent-panel-pending"]');
     const pendingCards = pending.locator('[data-testid^="diff-card-"]');
-    await expect(pendingCards).toHaveCount(3);
+    await expect(pendingCards).toHaveCount(1);
 
     const mixerCard = pendingCards.filter({ hasText: "Mix suggestion" });
     await expect(mixerCard).toHaveCount(1);
 
     // 3. Apply the proposal: it leaves pending and lands in history.
     await mixerCard.locator('[data-testid^="diff-apply-"]').click();
-    await expect(pendingCards).toHaveCount(2);
+    await expect(pendingCards).toHaveCount(0);
     await expect(
-      pendingCards.filter({ hasText: "Mix suggestion" }),
+      pending.filter({ hasText: "Mix suggestion" }),
     ).toHaveCount(0);
 
     const history = page.locator('[data-testid="agent-panel-history"]');

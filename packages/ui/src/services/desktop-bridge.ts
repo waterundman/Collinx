@@ -7,6 +7,11 @@
  *
  * 为什么用 `globalThis` 探测而不是 import：preload 通过 contextBridge 注入的
  * 对象只存在于运行时，不属于构建期模块图。直接 import 会在浏览器构建里报错。
+ *
+ * ⚠️ **当前零引用**（v2.9.1 审计实测）：UI 还没有任何地方读它。
+ * 规格来自桌面外壳 Stage（原生引擎发声），阻塞于 Electron 壳接线。
+ * 请勿按「零引用」删除；真正的最后一公里是给 preload 补 startPlayback
+ * 并在 App 里按 isDesktop 分流（见 docs/architecture.md §五）。
  */
 
 export type AudioEngineStatus = "unavailable" | "ready" | "error";

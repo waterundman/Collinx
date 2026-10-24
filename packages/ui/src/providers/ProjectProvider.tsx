@@ -749,12 +749,8 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         const conflicts = Array.isArray(data.conflicts)
           ? (data.conflicts as OrchestratorConflict[])
           : [];
-        // The orchestrator handler puts the DiffEnvelope[] proposals on the
-        // ToolResult as `diffs` (plural); ToolResult only types `diff`, so
-        // extract it defensively through a cast.
-        const diffs = Array.isArray((result as { diffs?: unknown }).diffs)
-          ? ((result as { diffs?: unknown }).diffs as DiffEnvelope[])
-          : [];
+        // 配器/变体等工具把多个提案放在 ToolResult.diffs（v2.9.1 起已类型化）
+        const diffs = result.diffs ?? [];
         if (result.status === "ok" && diffs.length > 0) {
           dispatch({
             type: "ADD_PENDING_DIFFS",
@@ -797,9 +793,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           { type: "user", name: "arrange-panel" },
         );
         const data = (result.data ?? {}) as Record<string, unknown>;
-        const diffs = Array.isArray((result as { diffs?: unknown }).diffs)
-          ? ((result as { diffs?: unknown }).diffs as DiffEnvelope[])
-          : [];
+        const diffs = result.diffs ?? [];
         if (result.status === "ok" && diffs.length > 0) {
           dispatch({
             type: "ADD_PENDING_DIFFS",
@@ -866,14 +860,8 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
               readMixer: () => toMixerSnapshot(stateRef.current.mixer),
             },
           );
-          // 工具约定把 DiffEnvelope[] 挂在 ToolResult.diffs 上（ToolResult 只
-          // 类型化了单数 diff），这里两者都取，避免漏掉提案。
-          const carried = (result as { diffs?: unknown }).diffs;
-          const diffs = Array.isArray(carried)
-            ? (carried as DiffEnvelope[])
-            : result.diff
-              ? [result.diff]
-              : [];
+          // 单数 diff 与复数 diffs 都取，避免漏掉提案（两者都在契约里）
+          const diffs = result.diffs ?? (result.diff ? [result.diff] : []);
           if (result.status === "ok" && diffs.length > 0) {
             dispatch({ type: "ADD_PENDING_DIFFS", diffs: alignRevision(diffs) } satisfies ProjectStoreAction);
           }
@@ -929,9 +917,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           { type: "user", name: "score-panel" },
         );
         const data = (result.data ?? {}) as Record<string, unknown>;
-        const diffs = Array.isArray((result as { diffs?: unknown }).diffs)
-          ? ((result as { diffs?: unknown }).diffs as DiffEnvelope[])
-          : [];
+        const diffs = result.diffs ?? [];
         let parts = convertExtractParts(data.parts);
         // Fallback: derive the part list from the proposal diffs' PartLayout
         // add_node ops when the tool payload carries no `parts` array.

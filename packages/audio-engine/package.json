@@ -1,7 +1,7 @@
 {
   "name": "@collinx/audio-engine",
   "version": "0.1.0",
-  "description": "Collinx 音频合成引擎 —— 零运行时依赖的 Web Audio 合成器，与产品代码解耦",
+  "description": "实验性音频引擎骨架（契约/时钟/ADSR，未接线；产品发声在 ui/services/audio-preview.ts）",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
