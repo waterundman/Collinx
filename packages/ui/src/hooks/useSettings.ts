@@ -12,6 +12,17 @@ export function useSettings(): SettingsContextValue {
   return context;
 }
 
+/**
+ * 可选上下文版本（v2.9.3）。
+ *
+ * `ProjectProvider` 需要读自动保存/撤销设置，但它也可能被单独挂载
+ * （store 单测、嵌入式用法）。那种环境下没有 SettingsProvider，
+ * 用默认设置即可，不应该抛错。
+ */
+export function useOptionalSettings(): SettingsContextValue | null {
+  return useContext(SettingsContext);
+}
+
 /** 获取单个类别设置的钩子 */
 export function useSettingCategory<K extends SettingsCategory>(
   category: K

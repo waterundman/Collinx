@@ -1,6 +1,6 @@
 # Collinx 架构（现行）
 
-> 更新：2026-10-24（v2.9.0）｜ 本文是**唯一权威**的架构描述。
+> 更新：2026-10-24（v2.9.3）｜ 本文是**唯一权威**的架构描述。
 > `docs/v2.*` 是历史版本存档，与本文冲突时以本文为准；存档里的过期结论见
 > `docs/architecture-review.md`。
 > 每条结论都注明核对位置；任何没能核实的都会显式标「未核实」，不写成事实。
@@ -22,12 +22,12 @@ audio-engine（引擎契约，纯类型）── 当前无任何包引用
 
 | 包 | 职责 | 关键入口 | 规模（实测） |
 |---|---|---|---|
-| `core` | 领域内核：`ProjectGraph`、`DiffEngine`、`TempoMap`、Taste Genome、IO 导入导出、`ToolRegistry` | `src/index.ts` | 51 个测试文件 |
+| `core` | 领域内核：`ProjectGraph`、`DiffEngine`、`TempoMap`、Taste Genome、IO 导入导出、`ToolRegistry` | `src/index.ts` | 48 个测试文件 |
 | `agent` | 19 个工具 + 8 个域实现（composer / arranger / orchestrator / mixing / engraving / teaching / taste-memory / planner） | `src/tools.ts`、`src/index.ts` | 21 个测试文件 |
-| `ui` | React 应用：9 个标签页、Web Audio 播放、Canvas 钢琴卷与图谱、LLM 对话 | `src/App.tsx` | 74 个测试文件 + 21 个 e2e spec（90 用例） |
-| `desktop` | Electron 外壳：窗口、IPC、原生引擎桥、播放驱动 | `src/main.ts`、`src/preload.ts` | 6 个 .ts + 1 个 worklet + 2 个测试 |
+| `ui` | React 应用：9 个标签页、Web Audio 播放、Canvas 钢琴卷与图谱、LLM 对话 | `src/App.tsx` | 89 个测试文件 + 22 个 e2e spec（99 用例） |
+| `desktop` | Electron 外壳：窗口、IPC、原生引擎桥、播放驱动 | `src/main.ts`、`src/preload.ts` | 8 个 .ts（含 2 个 `node:test`）+ 1 个 worklet |
 | `audio` | C++/JUCE 引擎：合成器、VST3/CLAP 宿主、presets、sandbox | `src/audio-engine.h`、`src/napi/` | 10 个 C++ 测试，CI `ci-audio.yml` |
-| `audio-engine` | 引擎契约（`AudioEngine` 接口 + `VoiceEvent`） | `src/engine/types.ts` | 4 个源文件，**无任何包引用它** |
+| `audio-engine` | 引擎契约（`AudioEngine` 接口 + `VoiceEvent`） | `src/engine/types.ts` | 5 个源文件，**无任何包引用它** |
 
 **硬约束**
 
@@ -216,7 +216,7 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 | 分轨导出（每轨一个 WAV） | ✅ | `services/stem-export.ts` + Score 面板「分轨导出」 |
 | 音频性能面板（真实声部/采样率/延迟） | ✅ | 混音页 `PerformanceDashboard` + `usePerformanceMetrics`；不可采集项显示「—」 |
 | 自动保存 + 损坏快照降级 | ✅ | `services/autosave.ts`、`persistence.ts` |
-| AI 读统计 / 改速度 / 生成动机 / 和声 / 配器 / 混音建议 / 记谱 / 讲解 / **读混音台** | ✅ | 18 工具，见 §四 |
+| AI 读统计 / 改速度 / 生成动机 / 和声 / 配器 / 混音建议 / 记谱 / 讲解 / **读混音台** / **读和弦** | ✅ | 19 工具，见 §四 |
 | AI 对「建议」措辞偶尔只讨论不执行 | ⚠️ | 模型行为，见 §四 末 |
 | Graph 视图表达工程结构 | ✅ | 视图层派生「同轨音列」边（§二 末） |
 | VST3 / CLAP 插件、SF2 / SFZ 采样 | ❌ | C++ 侧有宿主实现，UI 通路未接；`packages/ui` 无 SF2 加载器 |
@@ -253,7 +253,7 @@ Web Audio 的 `AudioPreview`，与 C++ 引擎无关。
 # 分层与规模
 find packages/core/src -name "*.test.ts" | wc -l      # 48
 find packages/agent/src -name "*.test.ts" | wc -l     # 21
-find packages/ui/src -name "*.test.ts*" | wc -l       # 84
+find packages/ui/src -name "*.test.ts*" | wc -l       # 89
 
 # 工具清单与权限
 grep -n 'name: "\|permission:' packages/agent/src/tools.ts
@@ -296,3 +296,31 @@ gh run list --workflow="ci-audio.yml"            # C++ 引擎构建 + ctest + N-
 （声部数/采样率/输出延迟/JS 堆）；CPU 与缓冲欠载浏览器不可采集，面板显示「—」而不是造数。
 
 复跑：`node scripts/verify/zero-ref-audit.mjs`
+
+---
+
+## 十、设置项生效矩阵（v2.9.3 审计）
+
+设置页有 20+ 个开关，历史上存在「界面能改、底层不读」的假旋钮。逐项核对后分三类：
+
+| 分类 | 设置项 | 状态 |
+|---|---|---|
+| ✅ 真生效 | `general.language` / `general.theme` | 读即用 |
+| ✅ 真生效 | `general.autoSave.enabled` / `.interval` | **v2.9.3 接入**：provider 读设置排期（单位统一为**秒**，默认 300=5 分钟；间隔下限 10s） |
+| ✅ 真生效 | `general.undoHistory.maxLevels` | **v2.9.3 接入**：`state.undoLimit` 驱动栈裁剪（100/500/1000，`unlimited`=硬上限 1000） |
+| ✅ 真生效 | `audio.sampleRate`（导出侧） | **v2.9.3 接入**：WAV/分轨导出按设置采样率渲染；播放侧仍由 AudioContext 默认（见下） |
+| ✅ 真生效 | `midi.midiDevice.*` / `midi.midiMapping.midiChannel` | 输入输出与通道号 |
+| ✅ 真生效 | `midi.midiMapping.recording.*`（量化/力度模式/固定力度） | 录制 take 处理 |
+| ✅ 真生效 | `midi.midiMapping.playback.*`（跟随/预备拍/节拍器） | transport 与钢琴卷 |
+| ✅ 真生效 | `agent.llm.*`（provider/key/baseURL/model/temperature/stream） | LLM 客户端 |
+| ⚠️ 部分 | `audio.sampleRate`（播放侧） | AudioContext 一旦创建无法改采样率；当前仅在新建上下文时可用，尚未在设置变更时重建 |
+| ⚠️ 部分 | `audio.bufferSize` / `audio.latency` | 仅用于 UI 延迟估算与展示，未映射到 `latencyHint` |
+| ❌ 不生效 | `audio.audioDevice.input/output` | 未调用 `setSinkId` / 未接输入设备 |
+| ❌ 不生效 | `midi.mixer.defaultFXChain` / `midi.mixer.loudnessNormalization` | 无消费方；新轨 FX 链由混音台单独管理 |
+| ❌ 不生效 | `midi.score.scoreFont` / `.scoreSize` / `.exportFormat` | 谱面用默认 HouseStyle；导出入口各自固定格式 |
+| ❌ 不生效 | `midi.agent.autoSuggest` / `.explanationLevel` / `.confirmationMode` | 未进入 prompt 或审批策略 |
+| ❌ 不生效 | `midi.taste.autoLearn` / `.askConfirmation` / `.projectOverlay` | Taste 写入路径未读这些开关 |
+
+**结论**：真生效 10 组、部分 2 项、完全不生效 5 组（共 13 个叶子开关）。
+处置原则：**宁可标 «未生效» 也不造一个看起来能用的开关**；接线优先级
+（缓冲区/设备 → 谱面样式 → agent 策略 → taste 开关）见 `docs/v2.9.3-debt.md`。

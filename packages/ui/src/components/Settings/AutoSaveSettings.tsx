@@ -3,14 +3,17 @@ import { useI18n } from '../../i18n/hooks';
 import { useSettings } from '../../hooks/useSettings';
 import styles from './GeneralSettings.module.css';
 
-/** 间隔选项（分钟） */
+/**
+ * 间隔选项。**value 是秒**（设置字段与 provider 都以秒为准，v2.9.3 统一），
+ * label 才是分钟 —— 此前 value 直接写 1/2/5 被当成秒，选「30 分钟」实际是 30 秒。
+ */
 const INTERVAL_OPTIONS = [
-  { value: 1, label: '1 分钟' },
-  { value: 2, label: '2 分钟' },
-  { value: 5, label: '5 分钟' },
-  { value: 10, label: '10 分钟' },
-  { value: 15, label: '15 分钟' },
-  { value: 30, label: '30 分钟' },
+  { value: 60, label: '1 分钟' },
+  { value: 120, label: '2 分钟' },
+  { value: 300, label: '5 分钟' },
+  { value: 600, label: '10 分钟' },
+  { value: 900, label: '15 分钟' },
+  { value: 1800, label: '30 分钟' },
 ] as const;
 
 export interface AutoSaveSettingsProps {

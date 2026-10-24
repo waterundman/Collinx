@@ -963,7 +963,11 @@ export function App() {
   const handleExportWAV = useCallback(() => {
     void (async () => {
       try {
-        const wav = await renderNotesToWav(buildRenderableNotes(), { mixer });
+        const wav = await renderNotesToWav(buildRenderableNotes(), {
+          mixer,
+          // v2.9.3：导出的采样率跟随设置（此前固定 44100，设置页改了没反应）
+          sampleRate: settings.audio.sampleRate,
+        });
         const blob = new Blob([wav as unknown as BlobPart], { type: "audio/wav" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -976,7 +980,7 @@ export function App() {
         console.error("导出 WAV 失败", err);
       }
     })();
-  }, [buildRenderableNotes, mixer]);
+  }, [buildRenderableNotes, mixer, settings.audio.sampleRate]);
 
   /**
    * v2.9.1：分轨导出 —— 每轨一个 WAV，走与整曲相同的 MixerGraph
@@ -985,7 +989,9 @@ export function App() {
   const handleExportStems = useCallback(() => {
     void (async () => {
       try {
-        const stems = await renderStems(buildRenderableNotes(), mixer);
+        const stems = await renderStems(buildRenderableNotes(), mixer, {
+          sampleRate: settings.audio.sampleRate,
+        });
         for (const stem of stems) {
           const blob = new Blob([stem.wav as unknown as BlobPart], { type: "audio/wav" });
           const url = URL.createObjectURL(blob);
@@ -1000,7 +1006,7 @@ export function App() {
         console.error("分轨导出失败", err);
       }
     })();
-  }, [buildRenderableNotes, mixer]);
+  }, [buildRenderableNotes, mixer, settings.audio.sampleRate]);
 
   /**
    * 混音台 → 音频图（v2.8.0 推子；v2.9.0 扩到静音/独奏/声像/FX）。

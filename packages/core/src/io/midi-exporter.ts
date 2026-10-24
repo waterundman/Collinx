@@ -83,14 +83,14 @@ export class MIDIExporter {
     const maxBar = sortedNotes.length > 0
       ? Math.max(...sortedNotes.map((n) => n.bar))
       : 16;
-    const tempoChanges = (tempoMap as unknown as { tempoChanges?: { bar: number; bpm: number }[] }).tempoChanges ?? [];
+    const tempoChanges = tempoMap.getTempoChanges();
     for (const tc of tempoChanges) {
       if (tc.bar > maxBar + 2) continue;
       const tick = (tc.bar - 1) * 4 * ticksPerQuarter;
       allEvents.push({ tick, bytes: writeTempo(tc.bpm) });
     }
 
-    const meterChanges = (tempoMap as unknown as { meterChanges?: { bar: number; numerator: number; denominator: number }[] }).meterChanges ?? [];
+    const meterChanges = tempoMap.getMeterChanges();
     for (const mc of meterChanges) {
       if (mc.bar > maxBar + 2) continue;
       const tick = (mc.bar - 1) * 4 * ticksPerQuarter;

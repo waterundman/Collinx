@@ -23,6 +23,30 @@ import type { AgentMusicData } from "@collinx/core";
 /** 自动保存间隔：5 分钟（DAW 惯例 5-10 分钟）。 */
 export const AUTOSAVE_INTERVAL_MS = 5 * 60 * 1000;
 
+/** 自动保存间隔下限：太频繁会把 localStorage 写爆 */
+export const MIN_AUTOSAVE_INTERVAL_MS = 10_000;
+
+export interface AutosavePolicy {
+  enabled: boolean;
+  intervalMs: number;
+}
+
+/**
+ * 设置 → 自动保存策略（v2.9.3）。
+ *
+ * 单位是**秒**：`settings.general.autoSave.interval` 默认 300（=5 分钟，与旧常量
+ * AUTOSAVE_INTERVAL_MS 一致）。此前 provider 写死 5 分钟、设置页标签写「分钟」
+ * 而值域是 1..30 —— 三处单位互相矛盾，用户改了也没任何效果。
+ */
+export function autosavePolicy(policy: { enabled: boolean; interval: number }): AutosavePolicy {
+  const seconds =
+    Number.isFinite(policy.interval) && policy.interval > 0 ? policy.interval : AUTOSAVE_INTERVAL_MS / 1000;
+  return {
+    enabled: policy.enabled,
+    intervalMs: Math.max(MIN_AUTOSAVE_INTERVAL_MS, Math.round(seconds * 1000)),
+  };
+}
+
 /** 轮转槽数量：最新 3 份快照可回退。 */
 export const AUTOSAVE_SLOT_COUNT = 3;
 

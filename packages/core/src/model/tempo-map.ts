@@ -66,6 +66,19 @@ export class TempoMap {
     }
   }
 
+  /** 只读访问器（v2.9.3）：导出器此前用 `as unknown as` 偷看私有字段。 */
+  getTempoChanges(): readonly TempoChange[] {
+    return this.tempoChanges;
+  }
+
+  getMeterChanges(): readonly MeterChange[] {
+    return this.meterChanges;
+  }
+
+  getKeyChanges(): readonly KeyChange[] {
+    return this.keyChanges;
+  }
+
   static default(): TempoMap {
     return new TempoMap();
   }

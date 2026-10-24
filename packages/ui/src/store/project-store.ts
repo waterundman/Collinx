@@ -90,9 +90,25 @@ export interface ProjectStoreSnapshot {
   genomeVersion: number;
 }
 
-/** Stage 2: hard cap on both undo and redo stacks so memory cannot grow
- *  unbounded during long editing sessions. */
+/** 默认撤销步数（设置未提供时回退到此值）。 */
 export const MAX_UNDO = 50;
+
+/**
+ * 撤销栈硬上限（v2.9.3）。
+ *
+ * 设置页提供「100 / 500 / 1000 / 不限制」。快照是**整工程 JSON + 混音**，
+ * 设置页最大选项是 1000 步，「不限制」实际按 1000 执行 —— UI 文案同步写明。
+ */
+export const UNDO_HARD_CAP = 1000;
+
+/** 把设置里的 `number | 'unlimited'` 解析成实际栈上限。 */
+export function resolveUndoLimit(value: number | "unlimited" | undefined): number {
+  if (value === "unlimited") return UNDO_HARD_CAP;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.min(Math.floor(value), UNDO_HARD_CAP);
+  }
+  return MAX_UNDO;
+}
 
 export interface ProjectStoreState {
   graph: ProjectGraph;
@@ -121,6 +137,11 @@ export interface ProjectStoreState {
   undoStack: ProjectStoreSnapshot[];
   /** Stage 2: redo stack (most recent last). Pop re-applies an undone edit. */
   redoStack: ProjectStoreSnapshot[];
+  /**
+   * v2.9.3：撤销栈上限，来自设置（`general.undoHistory.maxLevels`）。
+   * 此前是硬编码 MAX_UNDO=50，设置页的 100/500/1000/不限制从未生效。
+   */
+  undoLimit: number;
   /** Stage 0 (v2.1.0): tempo map as a first-class editable list. The playback
    *  engine (S2) reads these to build the TempoMap; defaults to bar1/120. */
   tempoChanges: TempoChange[];
@@ -154,6 +175,8 @@ export type ProjectStoreAction =
    * 一并从图里删除；master 与「最后一条轨」受保护。整步可 undo。
    */
   | { type: "REMOVE_MIXER_TRACK"; trackId: string }
+  /** v2.9.3：设置变更后调整撤销栈上限（不产生一步 undo） */
+  | { type: "SET_UNDO_LIMIT"; limit: number }
   /**
    * Stage 2: the provider's taste action creators mutate the shared TasteStore
    * before dispatching, so the reducer only advances the re-render counter.
@@ -945,6 +968,8 @@ export interface CreateInitialStateParams {
   appliedDiffs?: DiffEnvelope[];
   mixer?: MixerState;
   tasteStore?: TasteStore;
+  /** v2.9.3：撤销栈上限（来自设置；缺省 MAX_UNDO） */
+  undoLimit?: number;
 }
 
 /**
@@ -993,6 +1018,7 @@ export function createInitialState(
     toolCalls: [],
     undoStack: [],
     redoStack: [],
+    undoLimit: resolveUndoLimit(params.undoLimit),
     // Stage 0 (v2.1.0): tempo/meter are a DERIVED PROJECTION of graph.meta
     // (the single source of truth) — see deriveTempoProjection.
     ...deriveTempoProjection(graph),
@@ -1083,7 +1109,7 @@ function withUndo(
   const graph = patch.graph ?? state.graph;
   return {
     ...next,
-    undoStack: [...state.undoStack, undoSnapshot].slice(-MAX_UNDO),
+    undoStack: [...state.undoStack, undoSnapshot].slice(-state.undoLimit),
     redoStack: [],
     ...deriveTempoProjection(graph),
   };
@@ -1605,7 +1631,7 @@ export function createProjectReducer(
             action.redoGenome !== undefined
               ? { ...redoSnapshot, genome: action.redoGenome }
               : redoSnapshot,
-          ].slice(-MAX_UNDO),
+          ].slice(-state.undoLimit),
         };
       }
 
@@ -1620,7 +1646,7 @@ export function createProjectReducer(
             action.undoGenome !== undefined
               ? { ...undoSnapshot, genome: action.undoGenome }
               : undoSnapshot,
-          ].slice(-MAX_UNDO),
+          ].slice(-state.undoLimit),
           redoStack: state.redoStack.slice(0, -1),
         };
       }
@@ -1665,6 +1691,18 @@ export function createProjectReducer(
 
       case "CLEAR_TOOL_CALLS":
         return { ...state, toolCalls: [] };
+
+      // v2.9.3：撤销上限跟随设置。只裁剪多余的栈，不记录新的一步 undo。
+      case "SET_UNDO_LIMIT": {
+        const limit = resolveUndoLimit(action.limit);
+        if (limit === state.undoLimit) return state;
+        return {
+          ...state,
+          undoLimit: limit,
+          undoStack: state.undoStack.slice(-limit),
+          redoStack: state.redoStack.slice(-limit),
+        };
+      }
 
       // Stage 0 (.agentmusic load): replace the graph and re-derive notes from
       // it. The graph is a mutable class, so we snapshot the pre-edit state for

@@ -58,12 +58,15 @@ import {
   type TeachingConfigInput,
   type TeachingRunResult,
   convertAgentCollisions,
+  resolveUndoLimit,
   convertExtractParts,
   convertAgentExplanation,
   EMPTY_UI_EXPLANATION,
 } from "../store/project-store";
 import { createDemoNotes } from "../data/demoData";
 import { createBrowserTasteFsAdapter } from "../services/tasteFsAdapter";
+import { useOptionalSettings } from "../hooks/useSettings";
+import { DEFAULT_SETTINGS } from "../types/settings";
 import {
   PROJECT_PERSISTENCE_KEY,
   type PersistedProjectState,
@@ -73,7 +76,7 @@ import {
   serializeProjectState,
 } from "../services/persistence";
 import {
-  AUTOSAVE_INTERVAL_MS,
+  autosavePolicy,
   clearAutosaveSlots,
   scanAutosaveSlots,
   writeAutosaveSlot,
@@ -273,6 +276,17 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
   // 会让用户误以为 AI 已经参与。已删除：待审批队列现在只能由真实路径产生
   // （AI 工具调用 runAgentTool，或各面板的真实 Agent 按钮）。
 
+
+  /**
+   * v2.9.3：两条此前「设置页能改、实际不生效」的项在这里接上。
+   * - 自动保存开关/间隔（原来写死 5 分钟）
+   * - 撤销栈上限（原来写死 MAX_UNDO=50）
+   */
+  const settingsCtx = useOptionalSettings();
+  const generalSettings = settingsCtx?.settings.general ?? DEFAULT_SETTINGS.general;
+  const autoSave = autosavePolicy(generalSettings.autoSave);
+  const undoLimit = resolveUndoLimit(generalSettings.undoHistory.maxLevels);
+
   const [state, dispatch] = useReducer(
     useMemo(() => createProjectReducer(diffEngine), [diffEngine]),
     undefined,
@@ -289,6 +303,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           appliedDiffs: persisted.appliedDiffs,
           mixer: persisted.mixer,
           tasteStore,
+          undoLimit,
         });
       }
       const restored = createInitialState({
@@ -296,6 +311,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         initialNotes: initialNotes ?? createDemoNotes(),
         mixer: initialMixer,
         tasteStore,
+        undoLimit,
       });
       // v2.4.0 S5：通过 prop 注入的初始提案是针对"初始图"的，而初始图的
       // revisionId 由 ProjectGraph.create 随机生成，调用方无法预先得知。
@@ -311,6 +327,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       };
     }
   );
+
 
   // -----------------------------------------------------------------------
   // v1.17.0 Stage 1: autosave (crash recovery).
@@ -433,19 +450,25 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasteStore, diffEngine]);
 
+  // 设置变化 → 调整栈上限（只裁剪，不新增一步 undo）
+  useEffect(() => {
+    dispatch({ type: "SET_UNDO_LIMIT", limit: undoLimit } satisfies ProjectStoreAction);
+  }, [undoLimit]);
+
   useEffect(() => {
     if (!effectivePersistenceKey) return;
+    if (!autoSave.enabled) return;
     const intervalId = window.setInterval(() => {
       const fingerprint = computeAutosaveFingerprint(stateRef.current);
       if (autosaveFingerprintRef.current === fingerprint) return;
       autosaveFingerprintRef.current = fingerprint;
       const data = collectAgentMusicSnapshot();
       writeAutosaveSlot(JSON.stringify(data), new Date().toISOString());
-    }, AUTOSAVE_INTERVAL_MS);
+    }, autoSave.intervalMs);
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [effectivePersistenceKey, collectAgentMusicSnapshot]);
+  }, [effectivePersistenceKey, collectAgentMusicSnapshot, autoSave.enabled, autoSave.intervalMs]);
 
   // v2.4.0 S3: 原先这里注册了一个"compose" agent，对任何输入返回硬编码字符串
   // （`[compose] Rule-based response for "<prompt>"`）。已删除——AI 对话现在由
@@ -1206,6 +1229,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       toolCalls: state.toolCalls,
       undoStack: state.undoStack,
       redoStack: state.redoStack,
+      undoLimit: state.undoLimit,
       // Stage 0 (v2.1.0): expose the new tempo/meter first-class state.
       tempoChanges: state.tempoChanges,
       meterChanges: state.meterChanges,

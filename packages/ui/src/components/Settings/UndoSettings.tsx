@@ -91,7 +91,7 @@ export const UndoSettings: React.FC<UndoSettingsProps> = ({ className }) => {
           <label className={styles.settingLabel}>无限制撤销</label>
         </div>
         <p className={styles.settingDescription}>
-          启用后撤销历史将不限制步数，可能占用更多内存
+          启用后最多保留 1000 步撤销历史（快照是整工程，步数越多占用内存越大）
         </p>
         <div className={styles.toggleContainer}>
           <button

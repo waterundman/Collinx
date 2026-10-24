@@ -16,6 +16,7 @@ import {
 } from "@collinx/core";
 import { Orchestrator, EngravingAgent, TeachingAgent } from "@collinx/agent";
 import { ProjectProvider } from "../../providers/ProjectProvider";
+import { SettingsProvider } from "../../contexts/SettingsContext";
 import { useProjectStore } from "../../hooks/useProjectStore";
 import { createBrowserTasteFsAdapter } from "../../services/tasteFsAdapter";
 import { makeFixtureDiffs } from "../../test-utils/fixture-diffs";
@@ -94,6 +95,8 @@ function setup(
   // v2.4.0 S5：生产代码不再预置示例提案（原为假 AI 数据），改为测试显式注入
   // 夹具，使队列/审批/回滚等断言的强度保持不变。
   pendingDiffs: DiffEnvelope[] = makeFixtureDiffs(2),
+  /** v2.9.3：撤销上限来自设置；传值则挂 SettingsProvider 并写入 localStorage */
+  undoMaxLevels?: number | "unlimited",
 ) {
   let current: ProjectStoreValue | null = null;
   let root: Root;
@@ -104,19 +107,30 @@ function setup(
     return null;
   }
 
+  if (undoMaxLevels !== undefined) {
+    localStorage.setItem(
+      "collinx_settings",
+      JSON.stringify({ general: { undoHistory: { maxLevels: undoMaxLevels } } }),
+    );
+  }
+
+  const tree = (
+    <ProjectProvider
+      title="Test Project"
+      initialNotes={initialNotes}
+      initialMixer={initialMixer}
+      pendingDiffs={pendingDiffs}
+    >
+      <Probe />
+    </ProjectProvider>
+  );
+
   act(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
     root.render(
-      <ProjectProvider
-        title="Test Project"
-        initialNotes={initialNotes}
-        initialMixer={initialMixer}
-        pendingDiffs={pendingDiffs}
-      >
-        <Probe />
-      </ProjectProvider>
+      undoMaxLevels !== undefined ? <SettingsProvider>{tree}</SettingsProvider> : tree,
     );
   });
 
@@ -137,6 +151,8 @@ function setup(
 describe("project-store", () => {
   afterEach(() => {
     document.body.innerHTML = "";
+    // v2.9.3：T03 会写 collinx_settings 以设定撤销上限，避免污染后续用例
+    localStorage.clear();
   });
 
   it("T01: ProjectProvider 初始化后 graph 非空,notes 可从 store 查询", () => {
@@ -1655,8 +1671,8 @@ describe("project-store undo/redo (Stage 2)", () => {
     s.cleanup();
   });
 
-  it("T03: undo 栈上限(MAX_UNDO)防膨胀", () => {
-    const s = setup();
+  it("T03: undo 栈上限由设置决定（50 步）并防膨胀", () => {
+    const s = setup(undefined, undefined, makeFixtureDiffs(2), 50);
     expect(s.value.undoStack.length).toBe(0);
 
     act(() => {
@@ -1673,8 +1689,9 @@ describe("project-store undo/redo (Stage 2)", () => {
       }
     });
 
-    // The cap holds at MAX_UNDO; the oldest 10 steps were evicted.
-    expect(s.value.undoStack.length).toBe(MAX_UNDO);
+    // v2.9.3：上限来自设置（此前硬编码 MAX_UNDO=50，设置页无效）
+    expect(s.value.undoLimit).toBe(50);
+    expect(s.value.undoStack.length).toBe(50);
     expect(s.value.redoStack.length).toBe(0);
     // The graph itself keeps every note (edits are never lost by eviction).
     expect(s.value.notes.length).toBeGreaterThan(MAX_UNDO);
