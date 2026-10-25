@@ -5,6 +5,7 @@ import { planBarSlots, barBeatFromX } from "./bar-anchors";
 import type { BarAnchor, BarSlot } from "./bar-anchors";
 import { planSystems } from "./score-layout";
 import { ScorePlayhead } from "./ScorePlayhead";
+import { groupNotesForStaves, type ScoredNoteGroup } from "./note-grouping";
 
 const NOTE_NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const NOTE_NAMES_FLAT = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
@@ -168,12 +169,22 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     return { numerator: 4, denominator: 4 };
   }, [tempoMap]);
 
-  const notesByStaff = useMemo(() => {
-    return layout.staffConfig.map((staff) => {
-      return notes.filter((n) => {
-        if (staff.clef === "treble") return n.pitchMidi >= 60;
-        return n.pitchMidi < 60;
-      });
+  /**
+   * v2.9.6：谱表分配改为「按同时性分组后整组归属」。
+   *
+   * 旧行为按单音音高（≥60 高音谱表）分配 —— 和弦轨生成的三和弦
+   * （如 A3/C4/E4）被拆到两个谱表，谱面上和弦就散架了。
+   * 新规则：同小节/同拍/同时值聚成一组，组内最低音 < 60 → 低音谱表，
+   * 否则高音谱表；单音组与旧行为逐值一致。
+   */
+  const groupsByStaffAndBar = useMemo(() => {
+    const groups = groupNotesForStaves(notes, layout.staffConfig);
+    return groups.map((list) => {
+      const byBar: Record<number, ScoredNoteGroup[]> = {};
+      for (const group of list) {
+        (byBar[group.bar] ??= []).push(group);
+      }
+      return byBar;
     });
   }, [notes, layout.staffConfig]);
 
@@ -297,22 +308,16 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         // 使「丢弃」这一旧行为显式化 —— 不新增对外 prop，仅用于诊断。
         let outOfRangeBarCount = 0;
 
-        // 每个谱表的「小节号 → 音符」索引（跨系统共用，按真实小节号取用）。
-        const notesByStaffAndBar: Record<number, NoteEvent[]>[] = staves.map((_, staffIdx) => {
-          const groupedByBar: Record<number, NoteEvent[]> = {};
-          for (const note of notesByStaff[staffIdx] ?? []) {
-            const bar = note.bar;
-            // D32-5 显式忽略：bar < 1 / 非整数 / 超出本画布小节范围（分页时为
-            // [startBar, startBar+renderBars-1]）的音符不属于任何槽位。
+        // D32-5：越界小节（<1 / 非整数 / > lastBar）的**和弦组**计数。
+        // 渲染循环直接跳过这些小节 —— 旧行为的「静默丢弃」在这里显式化。
+        for (const byBar of groupsByStaffAndBar) {
+          for (const barKey of Object.keys(byBar)) {
+            const bar = Number(barKey);
             if (bar < 1 || !Number.isInteger(bar) || bar > lastBar) {
-              outOfRangeBarCount++;
-              continue;
+              outOfRangeBarCount += byBar[bar]!.length;
             }
-            if (!groupedByBar[bar]) groupedByBar[bar] = [];
-            groupedByBar[bar].push(note);
           }
-          return groupedByBar;
-        });
+        }
 
         // 全部系统的小节槽位（按小节号顺序展平）+ 所属系统的纵向起点，
         // 用于上报锚点；单系统时不带纵向信息（锚点形状与改动前一致）。
@@ -334,7 +339,8 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
           for (let staffIdx = 0; staffIdx < staves.length; staffIdx++) {
             const staff = staves[staffIdx];
-            const groupedByBar = notesByStaffAndBar[staffIdx] ?? {};
+            // 本谱表：小节号 → 和弦组（构建时已按拍排序）
+            const groupedByBar = groupsByStaffAndBar[staffIdx] ?? {};
             const yOffset = systemTop + staffIdx * (STAVE_HEIGHT + STAVE_GAP) + 30;
 
             for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
@@ -362,27 +368,32 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               if (slotIdx === 0) vfStaves.push(barStave);
 
               // 空小节只画 Stave、不建 Voice；落在本画布范围外的音符已被剔除。
-              const barNotes = (groupedByBar[slot.bar] ?? [])
-                .slice()
-                .sort((a, b) => a.beat - b.beat);
-              if (barNotes.length === 0) continue;
+              const barGroups = groupedByBar[slot.bar] ?? [];
+              if (barGroups.length === 0) continue;
 
+              // v2.9.6：每个「同时性组」= 一个 StaveNote（keys 为多音和弦）。
+              // 旧实现每音一个 StaveNote —— 三和弦被画成 3 个连续全音符，
+              // 一小节塞 12 拍，记谱不成立（v2.9.5 点击会话发现的谱面缺陷）。
               const vfNotes: InstanceType<typeof VF.StaveNote>[] = [];
-              for (const note of barNotes) {
-                const vfKey =
-                  MIDI_TO_VF_KEY[note.pitchMidi] ?? `c/${Math.floor(note.pitchMidi / 12) - 1}`;
-                const { duration, isDotted } = durQnToVfDuration(note.durQn);
-                const accidental = getAccidental(note.pitchMidi, note.pitchSpelling);
-
+              for (const group of barGroups) {
+                const keys = group.notes.map(
+                  (note) =>
+                    MIDI_TO_VF_KEY[note.pitchMidi] ?? `c/${Math.floor(note.pitchMidi / 12) - 1}`,
+                );
+                const { duration, isDotted } = durQnToVfDuration(group.durQn);
                 const staveNote = new VF.StaveNote({
                   clef: staff.clef,
-                  keys: [vfKey],
+                  keys,
                   duration: duration,
                 });
 
-                if (accidental) {
-                  staveNote.addModifier(new VF.Accidental(accidental));
-                }
+                // 每个键位的临时记号必须带 keyIndex，否则修饰符全落在第一个音上
+                group.notes.forEach((note, keyIndex) => {
+                  const accidental = getAccidental(note.pitchMidi, note.pitchSpelling);
+                  if (accidental) {
+                    staveNote.addModifier(new VF.Accidental(accidental), keyIndex);
+                  }
+                });
                 if (isDotted) {
                   VF.Dot.buildAndAttach([staveNote]);
                 }
@@ -471,7 +482,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [notes, layout, meter, notesByStaff, renderBars, totalHeight, startBar, systems]);
+  }, [notes, groupsByStaffAndBar, layout, meter, renderBars, totalHeight, startBar, systems]);
 
   const containerStyle: React.CSSProperties = {
     transform: `scale(${scale})`,

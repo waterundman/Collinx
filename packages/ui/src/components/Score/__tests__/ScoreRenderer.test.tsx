@@ -389,3 +389,53 @@ describe("ScoreRenderer 真实渲染 (S4b · D34-4)", () => {
     expect(typeof ScoreRenderer).toBe("function");
   });
 });
+
+// ── v2.9.6：同拍音符必须聚成一个和弦 StaveNote ───────────────────────────
+// 旧实现每音一个 StaveNote：三和弦（3 个 beat=1/durQn=4 的音）被画成
+// 3 个连续全音符 —— 一小节塞 12 拍，记谱不成立（v2.9.5 点击会话实锤）。
+// 判据：**符干数**（.vf-stem）—— 和弦 3 个音共 1 条符干；散排则是 3 条。
+// 注意全音符没有符干，所以这里用二分音符（durQn=2）。
+describe("v2.9.6 同拍聚合（和弦记谱）", () => {
+  it("同小节同拍同值的 3 个音 → 3 个符头 + 1 条符干（和弦），不是 3 条符干", async () => {
+    const notes = [
+      makeNote({ id: "c1", pitchMidi: 57, pitchSpelling: "A3", bar: 1, beat: 1, durQn: 2 }),
+      makeNote({ id: "c2", pitchMidi: 60, pitchSpelling: "C4", bar: 1, beat: 1, durQn: 2 }),
+      makeNote({ id: "c3", pitchMidi: 64, pitchSpelling: "E4", bar: 1, beat: 1, durQn: 2 }),
+    ];
+    const h = mount(<ScoreRenderer notes={notes} layout={twoStaffLayout} />);
+    await waitForSvg(h.container);
+
+    const svg = h.container.querySelector("svg")!;
+    // 等渲染完成（锚点上报一次即代表 render() 跑完）
+    const noteheads = svg.querySelectorAll(".vf-notehead");
+    const stems = svg.querySelectorAll(".vf-stem");
+    expect(noteheads.length).toBe(3);
+    expect(stems.length).toBe(1);
+    h.cleanup();
+  });
+
+  it("和弦整体落在同一个谱表（A3/C4/E4 → 低音谱表）", async () => {
+    const notes = [
+      makeNote({ id: "c1", pitchMidi: 57, pitchSpelling: "A3", bar: 1, beat: 1, durQn: 2 }),
+      makeNote({ id: "c2", pitchMidi: 60, pitchSpelling: "C4", bar: 1, beat: 1, durQn: 2 }),
+      makeNote({ id: "c3", pitchMidi: 64, pitchSpelling: "E4", bar: 1, beat: 1, durQn: 2 }),
+    ];
+    const h = mount(<ScoreRenderer notes={notes} layout={twoStaffLayout} />);
+    await waitForSvg(h.container);
+
+    // jsdom 不做布局（getBoundingClientRect 恒 0），改读 SVG **属性坐标**：
+    // 符干 y 坐标落在低音谱表区（staffIdx=1 → yOffset = 140+30 = 170 起）。
+    const stems = Array.from(
+      h.container.querySelectorAll("svg .vf-stem"),
+    ) as SVGElement[];
+    expect(stems).toHaveLength(1);
+    // 符干是 <g class="vf-stem"><path d="M x y L x y"/></g> —— 坐标在 path 的
+    // d 属性里（VexFlow5 不写 y1/y2 属性）。低音谱表纵向起点 =
+    // staffIdx×(120+20)+30 = 170；符干必须落在这个区域（>150 即排除高音谱表）。
+    const d = stems[0]!.querySelector("path")?.getAttribute("d") ?? "";
+    const ys = Array.from(d.matchAll(/[ML]\s*[-\d.]+\s+([-\d.]+)/g)).map((m) => Number(m[1]));
+    expect(ys.length).toBeGreaterThanOrEqual(2);
+    for (const y of ys) expect(y).toBeGreaterThan(150);
+    h.cleanup();
+  });
+});
