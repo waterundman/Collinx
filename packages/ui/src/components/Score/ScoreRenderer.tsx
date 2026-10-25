@@ -6,6 +6,13 @@ import type { BarAnchor, BarSlot } from "./bar-anchors";
 import { planSystems } from "./score-layout";
 import { ScorePlayhead } from "./ScorePlayhead";
 import { groupNotesForStaves, type ScoredNoteGroup } from "./note-grouping";
+import {
+  beamGroups,
+  keyAlterations,
+  MeasureAccidentalState,
+  vexflowKeySpec,
+  type KeyDef,
+} from "./engraving";
 
 const NOTE_NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const NOTE_NAMES_FLAT = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
@@ -326,6 +333,10 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
         for (const system of systemPlans) {
           const systemTop = system.index * systemHeight;
+          // v2.9.7：调号来自图 meta.key_map（tempoMap.keyAt），缺省 C major
+          const currentKey: KeyDef = tempoMap
+            ? (tempoMap.keyAt(system.startBar) as KeyDef)
+            : { tonic: "C", mode: "major" };
           const slots = planBarSlots({
             startX: firstBarLeft,
             availableWidth,
@@ -355,11 +366,15 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                 slotIdx === slots.length - 1 ? VF.BarlineType.END : VF.BarlineType.SINGLE,
               );
 
-              // 首谱表的每行首小节挂谱号；整谱仅第一行首小节挂拍号——与既有行为
-              // 一致（单系统时仍是「只有 staff 0 首小节有谱号 + 拍号」）。
-              if (staffIdx === 0 && slotIdx === 0) {
+              // v2.9.7 记谱规则（见 engraving.ts 来源注）：
+              // - 谱号：**每个谱表**每行首小节都要挂（旧实现只挂 staff 0，
+              //   低音谱表一直没有谱号 —— 用户指出的「不规范」之一）
+              // - 调号：紧随谱号，每行每个谱表都要（key_map 驱动）
+              // - 拍号：仅首系统首谱表（变化处另行标注，当前不支持中途变拍号 UI）
+              if (slotIdx === 0) {
                 barStave.addClef(staff.clef);
-                if (system.index === 0) {
+                barStave.addKeySignature(vexflowKeySpec(currentKey));
+                if (system.index === 0 && staffIdx === 0) {
                   barStave.addTimeSignature(`${meter.numerator}/${meter.denominator}`);
                 }
               }
@@ -367,14 +382,28 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               barStave.setContext(context).draw();
               if (slotIdx === 0) vfStaves.push(barStave);
 
-              // 空小节只画 Stave、不建 Voice；落在本画布范围外的音符已被剔除。
+              // 空小节不再跳过 —— v2.9.7 规则③要求画全小节休止符（下方分支）。
               const barGroups = groupedByBar[slot.bar] ?? [];
-              if (barGroups.length === 0) continue;
 
               // v2.9.6：每个「同时性组」= 一个 StaveNote（keys 为多音和弦）。
               // 旧实现每音一个 StaveNote —— 三和弦被画成 3 个连续全音符，
               // 一小节塞 12 拍，记谱不成立（v2.9.5 点击会话发现的谱面缺陷）。
               const vfNotes: InstanceType<typeof VF.StaveNote>[] = [];
+              // v2.9.7 规则③：空小节画全小节休止符（旧实现什么都不画）
+              if (barGroups.length === 0) {
+                vfNotes.push(
+                  new VF.StaveNote({ clef: staff.clef, keys: ["b/4"], duration: "wr" }),
+                );
+              }
+              // v2.9.7 规则②：小节内临时记号状态机（Gould p.78 —— 小节内同八度
+              // 同音名沿用、不重画；与调号一致不画；过小节线由新 context 复位）
+              const accidentalState = new MeasureAccidentalState(
+                keyAlterations(
+                  tempoMap
+                    ? (tempoMap.keyAt(slot.bar) as KeyDef)
+                    : { tonic: "C", mode: "major" },
+                ),
+              );
               for (const group of barGroups) {
                 const keys = group.notes.map(
                   (note) =>
@@ -387,11 +416,12 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                   duration: duration,
                 });
 
-                // 每个键位的临时记号必须带 keyIndex，否则修饰符全落在第一个音上
+                // 每个键位的临时记号必须带 keyIndex，否则修饰符全落在第一个音上。
+                // 是否画符号由小节状态机决定（旧实现见音就画，违反 Gould p.78）
                 group.notes.forEach((note, keyIndex) => {
-                  const accidental = getAccidental(note.pitchMidi, note.pitchSpelling);
-                  if (accidental) {
-                    staveNote.addModifier(new VF.Accidental(accidental), keyIndex);
+                  const symbol = accidentalState.symbolFor(note.pitchMidi, note.pitchSpelling);
+                  if (symbol) {
+                    staveNote.addModifier(new VF.Accidental(symbol), keyIndex);
                   }
                 });
                 if (isDotted) {
@@ -413,8 +443,12 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               voice.draw(context, barStave);
 
               // 梁只在本小节音符内生成。
+              // v2.9.7 规则⑤：按拍分梁（4/4 每拍一组；6/8 按附点四分 3/8 一组）。
+              // 旧实现整小节一条梁 —— 违反通行记谱法。
               const beams = VF.Beam.generateBeams(vfNotes, {
-                groups: [new VF.Fraction(meter.numerator, meter.denominator)],
+                groups: beamGroups(meter.numerator, meter.denominator).map(
+                  ([num, den]) => new VF.Fraction(num, den),
+                ),
               });
               beams.forEach((b) => b.setContext(context).draw());
             }

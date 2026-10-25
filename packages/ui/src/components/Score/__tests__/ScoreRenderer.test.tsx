@@ -406,11 +406,13 @@ describe("v2.9.6 同拍聚合（和弦记谱）", () => {
     await waitForSvg(h.container);
 
     const svg = h.container.querySelector("svg")!;
-    // 等渲染完成（锚点上报一次即代表 render() 跑完）
-    const noteheads = svg.querySelectorAll(".vf-notehead");
-    const stems = svg.querySelectorAll(".vf-stem");
-    expect(noteheads.length).toBe(3);
-    expect(stems.length).toBe(1);
+    // 作用域收敛到**单个 StaveNote 组**：全 svg 查询会把其它小节/谱表的元素
+    // 一并算进来（空小节休止符等），断言会随内容漂移。
+    const chordGroup = Array.from(svg.querySelectorAll(".vf-stavenote")).find(
+      (g) => g.querySelectorAll(".vf-notehead").length === 3,
+    );
+    expect(chordGroup).toBeDefined();
+    expect(chordGroup!.querySelectorAll(".vf-stem")).toHaveLength(1);
     h.cleanup();
   });
 
