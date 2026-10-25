@@ -381,3 +381,29 @@ describe("AgentMusicIO", () => {
     });
   });
 });
+
+// ── v2.9.5：manifest 统计必须有真实数据 ──────────────────────────────────
+// 实测存档 manifest 曾写 totalBars:1 / trackCount:1 —— bridge 只传了 graph，
+// notes 缺席时统计退化为 1。锁定「传 notes 就有真值」的契约。
+describe("AgentMusicIO.createManifest 统计", () => {
+  it("totalBars/trackCount 来自 notes（而非缺省 1）", () => {
+    const io = new AgentMusicIO();
+    const graph = ProjectGraph.create("Stats");
+    const notes = [
+      createNoteEvent({ trackId: "melody", bar: 1, beat: 1, durQn: 1, pitchMidi: 60 }),
+      createNoteEvent({ trackId: "melody", bar: 5, beat: 1, durQn: 1, pitchMidi: 62 }),
+      createNoteEvent({ trackId: "chords", bar: 5, beat: 1, durQn: 4, pitchMidi: 57 }),
+    ];
+    const m = io.createManifest({ graph: graph.toJSON(), notes });
+
+    expect(m.totalBars).toBe(5);
+    expect(m.trackCount).toBe(2);
+  });
+
+  it("没有 notes 时回退 1/1（不 NaN）", () => {
+    const io = new AgentMusicIO();
+    const m = io.createManifest({ graph: ProjectGraph.create("Empty").toJSON() });
+    expect(m.totalBars).toBe(1);
+    expect(m.trackCount).toBe(1);
+  });
+});

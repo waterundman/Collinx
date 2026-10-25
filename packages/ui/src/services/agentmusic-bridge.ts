@@ -126,7 +126,12 @@ function toDiffLogEntry(d: DiffEnvelope): DiffLogEntry {
  */
 export function collectAgentMusicData(store: AgentMusicStoreSource): AgentMusicData {
   const io = new AgentMusicIO();
-  const manifest = io.createManifest({ graph: store.graph.toJSON() });
+  // v2.9.5：manifest 此前只拿 graph → totalBars/trackCount 永远是 1/1。
+  // 把 notes/mixer 一并传入，统计才有意义（实测存档 manifest 曾写 totalBars:1）。
+  const manifest = io.createManifest({
+    graph: store.graph.toJSON(),
+    notes: store.notes,
+  });
 
   const genome = store.tasteStore.getCurrentGenome();
   const versions = store.tasteStore.getVersionHistory();

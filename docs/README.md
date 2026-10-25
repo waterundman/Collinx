@@ -28,6 +28,7 @@
 | [v2.9.1-debt.md](./v2.9.1-debt.md) | **v2.9.1 技术债清算**：全模块/接口审计、18 项已消解、3 项阻塞 |
 | [v2.9.3-debt.md](./v2.9.3-debt.md) | **v2.9.3 债务盘点**：设置假旋钮 13 个、导出采样率、类型逃逸/大文件登记 |
 | [v2.9.4-debt.md](./v2.9.4-debt.md) | **v2.9.4 续消解**：采样率/延迟档位/输出设备/默认FX链/归一化开关 |
+| [v2.9.5-click-session.md](./v2.9.5-click-session.md) | **v2.9.5 点击会话**：42 次点击做出 65s 悲伤钢琴曲；修 manifest 统计 |
 | [deep-research-report.md](./deep-research-report.md) | 深度调研 |
 
 ## 归档
