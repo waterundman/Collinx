@@ -8,6 +8,8 @@ import { ScorePlayhead } from "./ScorePlayhead";
 import { groupNotesForStaves, type ScoredNoteGroup } from "./note-grouping";
 import {
   beamGroups,
+  fillRestGaps,
+  stemDirection,
   keyAlterations,
   MeasureAccidentalState,
   vexflowKeySpec,
@@ -389,7 +391,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               // 旧实现每音一个 StaveNote —— 三和弦被画成 3 个连续全音符，
               // 一小节塞 12 拍，记谱不成立（v2.9.5 点击会话发现的谱面缺陷）。
               const vfNotes: InstanceType<typeof VF.StaveNote>[] = [];
-              // v2.9.7 规则③：空小节画全小节休止符（旧实现什么都不画）
+              // v2.9.7 规则③：空小节画全小节休止符
               if (barGroups.length === 0) {
                 vfNotes.push(
                   new VF.StaveNote({ clef: staff.clef, keys: ["b/4"], duration: "wr" }),
@@ -404,6 +406,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                     : { tonic: "C", mode: "major" },
                 ),
               );
+              const tickables: { beat: number; note: InstanceType<typeof VF.StaveNote> }[] = [];
               for (const group of barGroups) {
                 const keys = group.notes.map(
                   (note) =>
@@ -428,8 +431,35 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                   VF.Dot.buildAndAttach([staveNote]);
                 }
 
-                vfNotes.push(staveNote);
+                // v2.9.8 规则：符干方向由「离中线最远的音」决定（单音即自身）
+                if (group.durQn !== 4) {
+                  // 全音符无符干，不设方向
+                  const dir = stemDirection(
+                    group.notes.map((n) => n.pitchMidi),
+                    staff.clef,
+                  );
+                  staveNote.setStemDirection(dir === "up" ? VF.Stem.UP : VF.Stem.DOWN);
+                }
+                tickables.push({ beat: group.beat, note: staveNote });
               }
+              for (const rest of fillRestGaps(
+                meter.numerator,
+                meter.denominator,
+                barGroups.map((g) => ({ beat: g.beat, durQn: g.durQn })),
+              )) {
+                const { duration } = durQnToVfDuration(rest.durQn);
+                tickables.push({
+                  beat: rest.beat,
+                  note: new VF.StaveNote({
+                    clef: staff.clef,
+                    keys: ["b/4"],
+                    duration: `${duration}r`,
+                  }),
+                });
+              }
+              tickables
+                .sort((a, b) => a.beat - b.beat)
+                .forEach((t) => vfNotes.push(t.note));
 
               // 每小节独立 Voice + Formatter（不再把全曲音符展平进单个 Voice）。
               const voice = new VF.Voice({
@@ -445,11 +475,14 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               // 梁只在本小节音符内生成。
               // v2.9.7 规则⑤：按拍分梁（4/4 每拍一组；6/8 按附点四分 3/8 一组）。
               // 旧实现整小节一条梁 —— 违反通行记谱法。
-              const beams = VF.Beam.generateBeams(vfNotes, {
-                groups: beamGroups(meter.numerator, meter.denominator).map(
-                  ([num, den]) => new VF.Fraction(num, den),
-                ),
-              });
+              const beamables = vfNotes.filter((n) => !n.isRest());
+              const beams = beamables.length >= 2
+                ? VF.Beam.generateBeams(beamables, {
+                    groups: beamGroups(meter.numerator, meter.denominator).map(
+                      ([num, den]) => new VF.Fraction(num, den),
+                    ),
+                  })
+                : [];
               beams.forEach((b) => b.setContext(context).draw());
             }
           }

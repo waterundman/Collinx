@@ -148,14 +148,101 @@ export class MeasureAccidentalState {
 }
 
 /**
- * 梁分组（拍单位）：4/4、3/4 等以四分音符为一拍 → 每拍一组 (1,4)；
- * 6/8、9/8、12/8 复拍子 → 按附点四分 (3,8) 一组；其它 x/8 → 按八分 (1,8)。
- * 返回 [分子, 分母] 数组，渲染器映射为 VF.Fraction。
+ * 梁分组完整模式（v2.9.8，按 Digital Engraving Practice 重写）。
+ *
+ * 返回**铺满整小节**的分组序列（VexFlow generateBeams 的 groups 语义）。
+ * 规则（ScoreLabs #11 / mymusictheory / Wikipedia Beam）：
+ * - 4/4：**1+2 一梁、3+4 一梁**；严禁四拍一条梁（跨过第二强拍 beat3）
+ * - 2/4：整小节一梁；3/4：整小节一梁（首音必须落拍）
+ * - 6/8、9/8、12/8：按附点四分（3/8）分块
+ * - 2/2：按二分音符一拍（1/2）一组；3/2：整小节
+ * - 5/8 默认 3+2；7/8 默认 2+2+3；5/4 默认 3+2
+ * - x/16：按四分音符（4 个十六分）一组
  */
 export function beamGroups(numerator: number, denominator: number): [number, number][] {
-  if (denominator === 8 && numerator % 3 === 0 && numerator > 0) return [[3, 8]];
-  if (denominator === 8) return [[1, 8]];
-  // 四分音符为一拍（/4、/2、/16 等按拍值 = 4/denominator 个四分音符）
-  const beatValue = denominator; // 以全音符为 1：一拍 = 4/den /4 = 1/denominator
-  return [[1, beatValue]];
+  const n = Math.max(1, Math.floor(numerator));
+  const d = Math.max(1, Math.floor(denominator));
+  const chunks = (size: number, count: number, den: number): [number, number][] =>
+    Array.from({ length: count }, () => [size, den] as [number, number]);
+
+  if (d === 8) {
+    if (n % 3 === 0) return chunks(3, n / 3, 8);
+    if (n === 5) return [[3, 8], [2, 8]];
+    if (n === 7) return [[2, 8], [2, 8], [3, 8]];
+    return chunks(1, n, 8);
+  }
+  if (d === 4) {
+    if (n === 2) return [[2, 4]];
+    if (n === 3) return [[3, 4]];
+    if (n === 4) return [[2, 4], [2, 4]]; // 1+2 / 3+4 —— 严禁 [[4,4]]
+    if (n === 5) return [[3, 4], [2, 4]];
+    if (n === 6) return [[3, 4], [3, 4]];
+    return chunks(1, n, 4);
+  }
+  if (d === 2) {
+    if (n === 2) return [[1, 2], [1, 2]];
+    if (n === 3) return [[3, 2]];
+    return chunks(1, n, 2);
+  }
+  if (d === 16) return chunks(1, n, 4); // 4 个十六分 = 1 拍
+  return chunks(1, n, d);
+}
+
+/**
+ * 符干方向（Wikipedia Beam / daviddarling 规则）：
+ * **离中线最远的音符决定整组方向**；单音即自身。
+ * 中线：高音谱表 B4（midi 71），低音谱表 D3（midi 50）。
+ */
+export function stemDirection(pitches: number[], clef: string): "up" | "down" {
+  const middle = clef === "treble" ? 71 : 50;
+  const farthest = pitches.reduce(
+    (best, p) => (Math.abs(p - middle) > Math.abs(best - middle) ? p : best),
+    pitches[0] ?? middle,
+  );
+  return farthest < middle ? "up" : "down";
+}
+
+/**
+ * 小节内空隙补休止（v2.9.8 规则：每个声部每小节必须被音符+休止填满）。
+ *
+ * 输入本小节已有的组（beat/durQn），输出需要插入的休止段。
+ * 贪心策略：按 [2,1,0.5]（二分/四分/八分）从前往后取能放进空隙的最大块
+ * —— 符合 Gould 的「优先大块、避免附点」取向。16 分音符级空隙本轮
+ * 按 0.5 兜底（登记局限）。
+ */
+export function fillRestGaps(
+  meterNumerator: number,
+  meterDenominator: number,
+  groups: { beat: number; durQn: number }[],
+): { beat: number; durQn: number }[] {
+  const beatsPerBar = (meterNumerator * 4) / meterDenominator; // 四分音符单位
+  const UNIT = 0.5; // 八分音符粒度
+  const total = Math.round(beatsPerBar / UNIT);
+  const covered = new Array<boolean>(total).fill(false);
+  for (const g of groups) {
+    const start = Math.round((g.beat - 1) / UNIT);
+    const len = Math.max(0, Math.round(g.durQn / UNIT));
+    for (let i = start; i < Math.min(start + len, total); i++) covered[i] = true;
+  }
+
+  const rests: { beat: number; durQn: number }[] = [];
+  let i = 0;
+  while (i < total) {
+    if (covered[i]) {
+      i += 1;
+      continue;
+    }
+    let gapEnd = i;
+    while (gapEnd < total && !covered[gapEnd]) gapEnd += 1;
+    let cursor = i;
+    while (cursor < gapEnd) {
+      const remainingBeats = (gapEnd - cursor) * UNIT;
+      const block =
+        remainingBeats >= 2 ? 2 : remainingBeats >= 1 ? 1 : 0.5;
+      rests.push({ beat: 1 + cursor * UNIT, durQn: block });
+      cursor += Math.round(block / UNIT);
+    }
+    i = gapEnd;
+  }
+  return rests;
 }

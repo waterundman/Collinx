@@ -30,7 +30,7 @@
 | [v2.9.4-debt.md](./v2.9.4-debt.md) | **v2.9.4 续消解**：采样率/延迟档位/输出设备/默认FX链/归一化开关 |
 | [v2.9.5-click-session.md](./v2.9.5-click-session.md) | **v2.9.5 点击会话**：42 次点击做出 65s 悲伤钢琴曲；修 manifest 统计 |
 | [v2.9.6-score-mix.md](./v2.9.6-score-mix.md) | **v2.9.6 谱面乐理修复**（和弦聚合/整组谱表）+ 奇幻混音会话 |
-| [engraving-rules.md](./engraving-rules.md) | **记谱法规则**：渲染器遵守的 11 条规范（来源+实现+测试） |
+| [engraving-rules.md](./engraving-rules.md) | **电子化五线谱排印实践**：A-G 七域 30 条规则（梁/休止/符干/临时记号…，来源+实现+测试） |
 | [deep-research-report.md](./deep-research-report.md) | 深度调研 |
 
 ## 归档
