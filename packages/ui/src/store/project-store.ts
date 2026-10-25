@@ -17,6 +17,10 @@ import {
   createNoteEvent,
   createTrack,
   computeMixerDiff,
+  FX_TYPES,
+  type FXType,
+  createFXSlot,
+  addSlotToChain,
   mixerToDiff,
   diffToMixer,
   serializeGraph,
@@ -167,7 +171,9 @@ export type ProjectStoreAction =
   | { type: "SET_CHORD"; bar: number; chord: { root: string; quality: string; bass?: string } | null }
   | { type: "APPLY_MIXER_DIFF"; diff: DiffEnvelope }
   | { type: "REVERT_MIXER_TO"; mixer: MixerState }
-  | { type: "ADD_MIXER_TRACK"; name: string; sourceId: string }
+  | { type: "ADD_MIXER_TRACK"; name: string; sourceId: string;
+    /** v2.9.4：来自设置 mixer.defaultFXChain 的新轨默认 FX 类型（非法类型被忽略） */
+    defaultFxTypes?: FXType[] }
   /**
    * v2.9.0：删除混音轨。
    *
@@ -1559,6 +1565,13 @@ export function createProjectReducer(
 
       case "ADD_MIXER_TRACK": {
         const track = createTrack(action.name, action.sourceId);
+        // v2.9.4：新轨默认 FX 链来自设置（此前 defaultFXChain 设置不生效）。
+        // 只接受合法 FXType；未知字符串直接丢弃，不造一个渲染不出来的槽。
+        if (action.defaultFxTypes && action.defaultFxTypes.length > 0) {
+          for (const type of action.defaultFxTypes) {
+            if (FX_TYPES.includes(type)) addSlotToChain(track.fxChain, createFXSlot(type));
+          }
+        }
         return withUndo(state, {
           mixer: {
             ...state.mixer,

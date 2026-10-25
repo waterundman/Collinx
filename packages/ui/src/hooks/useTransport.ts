@@ -106,6 +106,15 @@ export interface UseTransportOptions {
    * 行为与改动前完全一致 —— 老调用方与测试无需修改。
    */
   instrumentOfTrack?: (trackId: string | undefined) => string;
+  /**
+   * v2.9.4：音频引擎创建参数（来自设置 audio.*）。
+   * AudioContext 创建后不可改 —— 这里只在首次创建时生效。
+   */
+  audio?: {
+    sampleRate?: number;
+    latencyHint?: import("../services/audio-preview").AudioLatencyHint;
+    outputDeviceId?: string;
+  };
 }
 
 export interface UseTransportResult {
@@ -135,6 +144,8 @@ export interface UseTransportResult {
   getTrackLevel: (trackId: string) => number;
   /** v2.9.2：真实音频性能快照（声部数/采样率/延迟/电平） */
   getAudioPerformance: () => import("../services/audio-preview").AudioPerformanceInfo;
+  /** v2.9.4：运行中切换输出设备（setSinkId；不支持的环境返回 false） */
+  setOutputDevice: (deviceId: string) => Promise<boolean>;
   /** v2.8.0：Master 推子 → 总输出音量 */
   setMasterGain: (db: number) => void;
   pause: () => void;
@@ -214,6 +225,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     metronome,
     onRecordingCommit,
     instrumentOfTrack,
+    audio: audioOptions,
   } = options;
 
   // ── 最新入参经 ref 读取：使 play/pause/seek 等回调引用稳定（不随渲染重建） ──
@@ -346,7 +358,8 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
    */
   const previewRef = useRef<AudioPreview | null>(null);
   if (previewRef.current === null) {
-    previewRef.current = new AudioPreview();
+    // v2.9.4：设置里的采样率/延迟档位/输出设备在创建时生效（见 AudioPreviewOptions）
+    previewRef.current = new AudioPreview(audioOptions ?? {});
   }
   /** 已发出 noteOn 的音符：键 `${pitch}:${channel}` → 已换算通道（0-15）。
    *  两通道并存后单 pitch 键不诚实，故键含通道（见文件头抗卡音说明）。 */
@@ -839,6 +852,13 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     [],
   );
 
+  /** v2.9.4：运行中切换输出设备（setSinkId；不支持的环境返回 false） */
+  const setOutputDevice = useCallback(
+    async (deviceId: string): Promise<boolean> =>
+      previewRef.current?.setOutputDevice(deviceId) ?? false,
+    [],
+  );
+
   /** v2.9.2：性能面板的真实数据源（未启动时返回全 0 快照） */
   const getAudioPerformance = useCallback(
     (): import("../services/audio-preview").AudioPerformanceInfo =>
@@ -900,6 +920,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       removeTrackAudio,
       getTrackLevel,
       getAudioPerformance,
+      setOutputDevice,
       setMasterGain,
       seek,
       loop,
@@ -926,6 +947,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       removeTrackAudio,
       getTrackLevel,
       getAudioPerformance,
+      setOutputDevice,
       setMasterGain,
       seek,
       loop,

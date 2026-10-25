@@ -44,6 +44,21 @@ export function velocityToGain(velocity: number): number {
   return v * v * 0.35;
 }
 
+export type AudioLatencyHint = "interactive" | "balanced" | "playback";
+
+/**
+ * 缓冲区大小 → AudioContext 的 latencyHint 粗档位（v2.9.4）。
+ *
+ * Web Audio 不接受"给我 256 样本"这种精确值，只认三档。映射规则：
+ * ≤256 交互优先、≤1024 均衡、更大回放优先。
+ */
+export function latencyHintForBufferSize(bufferSize: number): AudioLatencyHint {
+  if (!Number.isFinite(bufferSize) || bufferSize <= 0) return "balanced";
+  if (bufferSize <= 256) return "interactive";
+  if (bufferSize <= 1024) return "balanced";
+  return "playback";
+}
+
 export interface AudioPreviewOptions {
   /** 主输出增益，默认 0.8 */
   masterGain?: number;
@@ -51,6 +66,15 @@ export interface AudioPreviewOptions {
   attack?: number;
   /** 释音时间（秒），默认 0.08 */
   release?: number;
+  /**
+   * 新 AudioContext 的采样率（v2.9.4，来自设置）。创建后不可更改；
+   * 设备不支持时自动回退到默认采样率（不静音）。
+   */
+  sampleRate?: number;
+  /** 新 AudioContext 的延迟档位（v2.9.4，由缓冲区大小换算）。 */
+  latencyHint?: AudioLatencyHint;
+  /** 输出设备 id（v2.9.4，来自设置）；不支持 setSinkId 的环境忽略。 */
+  outputDeviceId?: string;
 }
 
 interface Voice {
@@ -99,11 +123,35 @@ export class AudioPreview {
   private readonly masterGain: number;
   private readonly attack: number;
   private readonly release: number;
+  /** v2.9.4：上下文创建参数（创建后不可改，改设置需重建上下文） */
+  private readonly contextOptions: { sampleRate?: number; latencyHint?: AudioLatencyHint };
+  private outputDeviceId: string;
 
   constructor(opts: AudioPreviewOptions = {}) {
     this.masterGain = opts.masterGain ?? 0.8;
     this.attack = opts.attack ?? 0.005;
     this.release = opts.release ?? 0.08;
+    this.contextOptions = {
+      ...(opts.sampleRate && opts.sampleRate > 0 ? { sampleRate: opts.sampleRate } : {}),
+      ...(opts.latencyHint ? { latencyHint: opts.latencyHint } : {}),
+    };
+    this.outputDeviceId = opts.outputDeviceId ?? "";
+  }
+
+  /**
+   * 切换输出设备（v2.9.4）。设置项 `audio.audioDevice.output` 从此真的生效。
+   * 浏览器不支持 `AudioContext.setSinkId` 时静默忽略（返回 false）。
+   */
+  async setOutputDevice(deviceId: string): Promise<boolean> {
+    this.outputDeviceId = deviceId;
+    const ctx = this.ctx as (AudioContext & { setSinkId?: (id: string) => Promise<void> }) | null;
+    if (!ctx?.setSinkId || !deviceId) return false;
+    try {
+      await ctx.setSinkId(deviceId);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   get isReady(): boolean {
@@ -124,7 +172,23 @@ export class AudioPreview {
           (globalThis as { AudioContext?: typeof AudioContext }).AudioContext ??
           (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!Ctor) return false;
-        this.ctx = new Ctor();
+        // v2.9.4：优先用设置里的采样率/延迟档位；设备不支持时**回退默认**，
+        // 否则一次采样率不匹配就会让整条音频链静默失败（用户只看到"没声音"）。
+        try {
+          this.ctx = new Ctor(this.contextOptions);
+        } catch {
+          this.ctx = new Ctor();
+        }
+        if (this.outputDeviceId) {
+          const sink = this.ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+          if (sink.setSinkId) {
+            try {
+              await sink.setSinkId(this.outputDeviceId);
+            } catch {
+              /* 设备已拔掉/无权限：保持默认输出 */
+            }
+          }
+        }
         this.master = this.ctx.createGain();
         this.master.gain.value = this.masterGain;
 

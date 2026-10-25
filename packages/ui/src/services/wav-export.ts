@@ -26,6 +26,12 @@ export interface WavOptions {
   sampleRate?: number;
   /** 声道数，1 = 单声道，2 = 立体声 */
   channels?: number;
+  /**
+   * 峰值归一化开关（v2.9.4，默认 true）。
+   * 对应设置 `mixer.loudnessNormalization` —— 关掉后只做硬钳制，
+   * 保持原始动态（适合交给人耳比较 A/B 的场合）。
+   */
+  normalize?: boolean;
 }
 
 /**
@@ -85,7 +91,8 @@ export function encodeWav(interleaved: Float32Array, opts: WavOptions = {}): Uin
     if (a > peak) peak = a;
   }
   const TARGET_PEAK = 0.891; // -1 dBFS
-  const normGain = peak > TARGET_PEAK ? TARGET_PEAK / peak : 1;
+  const normGain =
+    opts.normalize === false ? 1 : peak > TARGET_PEAK ? TARGET_PEAK / peak : 1;
 
   // ── 采样：Float32 [-1,1] → Int16 ──
   let offset = WAV_HEADER_BYTES;
@@ -166,6 +173,8 @@ export interface RenderOptions {
   masterGain?: number;
   /** 混音状态（v2.9.0）。与播放侧共用同一份 MixerGraph，保证「听到的=导出的」。 */
   mixer?: MixerState;
+  /** v2.9.4：峰值归一化开关（设置 mixer.loudnessNormalization） */
+  normalize?: boolean;
 }
 
 /**
@@ -266,5 +275,9 @@ export async function renderNotesToWav(
     interleaved[i * 2 + 1] = right[i];
   }
 
-  return encodeWav(interleaved, { sampleRate, channels: 2 });
+  return encodeWav(interleaved, {
+    sampleRate,
+    channels: 2,
+    normalize: opts.normalize !== false,
+  });
 }

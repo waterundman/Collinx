@@ -8,6 +8,7 @@ import React, {
   type ReactNode,
 } from "react";
 import {
+  type FXType,
   AgentBus,
   AgentMusicIO,
   DiffEngine,
@@ -283,9 +284,10 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
    * - 撤销栈上限（原来写死 MAX_UNDO=50）
    */
   const settingsCtx = useOptionalSettings();
-  const generalSettings = settingsCtx?.settings.general ?? DEFAULT_SETTINGS.general;
-  const autoSave = autosavePolicy(generalSettings.autoSave);
-  const undoLimit = resolveUndoLimit(generalSettings.undoHistory.maxLevels);
+  // 无 SettingsProvider（store 单测/嵌入用法）时用默认设置，不抛错
+  const appSettings = settingsCtx?.settings ?? DEFAULT_SETTINGS;
+  const autoSave = autosavePolicy(appSettings.general.autoSave);
+  const undoLimit = resolveUndoLimit(appSettings.general.undoHistory.maxLevels);
 
   const [state, dispatch] = useReducer(
     useMemo(() => createProjectReducer(diffEngine), [diffEngine]),
@@ -638,7 +640,13 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         dispatch({ type: "REVERT_MIXER_TO", mixer: prevMixer } satisfies ProjectStoreAction);
       },
       addMixerTrack: (name: string, sourceId: string): void => {
-        dispatch({ type: "ADD_MIXER_TRACK", name, sourceId } satisfies ProjectStoreAction);
+        // v2.9.4：设置 mixer.defaultFXChain 终于生效 —— 新轨按它预置 FX 槽
+        dispatch({
+          type: "ADD_MIXER_TRACK",
+          name,
+          sourceId,
+          defaultFxTypes: appSettings.mixer.defaultFXChain as FXType[],
+        } satisfies ProjectStoreAction);
       },
       removeMixerTrack: (trackId: string): void => {
         dispatch({ type: "REMOVE_MIXER_TRACK", trackId } satisfies ProjectStoreAction);

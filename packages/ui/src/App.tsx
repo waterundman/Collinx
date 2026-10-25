@@ -27,6 +27,7 @@ import type { OrchestratorConfig, RegisterConflict } from "./components/Orchestr
 import { MixerConsole } from "./components/Mixer";
 import { PerformanceDashboard } from "./components/Performance";
 import { usePerformanceMetrics } from "./hooks/usePerformanceMetrics";
+import { latencyHintForBufferSize } from "./services/audio-preview";
 import { TasteTimelineView } from "./components/Taste/TasteTimelineView";
 import { TasteLibraryPanel } from "./components/Taste/TasteLibraryPanel";
 import { TasteDiffPanel } from "./components/Taste/TasteDiffPanel";
@@ -620,6 +621,12 @@ export function App() {
     tempoMap,
     channel: settings.midi.midiChannel,
     getOutputPort,
+    // v2.9.4：采样率/延迟档位在 AudioContext 创建时生效（改设置后需重启音频引擎）
+    audio: {
+      sampleRate: settings.audio.sampleRate,
+      latencyHint: latencyHintForBufferSize(settings.audio.bufferSize),
+      outputDeviceId: settings.audio.audioDevice.output,
+    },
     // v2.1.0 S2 (D12-4)：播放期节拍器（settings.midi.playback.metronome）
     metronome: settings.midi.playback.metronome,
     // v2.2.0 S0 (D21)：录制 take 自动提交（stop/pause 防丢）→ 换算 → 批量落盘
@@ -967,6 +974,8 @@ export function App() {
           mixer,
           // v2.9.3：导出的采样率跟随设置（此前固定 44100，设置页改了没反应）
           sampleRate: settings.audio.sampleRate,
+          // v2.9.4：峰值归一化开关（设置 mixer.loudnessNormalization）
+          normalize: settings.mixer.loudnessNormalization,
         });
         const blob = new Blob([wav as unknown as BlobPart], { type: "audio/wav" });
         const url = URL.createObjectURL(blob);
@@ -980,7 +989,7 @@ export function App() {
         console.error("导出 WAV 失败", err);
       }
     })();
-  }, [buildRenderableNotes, mixer, settings.audio.sampleRate]);
+  }, [buildRenderableNotes, mixer, settings.audio.sampleRate, settings.mixer.loudnessNormalization]);
 
   /**
    * v2.9.1：分轨导出 —— 每轨一个 WAV，走与整曲相同的 MixerGraph
@@ -991,6 +1000,7 @@ export function App() {
       try {
         const stems = await renderStems(buildRenderableNotes(), mixer, {
           sampleRate: settings.audio.sampleRate,
+          normalize: settings.mixer.loudnessNormalization,
         });
         for (const stem of stems) {
           const blob = new Blob([stem.wav as unknown as BlobPart], { type: "audio/wav" });
@@ -1006,7 +1016,7 @@ export function App() {
         console.error("分轨导出失败", err);
       }
     })();
-  }, [buildRenderableNotes, mixer, settings.audio.sampleRate]);
+  }, [buildRenderableNotes, mixer, settings.audio.sampleRate, settings.mixer.loudnessNormalization]);
 
   /**
    * 混音台 → 音频图（v2.8.0 推子；v2.9.0 扩到静音/独奏/声像/FX）。
@@ -1028,6 +1038,15 @@ export function App() {
    * 拿不到的留空（面板显示「—」），不编数字。
    */
   const audioPerf = usePerformanceMetrics(transport.getAudioPerformance);
+
+  /**
+   * v2.9.4：输出设备切换实时生效（AudioContext.setSinkId）。
+   * 采样率/延迟档位只在下次创建 AudioContext 时生效 —— 与浏览器一致。
+   */
+  const setOutputDevice = transport.setOutputDevice;
+  useEffect(() => {
+    void setOutputDevice(settings.audio.audioDevice.output);
+  }, [setOutputDevice, settings.audio.audioDevice.output]);
   useEffect(() => {
     applyMixerToAudio(mixer, { setTrackGain, setTrackPan, setTrackFx, setMasterGain });
   }, [mixer, setTrackGain, setTrackPan, setTrackFx, setMasterGain]);

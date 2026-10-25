@@ -168,7 +168,7 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.audio.sampleRateDesc', { defaultValue: '音频采样率，影响音质和CPU使用率' })}
+            {t('settings.audio.sampleRateDesc', { defaultValue: '音频采样率，影响音质和CPU使用率。播放与导出均已生效；修改后刷新页面重建音频引擎。' })}
           </p>
           <div className={styles.settingControl}>
             <select
@@ -203,7 +203,7 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
             </label>
           </div>
           <p className={styles.settingDescription}>
-            {t('settings.audio.bufferSizeDesc', { defaultValue: '缓冲区大小，较小的值降低延迟但可能增加CPU负载' })}
+            {t('settings.audio.bufferSizeDesc', { defaultValue: '缓冲区大小，较小的值降低延迟但可能增加CPU负载。映射为音频引擎延迟档位（interactive/balanced/playback），修改后刷新页面生效。' })}
           </p>
           <div className={styles.settingControl}>
             <select
