@@ -13,6 +13,7 @@ import {
   MusicXMLIO,
   midiToSpelling,
   notesToHarmonyEntries,
+  ABPlayer,
 } from "@collinx/core";
 import { ChordTrack } from "./components/ChordTrack/ChordTrack";
 import { PianoRollView } from "./components/PianoRoll/PianoRollView";
@@ -29,6 +30,7 @@ import { PerformanceDashboard } from "./components/Performance";
 import { usePerformanceMetrics } from "./hooks/usePerformanceMetrics";
 import { latencyHintForBufferSize } from "./services/audio-preview";
 import { TasteTimelineView } from "./components/Taste/TasteTimelineView";
+import { ABPlayerUI } from "./components/Taste/ABPlayerUI";
 import { TasteLibraryPanel } from "./components/Taste/TasteLibraryPanel";
 import { TasteDiffPanel } from "./components/Taste/TasteDiffPanel";
 import { TeachingPanel } from "./components/Teaching";
@@ -728,7 +730,13 @@ export function App() {
     setSelectedIds((prev) => prev.filter((id) => id !== noteId));
   };
 
-  const handleSelectVersion = useCallback((_version: number) => {
+  /* v3.1.0：A/B 对比。快照必须**带音符**才有第二个真实版本；没有就不给假变体。 */
+  const [tasteSelectedVersion, setTasteSelectedVersion] = useState<number | null>(null);
+  const [abOpen, setAbOpen] = useState(false);
+  const abPlayer = useMemo(() => new ABPlayer(), []);
+
+  const handleSelectVersion = useCallback((version: number) => {
+    setTasteSelectedVersion(version);
   }, []);
 
   const handleRevertTo = useCallback((version: number) => {
@@ -736,8 +744,43 @@ export function App() {
   }, [actions]);
 
   const handleParameterEdit = useCallback((paramKey: string, value: string) => {
-    actions.updateTasteParameter(paramKey, value);
-  }, [actions]);
+    actions.updateTasteParameter(paramKey, value, notes);
+  }, [actions, notes]);
+
+  /* v3.1.0：可对比的历史版本 = 快照里**带音符**的那些。旧存档没有 notes，
+     因此这里可能是空集 —— 空集时面板给「记录当前版本」，不造变体。 */
+  const tasteSnapshotsWithNotes = useMemo(
+    () => tasteStore.getVersionHistory().filter((v) => (v.notes?.length ?? 0) > 0),
+    [genomeVersion, tasteStore],
+  );
+
+  const abVersionBEntry = useMemo(() => {
+    if (tasteSnapshotsWithNotes.length === 0) return null;
+    const picked =
+      tasteSelectedVersion != null
+        ? tasteSnapshotsWithNotes.find((v) => v.version === tasteSelectedVersion)
+        : undefined;
+    return picked ?? tasteSnapshotsWithNotes[tasteSnapshotsWithNotes.length - 1];
+  }, [tasteSnapshotsWithNotes, tasteSelectedVersion]);
+
+  /**
+   * A/B 试听通道：按 tempoMap 把音符排成定时序列，逐音触发合成器。
+   * 与钢琴卷试听共用同一个 playNote，不新开音频链路。
+   */
+  const previewVersionNotes = useCallback(
+    (versionNotes: NoteEvent[]) => {
+      if (versionNotes.length === 0) return;
+      const startSec = Math.min(...versionNotes.map((n) => tempoMap.timeAt(n.bar, n.beat)));
+      for (const n of versionNotes) {
+        const delayMs = Math.max(0, (tempoMap.timeAt(n.bar, n.beat) - startSec) * 1000);
+        const durMs = Math.max(80, n.durQn * (60000 / tempoMap.bpmAt(n.bar)));
+        window.setTimeout(() => {
+          playNote(n.pitchMidi, computeAuditionVelocity(n.velocity), Math.min(durMs, 1200));
+        }, delayMs);
+      }
+    },
+    [playNote, tempoMap],
+  );
 
   const handleDeleteEvidence = useCallback((paramKey: string, evidenceId: string) => {
     actions.deleteTasteEvidence(paramKey, evidenceId);
@@ -760,11 +803,11 @@ export function App() {
       if (!diffReport) return;
       const items = diffReport.evidenceItems.filter((it) => evidenceIds.includes(it.paramKey));
       for (const item of items) {
-        actions.updateTasteParameter(item.paramKey, String(item.currentValue));
+        actions.updateTasteParameter(item.paramKey, String(item.currentValue), notes);
       }
       setDiffReport(null);
     },
-    [actions, diffReport]
+    [actions, diffReport, notes]
   );
 
   // "忽略" = 本次不写入（条目已从弹窗列表移除，无需落库）。
@@ -1589,6 +1632,14 @@ export function App() {
             >
               {t("app.taste.analyzeExport")}
             </button>
+            <button
+              onClick={() => setAbOpen((v) => !v)}
+              className={styles.tasteButton}
+              data-testid="taste-ab-toggle"
+              aria-expanded={abOpen}
+            >
+              {t("app.taste.abToggle")}
+            </button>
           </div>
 
           <div className={styles.tasteContent}>
@@ -1607,6 +1658,40 @@ export function App() {
               />
             </div>
           </div>
+
+          {/* v3.1.0：A/B 对比。只有快照带音符时才出现播放/投票流程。 */}
+          {abOpen && (
+            <div className={styles.tasteAB} data-testid="taste-ab-panel">
+              {abVersionBEntry ? (
+                <ABPlayerUI
+                  player={abPlayer}
+                  tempoMap={tempoMap}
+                  versionA={{
+                    id: "current",
+                    label: t("app.taste.abCurrent"),
+                    notes,
+                    description: "",
+                  }}
+                  versionB={{
+                    id: `v${abVersionBEntry.version}`,
+                    label: `v${abVersionBEntry.version}`,
+                    notes: abVersionBEntry.notes ?? [],
+                    description: abVersionBEntry.message,
+                  }}
+                  onAudition={(v) => previewVersionNotes(v.notes)}
+                />
+              ) : (
+                <EmptyState
+                  testId="taste-ab-empty"
+                  title={t("app.taste.abEmpty")}
+                  action={{
+                    label: t("app.taste.abRecord"),
+                    onClick: () => actions.recordTasteSnapshot(notes),
+                  }}
+                />
+              )}
+            </div>
+          )}
         </div>
       )}
 

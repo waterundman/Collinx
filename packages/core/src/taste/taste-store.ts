@@ -1,11 +1,20 @@
 import { TasteGenome, type TasteGenomeData } from "./taste-genome";
 import type { TasteEvidence } from "./taste-types";
+import type { NoteEvent } from "../model/note-event";
 
 export interface GenomeVersionEntry {
   version: number;
   genomeJson: TasteGenomeData;
   timestamp: string;
   message: string;
+  /**
+   * v3.1.0：版本快照携带当时的音符。
+   *
+   * 此前只存参数卡，于是「A/B 版本对比」永远缺第二个版本源 —— 参数可以
+   * 对比，声音不行。可选字段：旧存档没有它，读取时为 undefined（对比面板
+   * 据此显示空态，而不是造一个假变体）。
+   */
+  notes?: NoteEvent[];
 }
 
 export interface TastePackage {
@@ -84,13 +93,15 @@ export class TasteStore {
     return this._genome ? TasteGenome.fromJSON(this._genome.toJSON()) : null;
   }
 
-  save(genome: TasteGenome): void {
+  save(genome: TasteGenome, notes?: NoteEvent[]): void {
     genome.incrementVersion();
     const snapshot: GenomeVersionEntry = {
       version: genome.version,
       genomeJson: genome.toJSON(),
       timestamp: new Date().toISOString(),
       message: `v${genome.version}`,
+      // 只在该版本确实有音符时写入，避免给纯参数版本塞空数组
+      ...(notes && notes.length > 0 ? { notes: notes.map((n) => ({ ...n })) } : {}),
     };
     this._versionHistory.push(snapshot);
     this._genome = TasteGenome.fromJSON(genome.toJSON());

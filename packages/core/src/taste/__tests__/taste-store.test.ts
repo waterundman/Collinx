@@ -82,6 +82,65 @@ describe("TasteStore", () => {
       expect(store.getVersion()).toBe(1);
     });
 
+    it("save(genome, notes) records the notes with that version", () => {
+      const genome = new TasteGenome();
+      const notes = [
+        {
+          id: "n1",
+          trackId: "melody",
+          phraseId: null,
+          bar: 1,
+          beat: 1,
+          durQn: 2,
+          pitchMidi: 60,
+          pitchSpelling: "C4",
+          velocity: 0.8,
+          voice: "main",
+          tags: [],
+        },
+      ];
+
+      store.save(genome, notes);
+
+      const entry = store.getVersionHistory().find((e) => e.version === 1);
+      expect(entry).toBeDefined();
+      expect(entry!.notes).toHaveLength(1);
+      expect(entry!.notes![0].pitchMidi).toBe(60);
+    });
+
+    it("snapshot notes are deep-copied (later mutation cannot rewrite history)", () => {
+      const genome = new TasteGenome();
+      const notes = [
+        {
+          id: "n1",
+          trackId: "melody",
+          phraseId: null,
+          bar: 1,
+          beat: 1,
+          durQn: 2,
+          pitchMidi: 60,
+          pitchSpelling: "C4",
+          velocity: 0.8,
+          voice: "main",
+          tags: [],
+        },
+      ];
+
+      store.save(genome, notes);
+      notes[0].pitchMidi = 72; // 用户继续编辑当前工程
+
+      const entry = store.getVersionHistory().find((e) => e.version === 1);
+      expect(entry!.notes![0].pitchMidi).toBe(60);
+    });
+
+    it("save() without notes leaves the field undefined (no empty arrays)", () => {
+      const genome = new TasteGenome();
+      store.save(genome);
+
+      const entry = store.getVersionHistory().find((e) => e.version === 1);
+      expect(entry!.notes).toBeUndefined();
+    });
+
     it("getCurrentGenome returns independent copy", () => {
       const genome = new TasteGenome();
       genome.setParameter("key", createTestParam("original"));

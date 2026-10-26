@@ -1041,14 +1041,24 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
       // invoking reducers in dev. Each creator captures `beforeGenome` (the
       // pre-edit genome) so the undo snapshot records the state undo() must
       // restore (Stage 2).
-      updateTasteParameter: (paramKey: string, value: string): void => {
+      updateTasteParameter: (paramKey: string, value: string, notes?: NoteEvent[]): void => {
         const current = tasteStore.getCurrentGenome();
         if (!current) return;
         const param = current.getParameter(paramKey);
         if (!param) return;
         const beforeGenome = current.toJSON();
         current.setParameter(paramKey, { ...param, value });
-        tasteStore.save(current);
+        tasteStore.save(current, notes);
+        dispatch({
+          type: "TASTE_GENOME_CHANGED",
+          beforeGenome,
+        } satisfies ProjectStoreAction);
+      },
+      recordTasteSnapshot: (notes?: NoteEvent[]): void => {
+        const current = tasteStore.getCurrentGenome();
+        if (!current) return;
+        const beforeGenome = current.toJSON();
+        tasteStore.save(current, notes);
         dispatch({
           type: "TASTE_GENOME_CHANGED",
           beforeGenome,

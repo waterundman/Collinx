@@ -1555,7 +1555,11 @@
       "guideTitle": "编制流程"
     },
     "taste": {
-      "analyzeExport": "分析当前导出"
+      "analyzeExport": "分析当前导出",
+      "abToggle": "A/B 对比",
+      "abCurrent": "当前工程",
+      "abEmpty": "还没有带音符的版本快照。",
+      "abRecord": "记录当前版本"
     },
     "agent": {
       "apply": "应用",

@@ -746,7 +746,12 @@ export interface ProjectStoreActions {
    * same trace available on demand.
    */
   recordDecisionEvidence: (diff: DiffEnvelope) => void;
-  updateTasteParameter: (paramKey: string, value: string) => void;
+  updateTasteParameter: (paramKey: string, value: string, notes?: NoteEvent[]) => void;
+  /**
+   * v3.1.0：为当前 genome 记一版快照，并把当时的音符一起存下来。
+   * A/B 对比需要「第二个真实版本」，而快照此前只存参数不存音符。
+   */
+  recordTasteSnapshot: (notes?: NoteEvent[]) => void;
   revertTasteTo: (version: number) => void;
   deleteTasteEvidence: (paramKey: string, evidenceId: string) => void;
   /** Stage 2: pop the undo stack and restore the previous state. No-op when

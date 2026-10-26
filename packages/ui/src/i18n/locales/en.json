@@ -1555,7 +1555,11 @@
       "guideTitle": "How orchestration works"
     },
     "taste": {
-      "analyzeExport": "Analyze Current Export"
+      "analyzeExport": "Analyze Current Export",
+      "abToggle": "A/B Compare",
+      "abCurrent": "Current project",
+      "abEmpty": "No version snapshot carries notes yet.",
+      "abRecord": "Record current version"
     },
     "agent": {
       "apply": "Apply",

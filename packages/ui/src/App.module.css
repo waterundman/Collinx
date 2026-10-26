@@ -190,6 +190,15 @@
   flex-direction: column;
 }
 
+/* v3.1.0：A/B 对比面板，钉在品味视图底部，最高 380px 可滚 */
+.tasteAB {
+  flex: 0 0 auto;
+  max-height: 380px;
+  overflow: auto;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+}
+
 .graphLayout {
   flex: 1;
   position: relative;
