@@ -431,7 +431,7 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
                     : t('score.noNotes')}
                 </div>
                 {notes.length > 0 && (
-                  <div className={styles.previewPlaceholderText} style={{ fontSize: "11px", marginTop: "8px" }}>
+                  <div className={`${styles.previewPlaceholderText} ${styles.previewHint}`}>
                     {t('score.vexflowHint')}
                   </div>
                 )}

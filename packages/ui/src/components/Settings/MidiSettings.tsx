@@ -219,7 +219,7 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
         type="file"
         accept=".json"
         onChange={handleFileChange}
-        style={{ display: 'none' }}
+        className={styles.hiddenInput}
       />
 
       {/* MIDI设备选择 */}

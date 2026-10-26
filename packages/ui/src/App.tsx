@@ -36,7 +36,8 @@ import type { UserLevel } from "./components/Teaching";
 import { AgentPanel, AgentChat, ToolCallTimeline } from "./components/Agent";
 import { GraphView, NodeDetail } from "./components/KnowledgeGraph";
 import type { ConnectedNode, GraphData, GraphEdge } from "./components/KnowledgeGraph";
-import { TopBar, TabPill } from "./components/Shell";
+import { TopBar, TabPill, AppShell, Splitter, CommandPalette, useCommandPalette } from "./components/Shell";
+import type { CommandItem } from "./components/Shell";
 import { SettingsPage } from "./components/Settings";
 import styles from "./App.module.css";
 import {
@@ -1256,9 +1257,50 @@ export function App() {
     }
   }, [activeTab, notes.length, mixer.tracks.length, tasteStore, genomeVersion, arrangerDiff, defaultLayout.staffConfig?.length ?? 0, t, graphData.nodes.length, pendingDiffs.length]);
 
+  /* v3.0.0 A3：命令面板。
+     命令集只做「已有能力的快捷入口」，不新增任何行为 —— 面板只是把页签与
+     两个顶栏按钮收进键盘可达的入口，符合朴素哲学的「键盘优先」。 */
+  const { open: commandOpen, openPalette, close: closeCommandPalette } = useCommandPalette();
+  const commands = useMemo<CommandItem[]>(
+    () => [
+      ...tabs.map((tab, i) => ({
+        id: `tab-${tab.id}`,
+        label: t("app.command.goToTab", { name: tab.label }),
+        hint: i < 9 ? `⌘${i + 1}` : undefined,
+        run: () => setActiveTab(tab.id),
+      })),
+      {
+        id: "save-project",
+        label: t("app.command.saveProject"),
+        hint: "⌘S",
+        run: handleSaveProject,
+      },
+      {
+        id: "open-settings",
+        label: t("app.command.openSettings"),
+        run: () => setSettingsOpen(true),
+      },
+    ],
+    [tabs, t, handleSaveProject],
+  );
+
   return (
-    <div className={styles.appRoot}>
-      <TopBar brand="Collinx" status={headerStatus} toolbar={<>
+    <AppShell>
+      <TopBar
+        brand="Collinx"
+        status={headerStatus}
+        command={
+          <button
+            type="button"
+            onClick={openPalette}
+            className={styles.commandEntry}
+            data-testid="open-command-palette"
+          >
+            <span className={styles.commandEntryLabel}>{t("app.command.entry")}</span>
+            <span className={styles.commandEntryKey}>⌘K</span>
+          </button>
+        }
+        toolbar={<>
         <button
           type="button"
           onClick={handleSaveProject}
@@ -1300,7 +1342,7 @@ export function App() {
           type="file"
           accept=".agentmusic"
           data-testid="project-file-input"
-          style={{ display: "none" }}
+          className={styles.hiddenInput}
           onChange={handleProjectFileChange}
         />
       </>}>
@@ -1357,6 +1399,10 @@ export function App() {
                 compact
               />
             </div>
+
+            {/* v3.0.0 A2：谱面与钢琴卷之间可拖拽。首轮只接这一处，
+                验证后再推广到其它分栏。 */}
+            <Splitter />
 
             {/* v2.0.0 Stage 1 (D1-5): 全局 transport 控件，置于钢琴卷上方、同属
                 compose 标签页（可见、结构合理：控制其正下方 PianoRollView 的播放）。 */}
@@ -1652,6 +1698,14 @@ export function App() {
       {/* v1.24.0 Stage 1 (D1-2): settings modal, conditionally mounted.
           Escape-to-close lives inside SettingsPage (onKeyDown → onClose). */}
       {settingsOpen && <SettingsPage onClose={() => setSettingsOpen(false)} />}
-    </div>
+
+      {/* v3.0.0 A3：⌘K 命令面板（挂在 Shell 内，覆盖全站） */}
+      <CommandPalette
+        open={commandOpen}
+        items={commands}
+        onClose={closeCommandPalette}
+        placeholder={t("app.command.placeholder")}
+      />
+    </AppShell>
   );
 }

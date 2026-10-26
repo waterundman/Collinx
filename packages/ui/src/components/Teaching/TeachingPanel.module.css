@@ -437,3 +437,45 @@
 .harmonyResult {
   padding-top: var(--space-2);
 }
+
+/* ---- v3.0.0 A5：段落说明与风险提示 ---- */
+
+.explanationItem {
+  margin-bottom: 10px;
+}
+
+.explanationDomainLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  margin-bottom: 4px;
+}
+
+.explanationText {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.riskRow {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.riskRow[data-severity="high"] {
+  color: var(--accent-red);
+}
+
+.riskRow[data-severity="medium"] {
+  color: var(--accent-yellow);
+}
+
+.riskTag {
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 36px;
+}

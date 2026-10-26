@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { DomainExplanation } from "@collinx/core";
+import styles from "./ExplanationView.module.css";
 
 interface ExplanationViewProps {
   explanations: DomainExplanation[];
@@ -14,42 +15,14 @@ export function ExplanationView({ explanations }: ExplanationViewProps) {
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        style={{
-          background: "transparent",
-          border: "none",
-          color: "var(--accent-cyan)",
-          cursor: "pointer",
-          fontSize: "11px",
-          padding: 0,
-          fontFamily: "var(--font-ui)",
-        }}
-      >
+      <button type="button" onClick={() => setExpanded((v) => !v)} className={styles.toggle}>
         {expanded ? "▾" : "▸"} {explanations.length} domain explanation{explanations.length > 1 ? "s" : ""}
       </button>
       {expanded && (
-        <ul
-          style={{
-            listStyle: "none",
-            margin: "var(--space-1) 0 0",
-            padding: 0,
-          }}
-        >
+        <ul className={styles.list}>
           {explanations.map((exp, i) => (
-            <li
-              key={i}
-              style={{
-                fontSize: "11px",
-                color: "var(--text-secondary)",
-                marginBottom: "var(--space-1)",
-                paddingLeft: "var(--space-2)",
-                borderLeft: "2px solid var(--border-secondary)",
-              }}
-            >
-              <strong style={{ color: "var(--text-primary)" }}>{exp.label}:</strong>{" "}
-              {exp.text}
+            <li key={i} className={styles.item}>
+              <strong className={styles.label}>{exp.label}:</strong> {exp.text}
             </li>
           ))}
         </ul>

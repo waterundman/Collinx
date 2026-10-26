@@ -1,9 +1,6 @@
 import React from "react";
 import styles from "./GraphView.module.css";
-
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
+import { getCSSVar } from "../../utils/cssVar";
 
 export interface ConnectedNode {
   id: string;

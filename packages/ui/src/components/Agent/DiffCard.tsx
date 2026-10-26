@@ -61,7 +61,7 @@ export function DiffCard({ diff, status = "pending", onApply, onReject, onRollba
       <div className={styles.meta}>
         <span>{diff.ops.length} {diff.ops.length !== 1 ? t('diffCard.operations') : t('diffCard.operation')}</span>
         {diff.riskFlags.length > 0 && (
-          <span style={{ color: "var(--accent-red)" }}>
+          <span className={styles.riskFlagCount}>
             {diff.riskFlags.length} {diff.riskFlags.length !== 1 ? t('diffCard.riskFlags') : t('diffCard.riskFlag')}
           </span>
         )}

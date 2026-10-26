@@ -17,6 +17,7 @@ import type {
   ArrangerRunResult,
 } from "../../store/project-store";
 import styles from "./ArrangerPanel.module.css";
+import { getCSSVar } from "../../utils/cssVar";
 
 interface ArrangerVariant {
   id: string;
@@ -57,10 +58,6 @@ function mapRealVariants(
     divergence: clamp(v.variationScore, 0, 1),
     energyCurve: curve,
   }));
-}
-
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 const FORM_ROLE_KEYS: Record<string, string> = {

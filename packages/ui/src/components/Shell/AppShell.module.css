@@ -1,0 +1,34 @@
+/* v3.0.0 A1：App Shell —— 整页骨架，不含业务样式 */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  overflow: hidden;
+}
+
+/* 内容层：header 之后的一切都在这里纵向排布 */
+.main {
+  display: flex;
+  flex: 1;
+  min-height: 0; /* 关键：否则子级 min-height:auto 会把整页撑出视口 */
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 约定：首个 header 元素固定顶部、不参与滚动 */
+.shell > .main > header {
+  flex: 0 0 auto;
+}
+
+.aside {
+  flex: 0 0 auto;
+  width: 280px;
+  min-height: 0;
+  border-left: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  overflow: auto;
+}

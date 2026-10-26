@@ -1,0 +1,29 @@
+/* v3.0.0 A5：ExplanationView 此前零样式模块，4 处内联样式集中到这里 */
+
+.toggle {
+  background: transparent;
+  border: none;
+  color: var(--accent-cyan);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  font-family: var(--font-ui);
+}
+
+.list {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+}
+
+.item {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border-secondary);
+}
+
+.label {
+  color: var(--text-primary);
+}

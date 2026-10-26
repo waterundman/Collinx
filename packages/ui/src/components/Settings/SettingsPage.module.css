@@ -389,3 +389,7 @@
     width: 100%;
   }
 }
+/* v3.0.0 A5：空态内边距 */
+.emptyStatePadded {
+  padding: var(--space-4);
+}

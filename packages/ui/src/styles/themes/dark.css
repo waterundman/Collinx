@@ -1,39 +1,23 @@
 /* ============================================================
    Collinx Dark Theme
+   ============================================================
+
+   v3.0.0 A4：去重。
+
+   此前本文件把 `:root`（design-tokens.css）里已有的暗色值整份重抄了一遍，
+   于是同一语义有两个真相源，改主题极易只改一边。更糟的是 border 系列两边
+   **值还不一样**（这里 #2a2a36 / #3a3a48，tokens 里 #212327 / #363a3f），
+   实际生效的是本文件，tokens 那份形同虚设。
+
+   规则：`design-tokens.css` 的 `:root` 是唯一暗色基准，本文件只保留 tokens
+   未定义的补充名。新增值先加 tokens，不要在这里开第二个源。
    ============================================================ */
 
 [data-theme="dark"] {
-  /* ---- Background ---- */
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #111118;
-  --bg-elevated: #1c1c26;
-
-  /* ---- Text ---- */
-  --text-primary: #e8e8ec;
-  --text-secondary: #b4b4bc;
-  --text-muted: #8a8a96;
-  --text-disabled: #6a6a76;
-  --text-on-accent: #06121a;
-
-  /* ---- Border ---- */
-  --border-primary: #2a2a36;
-  --border-secondary: #3a3a48;
-
-  /* ---- Accent ---- */
-  --accent-primary: #00d4ff;
+  /* ---- 以下 5 个名字 tokens 里没有，故留在此处 ---- */
   --accent-secondary: #33ddff;
-  --accent-red: #ef4444;
-  --accent-green: #22c55e;
-  --accent-yellow: #f59e0b;
-  --accent-cyan: #00d4ff;
-  --accent-sunset: #ff7a17;
-  --accent-sunset-ink: #ff7a17;
-
-  /* ---- Component ---- */
-  --button-bg: #2a2a36;
-  --button-text: #e8e8ec;
   --input-bg: #16161e;
-  --input-border: #2a2a36;
+  --input-border: var(--border-primary);
   --card-bg: #16161e;
-  --card-border: #2a2a36;
+  --card-border: var(--border-primary);
 }

@@ -1,10 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
 import { Icon } from "../Icon/Icon";
 import styles from "./GraphView.module.css";
-
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
+import { getCSSVar } from "../../utils/cssVar";
 
 export interface GraphNode {
   id: string;

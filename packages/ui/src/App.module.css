@@ -1,10 +1,38 @@
-.appRoot {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+/* v3.0.0 A1：根容器样式已迁到 components/Shell/AppShell.module.css。
+   保留此处占位注释，避免后来人再往 App 里加整页级样式。 */
+
+/* v3.0.0 A3：顶栏命令入口。朴素 —— 无图标、无渐变，只一个浅底片。 */
+.commandEntry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-overlay);
+  color: var(--text-muted);
   font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.commandEntry:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-secondary);
+}
+
+.commandEntryLabel {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.commandEntryKey {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 .topBarButton {
@@ -51,9 +79,9 @@
    * 下面的钢琴卷被挤到 **height: 0**（实测 canvas 0×1208），用户完全看不到
    * 音符编辑区。加 `min-height: 0` 才能真正收起，溢出改为滚动。
    */
-  flex: 0 0 180px;
+  flex: 0 0 var(--compose-score-h);
   min-height: 0;
-  max-height: 45%;
+  max-height: var(--compose-score-max);
   overflow: auto;
 }
 
@@ -204,4 +232,9 @@
   min-height: 0;
   overflow: hidden;
   border-top: 1px solid var(--border-primary);
+}
+
+/* v3.0.0 A5：隐藏的原生 file input */
+.hiddenInput {
+  display: none;
 }

@@ -1,17 +1,23 @@
 .header {
-  padding: var(--space-1) var(--space-4);
-  background: var(--bg-primary);
+  /* v3.0.0：顶栏高度令牌化。此前只有 padding 撑高（约 30px），
+     与页面内容缺少一层底色区分；现在固定 44px + bg-secondary。 */
+  min-height: var(--shell-header-h);
+  padding: 0 var(--space-4);
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  flex: 0 0 auto;
 }
 
 .brand {
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 2px;
-  color: var(--ink);
+  /* v3.0.0：14px/700/2px 字距偏"海报"，降到 13px/600/0.5px ——
+     朴素哲学下品牌字不该比正文更响亮。 */
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
 }
 
 .tabBar {
@@ -23,7 +29,9 @@
 }
 
 .status {
-  margin-left: auto;
+  /* v3.0.0 A3：弹性空隙上移给 .command，避免两者都 margin-left:auto
+     时中间出现双弹性空间（command 与 status 之间被拉出一道大缝）。 */
+  margin-left: var(--space-3);
   font-size: 11px;
   /* v2.5.0：状态文字是次级信息而非"禁用态"，此前误用 --text-disabled
      （暗色下 #44444e on #0a0a0a = 2.06:1，几乎看不见）。 */
@@ -38,4 +46,10 @@
   gap: 6px;
   align-items: center;
   margin-left: var(--space-3);
+}
+
+.command {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
 }

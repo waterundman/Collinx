@@ -116,17 +116,43 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
   const [dragSlot, setDragSlot] = useState<{ trackId: string; slotIdx: number } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   // 输出电平：rAF 轮询而不是 setInterval —— 与屏幕刷新同步，且后台标签页自动暂停
-  const [masterLevel, setMasterLevel] = useState(0);
-  const [trackLevels, setTrackLevels] = useState<Record<string, number>>({});
+  /* v3.0.0 A6：电平表不再走 state。
+     此前 rAF 每帧 setState 两个值 → 整个混音台（15 处 inline style、
+     每条轨道 + 主控）每帧重渲染一次，60fps 下纯属浪费：用户看到的只是
+     一根 6px 高的条在变长。现在直接把数值写进 DOM（ref + style），
+     React 在播放期间零提交。 */
+  const masterLevelRef = useRef(0);
+  const masterFillRef = useRef<HTMLSpanElement | null>(null);
+  const meterFillRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const meterDbRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   useEffect(() => {
     if (!audioLevel && !trackLevel) return;
     let raf = 0;
     const tick = () => {
-      if (audioLevel) setMasterLevel(audioLevel());
+      if (audioLevel) {
+        const v = audioLevel();
+        masterLevelRef.current = v;
+        const fill = masterFillRef.current;
+        if (fill) {
+          fill.style.width = `${Math.round(v * 100)}%`;
+          fill.style.background = v > 0.95 ? "#ef4444" : v > 0.75 ? "#f59e0b" : "#22c55e";
+        }
+      }
       if (trackLevel) {
-        const next: Record<string, number> = {};
-        for (const t of mixer.tracks) next[t.id] = trackLevel(t.sourceTrackId);
-        setTrackLevels(next);
+        for (const t of mixer.tracks) {
+          const v = trackLevel(t.sourceTrackId);
+          const pct = Math.max(0, Math.min(100, v * 100));
+          const fill = meterFillRefs.current.get(t.id);
+          if (fill) {
+            fill.style.width = `${pct}%`;
+            fill.style.background =
+              pct > 95 ? "var(--accent-red)" : pct > 75 ? "var(--accent-yellow)" : "var(--accent-green)";
+          }
+          const db = meterDbRefs.current.get(t.id);
+          if (db) {
+            db.textContent = v > 0 ? `${(20 * Math.log10(v)).toFixed(1)} dB` : "-∞";
+          }
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -323,24 +349,26 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
     // 重构前读的是 `track.meterLevel` —— 一个静态数据字段，且默认值是 "0"，
     // 于是电平表永远满格显示（之前截图里 Master 那条红色满格就是这么来的）。
     // 原来的比例公式 `(1 - |level|) * 100` 也是反的：level=0（无信号）反而 100%。
-    const level = trackLevels[track.id] ?? 0;
-    const pct = Math.max(0, Math.min(100, level * 100));
-
     return (
       <div className={styles.meterContainer} data-testid={`mixer-meter-${track.id}`}>
         <div className={styles.meterBar}>
           <div
             className={styles.meterFill}
-            style={{
-              width: `${pct}%`,
-              background:
-                pct > 95 ? "var(--accent-red)" : pct > 75 ? "var(--accent-yellow)" : "var(--accent-green)",
+            ref={(el) => {
+              if (el) meterFillRefs.current.set(track.id, el);
+              else meterFillRefs.current.delete(track.id);
             }}
           />
         </div>
-        {/* 峰值换算成 dB 显示，与推子的 dB 语义一致 */}
-        <div className={styles.meterDb}>
-          {level > 0 ? `${(20 * Math.log10(level)).toFixed(1)} dB` : "-∞"}
+        {/* 峰值换算成 dB 显示，与推子的 dB 语义一致；数值由 rAF 直写 textContent */}
+        <div
+          className={styles.meterDb}
+          ref={(el) => {
+            if (el) meterDbRefs.current.set(track.id, el);
+            else meterDbRefs.current.delete(track.id);
+          }}
+        >
+          -∞
         </div>
       </div>
     );
@@ -356,7 +384,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
         <div className={styles.panKnob}>
           <div
             className={styles.panIndicator}
-            style={{ transform: `rotate(${angle}deg)`, transformOrigin: "50% 100%", height: "10px" }}
+            style={{ transform: `rotate(${angle}deg)` }}
           />
         </div>
         <div className={styles.panLabel}>{display}</div>
@@ -404,16 +432,15 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
 
     return (
       <div
-        className={styles.fxEditorOverlay}
+        className={`${styles.fxEditorOverlay} ${styles.fxEditorDocked}`}
         onClick={(e) => e.stopPropagation()}
-        style={{ bottom: "auto", top: "100%", marginBottom: 0, marginTop: "4px" }}
       >
         <div className={styles.fxEditorHeader}>
           <span className={styles.fxEditorTitle}>
             {FX_LABELS[slot.type as FXType] ?? slot.type}
             {!slot.enabled && " (Bypassed)"}
           </span>
-          <div style={{ display: "flex", gap: "4px" }}>
+          <div className={styles.fxEditorActions}>
             <button
               className={styles.fxEditorClose}
               onClick={() => handleFXSlotToggle(track.id, slot.id)}
@@ -455,7 +482,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
             </div>
           );
         })}
-        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "8px" }}>
+        <div className={styles.fxAddTypes}>
           {FX_TYPES.map((ft) => (
             <button
               key={ft}
@@ -468,15 +495,8 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
                 onTrackChange?.(track.id, { fxChain: { ...track.fxChain, slots: newSlots } });
                 setFxEditor({ trackId: track.id, slotId: newSlot.id });
               }}
-              style={{
-                padding: "2px 6px",
-                fontSize: "9px",
-                background: ft === slot.type ? "var(--bg-active)" : "var(--bg-elevated)",
-                border: `1px solid ${ft === slot.type ? "var(--accent-cyan)" : "var(--border-primary)"}`,
-                borderRadius: "3px",
-                color: ft === slot.type ? "var(--accent-cyan)" : "var(--text-secondary)",
-                cursor: "pointer",
-              }}
+              className={styles.fxTypeChip}
+              data-active={ft === slot.type ? "true" : undefined}
             >
               {FX_LABELS[ft as FXType]}
             </button>
@@ -574,13 +594,12 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
                * 也没有按钮 —— 加错的轨删不掉。最后一条轨禁删（与 reducer 同一条规则）。
                */
               <button
-                className={styles.muteBtn}
+                className={`${styles.muteBtn} ${styles.removeTrackBtn}`}
                 data-testid={`mixer-remove-${track.id}`}
                 onClick={() => onRemoveTrack(track.id)}
                 disabled={mixer.tracks.length <= 1}
                 title={t("mixer.removeTrackHint")}
                 aria-label={t("mixer.removeTrack")}
-                style={{ fontSize: "11px" }}
               >
                 ×
               </button>
@@ -590,14 +609,13 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
 
         {isMaster && (
           <div className={styles.controlButtons}>
-            <span style={{ fontSize: "9px", color: "var(--text-muted)" }}>MASTER</span>
+            <span className={styles.masterTag}>MASTER</span>
           </div>
         )}
 
         {onSuggestFxChain && (
           <button
-            className={styles.addTrackBtn}
-            style={{ marginLeft: 0, padding: "2px 6px", fontSize: "10px" }}
+            className={`${styles.addTrackBtn} ${styles.addTrackBtnCompact}`}
             data-testid={`mixer-suggest-fx-${track.id}`}
             onClick={() => onSuggestFxChain?.(track.id)}
             title={t('mixer.suggestFxChainHint')}
@@ -606,7 +624,7 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
           </button>
         )}
 
-        <div style={{ position: "relative", width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div className={styles.fxColumn}>
           {renderFXSlots(track)}
           {isEditingFX && track.fxChain.slots.map((slot) => renderFXEditor(track, slot))}
         </div>
@@ -624,31 +642,8 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
           {t('mixer.trackCount', { count: mixer.tracks.length })}
         </span>
         {audioLevel && (
-          <span
-            data-testid="mixer-master-level"
-            title={`输出电平 ${Math.round(masterLevel * 100)}%`}
-            style={{
-              display: 'inline-block',
-              width: 120,
-              height: 6,
-              marginLeft: 10,
-              verticalAlign: 'middle',
-              background: 'rgba(0,0,0,0.18)',
-              borderRadius: 3,
-              overflow: 'hidden',
-            }}
-          >
-            <span
-              style={{
-                display: 'block',
-                width: `${Math.round(masterLevel * 100)}%`,
-                height: '100%',
-                // 超过 95% 视为削波（红），75% 以上预警（黄）
-                background:
-                  masterLevel > 0.95 ? '#ef4444' : masterLevel > 0.75 ? '#f59e0b' : '#22c55e',
-                transition: 'width 60ms linear',
-              }}
-            />
+          <span className={styles.masterMeter} data-testid="mixer-master-level">
+            <span className={styles.masterMeterFill} ref={masterFillRef} />
           </span>
         )}
         <button className={styles.addTrackBtn} data-testid="mixer-add-track" onClick={handleAddTrackClick}>
@@ -674,9 +669,8 @@ export const MixerConsole: React.FC<MixerConsoleProps> = ({
             </span>
             <span>{t('mixer.noTracks')}</span>
             <button
-              className={styles.addTrackBtn}
+              className={`${styles.addTrackBtn} ${styles.addTrackBtnFirst}`}
               onClick={handleAddTrackClick}
-              style={{ marginLeft: 0 }}
             >
               {t('mixer.addFirstTrack')}
             </button>

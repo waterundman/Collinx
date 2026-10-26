@@ -8,7 +8,9 @@
   align-items: center;
   gap: var(--space-3);
   flex: 0 0 auto;
-  padding: var(--space-1) var(--space-2);
+  /* v3.0.0：走带条高度令牌化（此前靠 padding 撑到约 32px，偏低且不稳定） */
+  min-height: var(--transport-h);
+  padding: 0 var(--space-2);
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);

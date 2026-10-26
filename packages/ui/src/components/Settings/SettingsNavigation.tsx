@@ -204,7 +204,7 @@ export const SettingsNavigation: React.FC<SettingsNavigationProps> = ({
       ))}
 
       {filteredItems.length === 0 && (
-        <div className={styles.emptyState} style={{ padding: 'var(--space-4)' }}>
+        <div className={`${styles.emptyState} ${styles.emptyStatePadded}`}>
           <p className={styles.emptyStateDescription}>
             {t('common.search')} {t('common.none')}
           </p>

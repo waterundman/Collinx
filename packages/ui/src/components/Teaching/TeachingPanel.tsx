@@ -205,11 +205,11 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({  activeDiff,
                 <div className={styles.explanationCard}>
                   <div className={styles.explanationTitle}>段落说明</div>
                   {activeDiff.domainExplanations.map((de, idx) => (
-                    <div key={idx} style={{ marginBottom: "10px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-cyan)", marginBottom: "4px" }}>
+                    <div key={idx} className={styles.explanationItem}>
+                      <div className={styles.explanationDomainLabel}>
                         {de.label}
                       </div>
-                      <div style={{ fontSize: "12px", color: "var(--text-primary)", lineHeight: "1.5" }}>
+                      <div className={styles.explanationText}>
                         {de.text}
                       </div>
                     </div>
@@ -223,16 +223,10 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({  activeDiff,
                   {activeDiff.riskFlags.map((rf, idx) => (
                     <div
                       key={idx}
-                      style={{
-                        fontSize: "12px",
-                        color: rf.severity === "high" ? "var(--accent-red)" : rf.severity === "medium" ? "var(--accent-yellow)" : "var(--text-secondary)",
-                        padding: "4px 0",
-                        display: "flex",
-                        gap: "6px",
-                        alignItems: "baseline",
-                      }}
+                      className={styles.riskRow}
+                      data-severity={rf.severity}
                     >
-                      <span style={{ fontSize: "10px", fontWeight: 600, minWidth: "36px" }}>
+                      <span className={styles.riskTag}>
                         {rf.severity === "high" ? "高风险" : rf.severity === "medium" ? "中风险" : "低风险"}
                       </span>
                       <span>{rf.description}</span>

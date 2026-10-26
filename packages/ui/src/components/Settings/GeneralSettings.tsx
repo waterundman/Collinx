@@ -45,21 +45,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ className }) =
 
       {/* 重置按钮 */}
       <div className={styles.section}>
-        <button
-          onClick={handleReset}
-          style={{
-            padding: 'var(--space-2) var(--space-4)',
-            fontSize: '13px',
-            fontWeight: 500,
-            color: 'var(--text-secondary)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-primary)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            transition: 'all var(--transition-fast) var(--ease-standard)',
-            alignSelf: 'flex-start',
-          }}
-        >
+        <button onClick={handleReset} className={styles.resetBtn}>
           {t('settings.reset', { defaultValue: '重置通用设置' })}
         </button>
       </div>

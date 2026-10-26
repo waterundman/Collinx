@@ -198,9 +198,97 @@
 
 .meterFill {
   height: 100%;
+  width: 0;
   background: var(--accent-green);
-  transition: width var(--transition-fast) var(--ease-standard);
+  /* v3.0.0 A6：宽度由 rAF 直接写入，CSS 过渡会造成二次平滑（看起来"粘手"） */
+  transition: none;
   border-radius: var(--radius-sm);
+}
+
+/* 主控电平（原为内联样式，v3.0.0 收进类名） */
+.masterMeter {
+  display: inline-block;
+  width: 120px;
+  height: 6px;
+  margin-left: var(--space-3);
+  vertical-align: middle;
+  background: var(--bg-overlay);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.masterMeterFill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--accent-green);
+}
+
+/* ---- v3.0.0 A5：以下均由内联样式迁入（静态值），动态值仍保留 inline ---- */
+
+/* FX 编辑器从下方浮层改为挂在通道条下方 */
+.fxEditorDocked {
+  top: 100%;
+  bottom: auto;
+  margin-top: var(--space-1);
+  margin-bottom: 0;
+}
+
+.fxEditorActions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.fxAddTypes {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+/* FX 类型切换片：选中态靠 data-active，不再逐项拼内联色值 */
+.fxTypeChip {
+  padding: 2px 6px;
+  font-size: 9px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.fxTypeChip[data-active="true"] {
+  background: var(--bg-active);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.panIndicator {
+  transform-origin: 50% 100%;
+  height: 10px;
+}
+
+.masterTag {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.addTrackBtnCompact {
+  margin-left: 0;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.addTrackBtnFirst {
+  margin-left: 0;
+}
+
+.fxColumn {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .meterDb {
@@ -653,4 +741,8 @@
 .instrumentSelect:hover {
   border-color: var(--accent, #6366f1);
   color: var(--text-primary);
+}
+
+.removeTrackBtn {
+  font-size: 11px;
 }

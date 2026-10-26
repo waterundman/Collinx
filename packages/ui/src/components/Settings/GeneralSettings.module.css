@@ -271,3 +271,17 @@
     width: 100%;
   }
 }
+
+/* v3.0.0 A5：重置按钮（原 10 行内联样式） */
+.resetBtn {
+  padding: var(--space-2) var(--space-4);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast) var(--ease-standard);
+  align-self: flex-start;
+}

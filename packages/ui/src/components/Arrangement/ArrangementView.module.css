@@ -12,7 +12,8 @@
 .barContainer {
   display: flex;
   align-items: flex-end;
-  height: 64px;
+  /* v3.0.0：64 → 52（乐段块 48 + 底部 4），与画布乐段条高度一致 */
+  height: 52px;
   position: relative;
 }
 

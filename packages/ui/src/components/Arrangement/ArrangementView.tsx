@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import styles from "./ArrangementView.module.css";
+import { getCSSVar } from "../../utils/cssVar";
 
 interface PhraseBlock {
   id: string;
@@ -32,10 +33,6 @@ const STARTING_SECTIONS: { role: string; bars: number }[] = [
   { role: "bridge", bars: 4 },
   { role: "outro", bars: 4 },
 ];
-
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
 
 const ROLE_COLOR_VARS: Record<string, string> = {
   verse: "--section-verse",

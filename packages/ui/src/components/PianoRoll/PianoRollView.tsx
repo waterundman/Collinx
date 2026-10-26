@@ -8,6 +8,7 @@ import {
 import { useI18n } from "../../i18n";
 import styles from "./PianoRoll.module.css";
 import { createBarTimeline } from "./bar-timeline";
+import { getCSSVar } from "../../utils/cssVar";
 
 interface PianoRollViewProps {
   notes: NoteEvent[];
@@ -89,10 +90,6 @@ const MIN_PIXELS_PER_BEAT = 15;
 const MAX_PIXELS_PER_BEAT = 200;
 /** v1.28.0 (D1-2): autoScrollFollow 的右缘/左缘留白（px）。 */
 const FOLLOW_EDGE_MARGIN = 48;
-
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
 
 const WHITE_KEY_INDICES = [0, 2, 4, 5, 7, 9, 11];
 const BLACK_KEY_INDICES = [1, 3, 6, 8, 10];
@@ -839,7 +836,7 @@ export const PianoRollView: React.FC<PianoRollViewProps> = ({
 
       <div className={styles.mainArea}>
         <div className={styles.keyboard} ref={keyboardRef}>
-          <div style={{ transform: `translateY(${-scrollY}px)`, position: "relative" }}>
+          <div className={styles.keyboardInner} style={{ transform: `translateY(${-scrollY}px)` }}>
             {keyboardKeys.map((key) => {
               // v1.25.0 Stage 1 (D2-1): MIDI 输入高亮落点选在键位 DOM 层而非
               // canvas 格位——(1) noteon/noteoff 与物理按键一一对应，键位高亮

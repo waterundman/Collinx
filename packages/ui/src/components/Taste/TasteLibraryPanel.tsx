@@ -154,7 +154,7 @@ export const TasteLibraryPanel: React.FC<TasteLibraryPanelProps> = ({
             <Icon name={DOMAIN_META[activeDomain].icon} size={14} aria-hidden />
           </span>
           <span>{DOMAIN_META[activeDomain].label}</span>
-          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+          <span className={styles.paramCount}>
             ({params.length} 个参数)
           </span>
         </div>
@@ -231,8 +231,8 @@ export const TasteLibraryPanel: React.FC<TasteLibraryPanelProps> = ({
                         </>
                       )}
 
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" }}>
-                        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>置信度:</span>
+                      <div className={styles.confidenceRow}>
+                        <span className={styles.confidenceLabel}>置信度:</span>
                         <div className={styles.confidenceStars}>
                           {Array.from({ length: 5 }, (_, i) => (
                             <span
@@ -281,7 +281,7 @@ export const TasteLibraryPanel: React.FC<TasteLibraryPanelProps> = ({
                     {isExpanded && param.evidence.length === 0 && (
                       <div className={styles.evidenceList}>
                         <div className={styles.evidenceItem}>
-                          <span style={{ color: "var(--text-disabled)", fontStyle: "italic" }}>
+                          <span className={styles.emptyEvidence}>
                             暂无证据数据
                           </span>
                         </div>

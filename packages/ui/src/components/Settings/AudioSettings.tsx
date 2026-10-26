@@ -269,13 +269,8 @@ export const AudioSettings: React.FC<AudioSettingsProps> = ({ className }) => {
               value={audio.latency}
               onChange={handleLatencyChange}
               className={styles.selectControl}
-              style={{ cursor: 'pointer' }}
             />
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginTop: 'var(--space-1)',
-            }}>
+            <div className={styles.rangeHintRow}>
               <span className={styles.settingDescription}>0 ms</span>
               <span className={styles.settingDescription}>{audio.latency} ms</span>
               <span className={styles.settingDescription}>100 ms</span>

@@ -176,3 +176,8 @@
   height: 6px;
   background: var(--border-secondary);
 }
+
+/* v3.0.0 A5：键位滚动容器（原 position 内联） */
+.keyboardInner {
+  position: relative;
+}

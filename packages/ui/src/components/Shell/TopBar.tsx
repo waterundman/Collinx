@@ -10,6 +10,8 @@ export interface TopBarProps {
   children?: React.ReactNode;
   /** Right-aligned action buttons (e.g. save/load project) shown before status. */
   toolbar?: React.ReactNode;
+  /** v3.0.0 A3: 全局命令入口（⌘K），渲染在 toolbar 之后、status 之前。 */
+  command?: React.ReactNode;
 }
 
 /**
@@ -24,6 +26,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   status,
   children,
   toolbar,
+  command,
 }) => {
   return (
     <header className={styles.header}>
@@ -36,6 +39,12 @@ export const TopBar: React.FC<TopBarProps> = ({
       {toolbar ? (
         <div className={styles.toolbar} data-testid="topbar-toolbar">
           {toolbar}
+        </div>
+      ) : null}
+
+      {command ? (
+        <div className={styles.command} data-testid="topbar-command">
+          {command}
         </div>
       ) : null}
 

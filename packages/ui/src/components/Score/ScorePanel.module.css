@@ -355,3 +355,9 @@
   width: 100%;
   height: 100%;
 }
+
+/* v3.0.0 A5：VexFlow 提示行 */
+.previewHint {
+  font-size: 11px;
+  margin-top: var(--space-2);
+}

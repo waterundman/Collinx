@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { TasteStore } from "@collinx/core";
 import styles from "./TastePanel.module.css";
+import { getCSSVar } from "../../utils/cssVar";
 
 interface TasteTimelineViewProps {
   store: TasteStore;
@@ -23,10 +24,6 @@ const PADDING_Y = 40;
 const MIN_RADIUS = 6;
 const MAX_RADIUS = 18;
 const VERSION_SPACING_Y = 50;
-
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -302,22 +299,13 @@ export const TasteTimelineView: React.FC<TasteTimelineViewProps> = ({
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }} data-testid="taste-timeline">
-      <div
-        style={{
-          padding: "8px 12px",
-          borderBottom: "1px solid var(--border-primary)",
-          background: "var(--bg-surface)",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-        }}
-      >
-        <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--accent-cyan)" }}>版本时间线</span>
-        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+    <div className={styles.timelineRoot} data-testid="taste-timeline">
+      <div className={styles.timelineHeader}>
+        <span className={styles.timelineTitle}>版本时间线</span>
+        <span className={styles.timelineMeta}>
           共 {store.getVersionHistory().length} 个版本
         </span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
+        <div className={styles.timelineActions}>
           <button className={styles.timelineActionBtn} onClick={handleExport}>
             导出
           </button>
@@ -327,10 +315,10 @@ export const TasteTimelineView: React.FC<TasteTimelineViewProps> = ({
         </div>
       </div>
 
-      <div ref={containerRef} style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <div ref={containerRef} className={styles.timelineCanvasWrap}>
         <canvas
           ref={canvasRef}
-          style={{ display: "block", width: "100%", height: "100%" }}
+          className={styles.timelineCanvas}
           onClick={handleCanvasClick}
           onMouseMove={handleCanvasMove}
           onMouseLeave={handleCanvasLeave}
@@ -359,20 +347,11 @@ export const TasteTimelineView: React.FC<TasteTimelineViewProps> = ({
       </div>
 
       {selectedNode && (
-        <div
-          style={{
-            padding: "8px 12px",
-            borderTop: "1px solid var(--border-primary)",
-            background: "var(--bg-surface)",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-          }}
-        >
-          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+        <div className={styles.timelineFooter}>
+          <span className={styles.timelineFooterText}>
             已选中 v{selectedNode.version} — {selectedNode.paramCount} 个参数 — {formatDateTime(selectedNode.timestamp)}
           </span>
-          <div style={{ marginLeft: "auto" }}>
+          <div className={styles.timelineFooterActions}>
             <button
               className={styles.timelineRevertBtn}
               onClick={() => handleRevert(selectedNode.version)}

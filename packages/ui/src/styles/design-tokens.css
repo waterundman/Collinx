@@ -205,6 +205,17 @@
   /* ---- Easing ---- */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 
+  /* ---- Layout (v3.0.0) ----
+     App Shell 与 compose 的可调尺寸。此前这些值硬编码在 App.module.css
+     （flex: 0 0 180px / max-height: 45%），Splitter 需要读写同一份数值，
+     故收敛为令牌：改一处，画布与实现同步。 */
+  --shell-header-h: 44px;
+  --transport-h: 40px;
+  --compose-score-h: 180px;
+  --compose-score-max: 45%;
+  --splitter-hit: 8px;
+  --splitter-line: 1px;
+
   /* ---- Font Families ---- */
   --font-display: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
   --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;

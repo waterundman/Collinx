@@ -165,3 +165,8 @@
 .btnRollback:hover {
   background: rgba(162, 155, 254, 0.22);
 }
+
+/* v3.0.0 A5：风险条计数 */
+.riskFlagCount {
+  color: var(--accent-red);
+}

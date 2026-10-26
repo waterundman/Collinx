@@ -1,0 +1,34 @@
+/* v3.0.0 A2：分栏把手 */
+
+.splitter {
+  flex: 0 0 auto;
+  height: var(--splitter-hit);
+  margin: 2px 0;
+  cursor: row-resize;
+  background: transparent;
+  position: relative;
+  user-select: none;
+  touch-action: none;
+  outline: none;
+}
+
+/* 1px 视觉线居中，热区 8px —— 看得细，抓得住 */
+.splitter::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--splitter-line);
+  background: var(--border-primary);
+  transition: background var(--transition-fast) var(--ease-standard);
+}
+
+.splitter:hover::after,
+.splitter:focus-visible::after {
+  background: var(--border-secondary);
+}
+
+.splitter:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--border-focus);
+}

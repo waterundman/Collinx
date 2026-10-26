@@ -354,3 +354,18 @@
     width: 100%;
   }
 }
+
+/* ---- v3.0.0 A5：原内联样式 ---- */
+.selectControl {
+  cursor: pointer;
+}
+
+.rangeHintRow {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-1);
+}
+
+.hiddenInput {
+  display: none;
+}

@@ -1,10 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { TasteDiffReport, EvidenceItem, TasteDomain } from "@collinx/core";
 import styles from "./TastePanel.module.css";
-
-function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
+import { getCSSVar } from "../../utils/cssVar";
 
 interface TasteDiffPanelProps {
   report: TasteDiffReport | null;
@@ -153,13 +150,13 @@ export const TasteDiffPanel: React.FC<TasteDiffPanelProps> = ({
           </div>
           <div className={styles.diffStats}>
             <span className={styles.diffStat}>
-              显著偏离: <span className={styles.diffStatCount} style={{ color: "var(--accent-red)" }}>{report.stats.significantDeviations}</span>
+              显著偏离: <span className={`${styles.diffStatCount} ${styles.diffStatRed}`}>{report.stats.significantDeviations}</span>
             </span>
             <span className={styles.diffStat}>
-              中等偏离: <span className={styles.diffStatCount} style={{ color: "var(--accent-yellow)" }}>{report.stats.mildDeviations}</span>
+              中等偏离: <span className={`${styles.diffStatCount} ${styles.diffStatYellow}`}>{report.stats.mildDeviations}</span>
             </span>
             <span className={styles.diffStat}>
-              正常: <span className={styles.diffStatCount} style={{ color: "var(--accent-green)" }}>{report.stats.inTolerance}</span>
+              正常: <span className={`${styles.diffStatCount} ${styles.diffStatGreen}`}>{report.stats.inTolerance}</span>
             </span>
             <span className={styles.diffStat}>
               总计: <span className={styles.diffStatCount}>{report.stats.totalComparisons}</span>
@@ -168,7 +165,7 @@ export const TasteDiffPanel: React.FC<TasteDiffPanelProps> = ({
         </div>
 
         <div className={styles.diffBody}>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "12px", lineHeight: "1.5" }}>
+          <div className={styles.diffSummary}>
             {report.summary}
           </div>
 
@@ -271,7 +268,7 @@ export const TasteDiffPanel: React.FC<TasteDiffPanelProps> = ({
                 type="checkbox"
                 checked={selectAll && selectedIds.size === report.evidenceItems.length}
                 onChange={handleSelectAll}
-                style={{ accentColor: "var(--accent-cyan)" }}
+                className={styles.selectAllCheckbox}
               />
               全选 ({selectedCount}/{report.evidenceItems.length})
             </label>
