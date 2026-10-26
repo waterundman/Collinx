@@ -1,0 +1,67 @@
+/* v3.0.0 S3：动作按钮 —— 三档视觉，只靠底色分主次 */
+
+.base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast) var(--ease-standard),
+    border-color var(--transition-fast) var(--ease-standard),
+    color var(--transition-fast) var(--ease-standard);
+}
+
+.base:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.base:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+/* 每屏唯一：推进当前任务的那一个 */
+.primary {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  color: var(--text-on-accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-cyan-hover);
+  border-color: var(--accent-cyan-hover);
+}
+
+/* 次级：有形状但不着色 */
+.ghost {
+  background: var(--bg-surface);
+  border-color: var(--border-secondary);
+  color: var(--text-secondary);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* 破坏性：只染字与边，不铺满红底 */
+.danger {
+  background: transparent;
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--bg-error);
+}

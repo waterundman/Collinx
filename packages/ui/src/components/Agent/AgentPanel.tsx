@@ -1,7 +1,7 @@
 import React from "react";
 import type { DiffEnvelope } from "@collinx/core";
 import { useI18n } from "../../i18n";
-import { Icon } from "../Icon/Icon";
+import { EmptyState } from "../common/EmptyState";
 import { DiffCard } from "./DiffCard";
 import styles from "./AgentPanel.module.css";
 
@@ -57,10 +57,7 @@ export function AgentPanel({
             {t('agentPanel.pendingReview')} ({pendingDiffs.length})
           </div>
           {pendingDiffs.length === 0 ? (
-            <div className={styles.emptyState} data-testid="agent-panel-empty-pending">
-              <Icon name="layers" size={20} strokeWidth={1.5} className={styles.emptyIcon} aria-hidden />
-              <span>{t('agentPanel.noPendingDiffs')}</span>
-            </div>
+            <EmptyState testId="agent-panel-empty-pending" title={t('agentPanel.noPendingDiffs')} />
           ) : (
             <div className={styles.cardList}>
               {pendingDiffs.map((diff) => (
@@ -82,10 +79,7 @@ export function AgentPanel({
             {t('agentPanel.history')} ({historyDiffs.length})
           </div>
           {historyEntries.length === 0 ? (
-            <div className={styles.emptyState} data-testid="agent-panel-empty-history">
-              <Icon name="check" size={20} strokeWidth={1.5} className={styles.emptyIcon} aria-hidden />
-              <span>{t('agentPanel.noHistory')}</span>
-            </div>
+            <EmptyState testId="agent-panel-empty-history" title={t('agentPanel.noHistory')} />
           ) : (
             <div className={styles.cardList}>
               {historyEntries.map((entry) => (

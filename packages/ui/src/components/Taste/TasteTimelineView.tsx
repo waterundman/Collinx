@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { TasteStore } from "@collinx/core";
 import styles from "./TastePanel.module.css";
 import { getCSSVar } from "../../utils/cssVar";
+import { Button } from "../common/Button";
 
 interface TasteTimelineViewProps {
   store: TasteStore;
@@ -306,12 +307,12 @@ export const TasteTimelineView: React.FC<TasteTimelineViewProps> = ({
           共 {store.getVersionHistory().length} 个版本
         </span>
         <div className={styles.timelineActions}>
-          <button className={styles.timelineActionBtn} onClick={handleExport}>
+          <Button variant="primary" onClick={handleExport}>
             导出
-          </button>
-          <button className={styles.timelineActionBtn} onClick={handleImport}>
+          </Button>
+          <Button variant="ghost" onClick={handleImport}>
             导入
-          </button>
+          </Button>
         </div>
       </div>
 

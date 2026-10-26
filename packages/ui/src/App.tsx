@@ -20,7 +20,7 @@ import { TransportBar } from "./components/Transport/TransportBar";
 import { ScorePanel } from "./components/Score";
 import type { CollisionWarning } from "./components/Score";
 import { ArrangementView } from "./components/Arrangement/ArrangementView";
-import { EmptyGuide } from "./components/common/EmptyGuide";
+import { EmptyState } from "./components/common/EmptyState";
 import { ArrangerPanel } from "./components/Arranger";
 import { OrchestratorPanel } from "./components/Orchestrator";
 import type { OrchestratorConfig, RegisterConflict } from "./components/Orchestrator";
@@ -1521,17 +1521,8 @@ export function App() {
                 </div>
               </div>
             ) : (
-              /* v2.6.0：主区此前只有一行提示（79.7% 死区）→ 统一空态引导 */
-              <EmptyGuide
-                testId="orchestrate-guide"
-                icon="sliders"
-                title={t("app.orchestrate.guideTitle")}
-                steps={[
-                  { label: t("app.orchestrate.guideStep1") },
-                  { label: t("app.orchestrate.guideStep2") },
-                  { label: t("app.orchestrate.guideStep3") },
-                ]}
-              />
+              /* v3.0.0 S4：空态改为一句话 —— 原来的图标 + 三步引导比内容还重 */
+              <EmptyState testId="orchestrate-guide" title={t("app.orchestrate.guideTitle")} />
             )}
           </div>
 

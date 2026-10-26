@@ -14,6 +14,7 @@ import { Icon } from "../Icon/Icon";
 import { renderMarkdown } from "./markdown";
 import { loadChatSession, saveChatSession } from "./chatSession";
 import styles from "./AgentChat.module.css";
+import { Button } from "../common/Button";
 
 export interface ChatMessage {
   id: string;
@@ -296,9 +297,7 @@ export function AgentChat({
       <div className={styles.messagesContainer} data-testid="agent-chat-messages">
         {messages.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>
-              <Icon name="chat" size={26} strokeWidth={1.4} aria-hidden />
-            </div>
+            {/* v3.0.0 S4：空态不卖萌 —— 去掉装饰性图标，保留一句话与可执行建议 */}
             <div className={styles.emptyText}>
               {t("agentChat.startConversation", { name: agentName })}
             </div>
@@ -448,14 +447,14 @@ export function AgentChat({
             {t("agentChat.stop")}
           </button>
         ) : (
-          <button
+          <Button
             type="submit"
-            data-testid="agent-chat-send"
-            className={styles.sendButton}
+            variant="primary"
+            testId="agent-chat-send"
             disabled={!inputValue.trim()}
           >
             {t("agentChat.send")}
-          </button>
+          </Button>
         )}
       </form>
     </div>

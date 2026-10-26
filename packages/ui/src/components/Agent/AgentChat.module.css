@@ -242,28 +242,6 @@
   cursor: not-allowed;
 }
 
-.sendButton {
-  padding: var(--space-2) var(--space-4);
-  background: var(--accent-cyan);
-  color: var(--bg-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  font-family: var(--font-ui);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--transition-fast) var(--ease-standard);
-}
-
-.sendButton:hover:not(:disabled) {
-  background: var(--accent-cyan-hover);
-}
-
-.sendButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* v2.4.0 S3: 真实 LLM 接入后的新增 UI */
 .headerAction {
   margin-left: auto;

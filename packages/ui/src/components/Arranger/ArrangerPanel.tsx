@@ -18,6 +18,7 @@ import type {
 } from "../../store/project-store";
 import styles from "./ArrangerPanel.module.css";
 import { getCSSVar } from "../../utils/cssVar";
+import { Button } from "../common/Button";
 
 interface ArrangerVariant {
   id: string;
@@ -481,9 +482,9 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
           </div>
 
           <div className={styles.footer}>
-            <button className={styles.confirmBtn} onClick={handleConfirm}>
+            <Button variant="primary" onClick={handleConfirm}>
               {t('arranger.confirm')}
-            </button>
+            </Button>
           </div>
         </>
       )}

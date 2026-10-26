@@ -3,6 +3,7 @@ import type { DiffEnvelope } from "@collinx/core";
 import { useI18n } from "../../i18n";
 import { Icon } from "../Icon/Icon";
 import styles from "./TeachingPanel.module.css";
+import { Button } from "../common/Button";
 
 export type UserLevel = "beginner" | "intermediate" | "advanced" | "professional";
 
@@ -314,15 +315,14 @@ export const TeachingPanel: React.FC<TeachingPanelProps> = ({  activeDiff,
             <span className={styles.sidebarTitle}>
               {t("app.teaching.harmonyTitle")}
             </span>
-            <button
-              type="button"
-              className={styles.harmonyTrigger}
-              data-testid="teaching-harmony-trigger"
+            <Button
+              variant="primary"
+              testId="teaching-harmony-trigger"
               disabled={!canExplainHarmony || harmonyLoading}
               onClick={onExplainHarmony}
             >
               {t("app.teaching.harmonyAction")}
-            </button>
+            </Button>
           </div>
 
           {!canExplainHarmony && !harmonyLoading ? (
