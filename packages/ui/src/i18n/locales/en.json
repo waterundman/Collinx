@@ -1552,10 +1552,7 @@
       "conflictsDetected": "Detected {{count}} voice conflicts",
       "errorsAndWarnings": "{{errors}} errors · {{warnings}} warnings",
       "hint": "Select instruments on the right, click \"Orchestrate\" to begin",
-      "guideTitle": "How orchestration works",
-      "guideStep1": "Choose a preset ensemble on the right (string quartet / jazz band / electronic…)",
-      "guideStep2": "Check the players you want — the range hints show each part's playable notes",
-      "guideStep3": "Click 编排方案 to write parts into the project; conflicts will be listed here"
+      "guideTitle": "How orchestration works"
     },
     "taste": {
       "analyzeExport": "Analyze Current Export"
