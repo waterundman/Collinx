@@ -146,7 +146,7 @@ Collinx/
 | Phase 0 — PoC | Graph + Diff + Agent | Done |
 | Phase 1 — MVP | Arrangement + Piano-Roll + Partitur + Mischpult + Taste + Export | 99% |
 | Phase 2 — Benutzbarkeit | Gravur + A/B + Overlay + Leistung | 95% |
-| Phase 3 — Plugins | VST3 + Sandbox | 25% |
+| Phase 3 — Plugins | VST3 + Sandbox | Nur natives Gerüst (Browser-UI entfernt, Neuschrieb sobald Host steht) |
 | Phase 4 — Ökosystem | CLAP + Markt + SDK | — |
 
 ---

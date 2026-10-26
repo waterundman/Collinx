@@ -277,24 +277,34 @@ gh run list --workflow="ci-audio.yml"            # C++ 引擎构建 + ctest + N-
 
 ---
 
-## 九、零生产引用清单（v2.9.2 审计）
+## 九、零生产引用清单（v2.9.2 审计 · v3.0.0 清理）
 
 判定方法：从真实入口（`ui/main.tsx`、各包 `src/index.ts`、`desktop/main.ts`+`preload.ts`）做
 **可达性 BFS**，跟随所有相对 import 与 barrel re-export；脚本 `scripts/verify/zero-ref-audit.mjs`。
 > 只按「当前有没有人 import」判死是错的（v2.8.0 曾误删规格内交付物）——本表列**判定**，不直接删。
 
-当前 **29 个文件零生产引用**（214 个源文件中），分五类：
+### v3.0.0 清理结论：删 25 个文件，不留「等宿主」的死模块
 
-| 分组 | 文件数 | 判定 | 依据 / 阻塞 |
+上一版把 25 个文件标为「⛔ 阻塞」长期留存。本轮逐条核到**数据源**，结论是它们连"接上就有反应"的前提都不成立：
+
+| 原分组 | 文件数 | 删除依据（实证） |
+|---|---|---|
+| 插件宿主簇：`PluginBrowser` / `PluginEditor` / `PresetBrowser` / `CrashRecovery` / `Vst3HostService` | 18 | `Vst3HostService.scanDirectory()` **返回三个硬编码插件**（Reverb Pro / Synth Master / Compressor X）。挂上不是"未来功能"，是"现在就在造假数据"。`CrashInfo` 以 `pluginId` 为键，属同一簇，随宿主一起删 |
+| `MidiEffect` | 5 | 生产端无 `MidiEffectChainState` 来源，`midi-schedule` 也不应用效果；接入 = 同时补状态 + 发送前处理 + 持久化，属新功能而非接线 |
+| `Taste/ABPlayerUI` | 1 | core 的 `ABPlayer` 引擎是真的（含测试），但**没有第二个真实版本源** —— `GenomeVersionEntry` 只存参数快照、不含 notes。硬接就得现造一个"变体 B"，等于新的假 UI |
+| `Score/ScoreView` | 1 | 重复实现，已被 `ScoreRenderer`（分页 / 播放头 / 小节锚点）取代 |
+
+**保留项**（当前 4 个零引用文件）：
+
+| 分组 | 文件数 | 判定 | 依据 |
 |---|---|---|---|
-| 插件宿主簇：`PluginBrowser` / `PluginEditor` / `PresetBrowser` / `CrashRecovery` / `Vst3HostService` | 18 | ⛔ 阻塞 | 需要 C++ 插件宿主（扫描/加载/GUI 窗口/崩溃事件）；挂上只会是「点了没反应」 |
-| `MidiEffect`（面板 + 路由视图 + 类型） | 5 | ⛔ 阻塞 | 生产端没有 `MidiEffectChainState` 的来源，`midi-schedule` 也不应用效果；接入要同时补状态 + 发送前处理 + 持久化 |
-| `Taste/ABPlayerUI` | 1 | ⛔ 阻塞（本身有缺陷） | ①`phase="vote"` 永不置位 ②组件不发声，需外部 A/B 试听通道；详见文件头 |
-| `Score/ScoreView` | 1 | 🗑 重复实现 | 被 `ScoreRenderer`（分页/播放头/小节锚点）取代；确认 vault 规格后整体删除 |
-| `services/desktop-bridge` | 1 | ⛔ 阻塞 | 需要 Electron 壳 + preload 补 `startPlayback` |
-| 桶文件：`src/index.tsx`、`store/index.ts`、`components/Taste/index.ts` | 3 | ℹ️ 保留 | 库导出面/统一出口，无消费者不等于无用途 |
+| `services/desktop-bridge` | 1 | ⛔ 阻塞（保留） | 需 Electron 壳 + preload 补 `startPlayback`；文件头已写明「勿按零引用删除」 |
+| 桶文件：`src/index.tsx`、`store/index.ts`、`components/Taste/index.ts` | 3 | ℹ️ 保留 | 库导出面 / 统一出口 |
 
-**v2.9.2 新接入**：`components/Performance`（原零引用）→ 挂到混音页，数据只取真实可采集项
+**结论口径变更**：今后"待接线"不再作为长期状态存在。判定只有两种 ——
+①**有真实数据源** → 当轮接入；②**无数据源** → 删除，等能力就绪时按规格重写（不留半成品 UI）。
+
+**v2.9.2 保留的历史结论**：`components/Performance`（原零引用）→ 挂到混音页，数据只取真实可采集项
 （声部数/采样率/输出延迟/JS 堆）；CPU 与缓冲欠载浏览器不可采集，面板显示「—」而不是造数。
 
 复跑：`node scripts/verify/zero-ref-audit.mjs`
