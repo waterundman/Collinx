@@ -7,6 +7,7 @@ import type { SettingsCategory } from '../../types/settings';
 import { AudioSettings } from './AudioSettings';
 import { MidiSettings } from './MidiSettings';
 import { AgentSettings } from './AgentSettings';
+import { PluginSettingsSection } from './PluginSettings';
 import styles from './SettingsPage.module.css';
 
 export interface SettingsContentProps {
@@ -78,6 +79,10 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
       taste: {
         title: t('settings.taste.title'),
         description: t('settings.tasteDesc'),
+      },
+      plugins: {
+        title: t('settings.plugins.title'),
+        description: t('settings.plugins.intro'),
       },
     };
     return info[category];
@@ -345,6 +350,8 @@ export const SettingsContent: React.FC<SettingsContentProps> = ({
         return renderAgentSettings();
       case 'taste':
         return renderTasteSettings();
+      case 'plugins':
+        return <PluginSettingsSection />;
       default:
         return (
           <div className={styles.emptyState}>

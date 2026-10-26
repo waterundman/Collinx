@@ -834,6 +834,22 @@
         "saved": "已保存"
       }
     },
+    "plugins": {
+      "title": "插件",
+      "intro": "插件宿主扫描磁盘上真实存在的 VST3 / CLAP 目录。加载 DSP 需要原生宿主进程，目前尚未接线 —— 扫描与列表是真的，加载不是。",
+      "unavailable": "当前运行在浏览器中 —— 插件宿主仅在桌面外壳内可用。",
+      "scanPaths": "扫描目录",
+      "scanPathsHint": "留空则使用各平台默认目录（VST3 / CLAP 标准路径）。",
+      "pathPlaceholder": "/插件目录路径",
+      "addPath": "添加目录",
+      "scan": "扫描",
+      "scanning": "扫描中…",
+      "results": "找到 {{count}} 个插件",
+      "empty": "在扫描目录里没有找到插件。",
+      "notScanned": "尚未扫描。",
+      "load": "加载",
+      "loadUnavailable": "原生插件宿主尚未接线 —— 列得出来，加载不了。"
+    },
     "taste": {
       "title": "Taste设置",
       "library": "口味库",

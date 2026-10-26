@@ -12,6 +12,13 @@ interface NavigationItem {
 
 /** 导航图标组件 */
 const NavigationIcons: Record<SettingsCategory, React.ReactNode> = {
+  plugins: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 2v6M15 2v6" />
+      <path d="M6 8h12v4a6 6 0 0 1-12 0V8z" />
+      <path d="M12 18v4" />
+    </svg>
+  ),
   general: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
@@ -81,6 +88,7 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
   { key: 'score', labelKey: 'settings.notation.title', icon: NavigationIcons.score },
   { key: 'agent', labelKey: 'settings.agent.title', icon: NavigationIcons.agent },
   { key: 'taste', labelKey: 'settings.taste.title', icon: NavigationIcons.taste },
+  { key: 'plugins', labelKey: 'settings.plugins.title', icon: NavigationIcons.plugins },
 ];
 
 export interface SettingsNavigationProps {

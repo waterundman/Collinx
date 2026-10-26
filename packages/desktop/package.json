@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json && electron dist/main.js",
     "start": "electron dist/main.js",
-    "test": "node --test --experimental-strip-types src/audio-driver.test.ts src/audio-ring-buffer.test.ts"
+    "test": "node --test --experimental-strip-types src/audio-driver.test.ts src/audio-ring-buffer.test.ts src/plugin-scanner.test.ts"
   },
   "devDependencies": {
     "electron": "^33.0.0",

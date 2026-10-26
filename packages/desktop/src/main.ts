@@ -11,6 +11,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import * as path from "node:path";
 import { AudioEngineBridge } from "./audio-bridge";
+import { defaultPluginDirs, scanPluginDirs } from "./plugin-scanner";
 
 const isDev = !app.isPackaged;
 /** 开发时加载 vite dev server；打包后加载 ui 的构建产物 */
@@ -64,6 +65,24 @@ ipcMain.handle("audio:stop", async () => audio.stop());
 ipcMain.handle("audio:startPlayback", () => audio.startPlayback());
 ipcMain.handle("audio:stopPlayback", () => audio.stopPlayback());
 ipcMain.handle("audio:playbackStats", () => audio.playbackStats());
+
+// ── 插件（v3.1.0）─────────────────────────────────────────────
+// scan 是**真实文件系统扫描**：只发现磁盘上的 .vst3 / .clap，绝不返回造出来的条目。
+ipcMain.handle("plugins:scan", async (_e, dirs?: string[]) => {
+  try {
+    const list = await scanPluginDirs(dirs && dirs.length > 0 ? dirs : defaultPluginDirs());
+    return { ok: true, plugins: list };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : "扫描失败", plugins: [] };
+  }
+});
+
+// load 需要原生插件宿主进程（尚未接线）—— 明确返回失败原因，界面据此禁用而不是假装成功。
+ipcMain.handle("plugins:load", async (_e, pluginId: string) => ({
+  ok: false,
+  pluginId,
+  reason: "原生插件宿主尚未接线：当前只能扫描与列出，无法加载 DSP",
+}));
 
 // SharedArrayBuffer 需要 crossOriginIsolated（COOP + COEP）。
 // 没有这两个头时 Chromium 不暴露 SharedArrayBuffer，音频管线只能退化成静音。

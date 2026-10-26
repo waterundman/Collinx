@@ -49,6 +49,33 @@ const api = {
       uptimeMs: number;
     } | null> => ipcRenderer.invoke("audio:playbackStats"),
   },
+
+  /**
+   * v3.1.0：插件宿主（真实文件系统扫描）。
+   *
+   * 只暴露领域方法，不暴露 ipcRenderer。scan 返回磁盘上真实存在的
+   * .vst3/.clap；load 在原生宿主接线前恒返回 ok:false + 原因。
+   */
+  plugins: {
+    scan: (
+      dirs?: string[],
+    ): Promise<{
+      ok: boolean;
+      reason?: string;
+      plugins: Array<{
+        id: string;
+        name: string;
+        format: "vst3" | "clap";
+        path: string;
+        hasBinary: boolean;
+      }>;
+    }> => ipcRenderer.invoke("plugins:scan", dirs),
+
+    load: (
+      pluginId: string,
+    ): Promise<{ ok: boolean; pluginId: string; reason?: string }> =>
+      ipcRenderer.invoke("plugins:load", pluginId),
+  },
 };
 
 contextBridge.exposeInMainWorld("collinx", api);

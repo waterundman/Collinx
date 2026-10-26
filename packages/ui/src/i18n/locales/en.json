@@ -834,6 +834,22 @@
         "saved": "Saved"
       }
     },
+    "plugins": {
+      "title": "Plugins",
+      "intro": "The plugin host scans real VST3 / CLAP directories on disk. Loading DSP requires the native host process, which is not wired yet — scanning and listing are real, loading is not.",
+      "unavailable": "Running in a browser — the plugin host is only available inside the desktop shell.",
+      "scanPaths": "Scan directories",
+      "scanPathsHint": "Leave empty to use platform defaults (VST3 / CLAP standard folders).",
+      "pathPlaceholder": "/path/to/plugins",
+      "addPath": "Add directory",
+      "scan": "Scan",
+      "scanning": "Scanning…",
+      "results": "Found {{count}} plugins",
+      "empty": "No plugins found in the scanned directories.",
+      "notScanned": "Not scanned yet.",
+      "load": "Load",
+      "loadUnavailable": "Native plugin host is not wired yet — listing works, loading does not."
+    },
     "taste": {
       "title": "Taste Settings",
       "library": "Taste Library",

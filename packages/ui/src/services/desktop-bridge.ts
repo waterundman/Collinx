@@ -32,6 +32,24 @@ export interface CollinxDesktopBridge {
     start(): Promise<boolean>;
     stop(): Promise<void>;
   };
+  /**
+   * v3.1.0：插件宿主。**可选** —— 旧版 preload 没有这一段，
+   * 调用方必须按「不可用」处理，而不是假定存在。
+   */
+  plugins?: {
+    scan(dirs?: string[]): Promise<{
+      ok: boolean;
+      reason?: string;
+      plugins: Array<{
+        id: string;
+        name: string;
+        format: "vst3" | "clap";
+        path: string;
+        hasBinary: boolean;
+      }>;
+    }>;
+    load(pluginId: string): Promise<{ ok: boolean; pluginId: string; reason?: string }>;
+  };
 }
 
 /** 取桌面桥；在浏览器中返回 null（调用方据此降级） */

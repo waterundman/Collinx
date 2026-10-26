@@ -85,6 +85,14 @@ export interface TasteSettings {
   projectOverlay: boolean;
 }
 
+/** 插件设置（v3.1.0） */
+export interface PluginSettings {
+  /** 自定义扫描目录；为空时用宿主默认目录（mac/Linux/Windows 各自的 VST3/CLAP 标准路径） */
+  scanPaths: string[];
+  /** 扫描到的插件是否记住「已忽略」状态（仅界面层，不影响宿主） */
+  hideWithoutBinary: boolean;
+}
+
 /** 完整设置类型 */
 export interface AppSettings {
   general: GeneralSettings;
@@ -94,6 +102,7 @@ export interface AppSettings {
   score: ScoreSettings;
   agent: AgentSettings;
   taste: TasteSettings;
+  plugins: PluginSettings;
 }
 
 /** 设置类别键 */
@@ -176,6 +185,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     autoLearn: true,
     askConfirmation: true,
     projectOverlay: false,
+  },
+  plugins: {
+    scanPaths: [],
+    hideWithoutBinary: false,
   },
 };
 
