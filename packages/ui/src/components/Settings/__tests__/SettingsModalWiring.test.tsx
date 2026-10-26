@@ -143,6 +143,32 @@ describe('App settings entry wiring (S1-T01)', () => {
     cleanup();
   });
 
+  // ── S1-T02c: 焦点掉出容器后 Esc 仍应关闭 ──
+  it('S1-T02c: 焦点掉出设置容器后 Esc 仍关闭（v3.1.0 点击审计实测缺陷）', async () => {
+    const { container, cleanup } = renderApp();
+
+    click(getOpenSettingsButton(container));
+    await waitFor(() => queryDialog(container) !== null);
+
+    // 复现真实路径：刚点掉一个按钮（例如移除 MIDI 效果），焦点回到 body，
+    // 事件不会再经过设置容器的 onKeyDown —— 关闭必须挂在 document 上。
+    act(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    expect(container.contains(document.activeElement)).toBe(false);
+
+    act(() => {
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      );
+    });
+
+    await waitFor(() => queryDialog(container) === null);
+    expect(queryDialog(container)).toBeNull();
+
+    cleanup();
+  });
+
   // ── S1-T02 补充: onClose 路径（关闭按钮渲染时）也应卸载模态 ──
   it('S1-T02b: 模态出现前后 App 内容保持可交互（save-project 按钮始终存在）', () => {
     const { container, cleanup } = renderApp();

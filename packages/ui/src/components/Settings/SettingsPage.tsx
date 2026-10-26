@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useI18n } from '../../i18n/hooks';
 import { useSettings } from '../../hooks/useSettings';
 import type { SettingsCategory, AppSettings } from '../../types/settings';
@@ -114,6 +114,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     [onClose]
   );
 
+  /**
+   * v3.1.0（点击审计实测）：Esc 只在设置容器**内部**有焦点时才生效。
+   * 删掉一个刚点过的按钮（如 MIDI 效果移除）后焦点会掉回 body，
+   * 此时按 Esc 完全没反应 —— 用户被卡在设置里，只能找关闭按钮。
+   * 模态框的 Esc 应该挂在 document 上，与焦点在哪无关。
+   */
+  useEffect(() => {
+    if (!onClose) return undefined;
+    const onDocKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onDocKeyDown);
+    return () => document.removeEventListener('keydown', onDocKeyDown);
+  }, [onClose]);
+
   return (
     <div
       className={styles.container}
@@ -121,6 +136,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       role="dialog"
       aria-label={t('settings.title')}
       aria-modal="true"
+      data-testid="settings-page"
     >
       {/* 侧边栏 */}
       <aside className={styles.sidebar}>
