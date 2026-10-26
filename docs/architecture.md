@@ -283,26 +283,28 @@ gh run list --workflow="ci-audio.yml"            # C++ 引擎构建 + ctest + N-
 **可达性 BFS**，跟随所有相对 import 与 barrel re-export；脚本 `scripts/verify/zero-ref-audit.mjs`。
 > 只按「当前有没有人 import」判死是错的（v2.8.0 曾误删规格内交付物）——本表列**判定**，不直接删。
 
-### v3.0.0 清理结论：删 25 个文件，不留「等宿主」的死模块
+### v3.0.0 清理 + v3.1.0 回接（真数据源到了才接）
 
-上一版把 25 个文件标为「⛔ 阻塞」长期留存。本轮逐条核到**数据源**，结论是它们连"接上就有反应"的前提都不成立：
+v3.0.0 把 25 个「⛔ 阻塞」文件删了，依据是**数据源不存在**而非"没人 import"。
+v3.1.0 给其中三块补上了真实数据源并回接，另外两块维持删除：
 
-| 原分组 | 文件数 | 删除依据（实证） |
-|---|---|---|
-| 插件宿主簇：`PluginBrowser` / `PluginEditor` / `PresetBrowser` / `CrashRecovery` / `Vst3HostService` | 18 | `Vst3HostService.scanDirectory()` **返回三个硬编码插件**（Reverb Pro / Synth Master / Compressor X）。挂上不是"未来功能"，是"现在就在造假数据"。`CrashInfo` 以 `pluginId` 为键，属同一簇，随宿主一起删 |
-| `MidiEffect` | 5 | 生产端无 `MidiEffectChainState` 来源，`midi-schedule` 也不应用效果；接入 = 同时补状态 + 发送前处理 + 持久化，属新功能而非接线 |
-| `Taste/ABPlayerUI` | 1 | core 的 `ABPlayer` 引擎是真的（含测试），但**没有第二个真实版本源** —— `GenomeVersionEntry` 只存参数快照、不含 notes。硬接就得现造一个"变体 B"，等于新的假 UI |
-| `Score/ScoreView` | 1 | 重复实现，已被 `ScoreRenderer`（分页 / 播放头 / 小节锚点）取代 |
+| 模块 | v3.0.0 | v3.1.0 现状 | 依据 |
+|---|---|---|---|
+| 插件宿主簇（`PluginBrowser` / `PluginEditor` / `PresetBrowser` / `CrashRecovery` / `Vst3HostService`，18 文件） | 删 | **回接为「设置 → 插件」分区** | 数据源换成真的：`desktop/src/plugin-scanner.ts` 扫真实 `.vst3`/`.clap`；`services/plugin-host.ts` 无宿主即 unavailable、零伪造。`load` 仍返回「原生宿主未接线」——**列得出来，加载不了**，这是当前真实边界 |
+| `MidiEffect`（5 文件） | 删 | **以另一形态回接**：「设置 → MIDI → 效果链」移调 / 力度 | 不再需要独立面板：效果作用在 `buildPlaybackEvents` 发送前的音符副本上，纯函数 + 越界钳制；只影响发声，不改工程音符 |
+| `Taste/ABPlayerUI`（1 文件） | 删 | **回接**：品味视图底部 A/B 面板 | 补上了缺的那一半：`GenomeVersionEntry.notes` 让版本快照带音符，于是有真实的"第二个版本"；`phase="vote"` 断头流程已修，试听通道由宿主注入 |
+| `Score/ScoreView`（1 文件） | 删 | 维持删除 | 重复实现，`ScoreRenderer` 已覆盖 |
 
-**保留项**（当前 4 个零引用文件）：
+**保留项**（当前 3 个零引用文件，全为桶出口）：
 
 | 分组 | 文件数 | 判定 | 依据 |
 |---|---|---|---|
-| `services/desktop-bridge` | 1 | ⛔ 阻塞（保留） | 需 Electron 壳 + preload 补 `startPlayback`；文件头已写明「勿按零引用删除」 |
-| 桶文件：`src/index.tsx`、`store/index.ts`、`components/Taste/index.ts` | 3 | ℹ️ 保留 | 库导出面 / 统一出口 |
+| 桶文件：`src/index.tsx`、`store/index.ts`、`components/Taste/index.ts` | 3 | ℹ️ 保留 | 库导出面 / 统一出口，无消费者不等于无用途 |
 
-**结论口径变更**：今后"待接线"不再作为长期状态存在。判定只有两种 ——
-①**有真实数据源** → 当轮接入；②**无数据源** → 删除，等能力就绪时按规格重写（不留半成品 UI）。
+> `services/desktop-bridge` 已于 v3.1.0 **脱离零引用** —— 它现在被 `services/plugin-host.ts` 消费，同时承载 `plugins.*` 类型契约。
+
+**结论口径**（v3.0.0 定，v3.1.0 验证有效）："待接线"不是合法长期状态。判定只有两种 ——
+①**有真实数据源** → 当轮接入；②**无数据源** → 删除，等能力就绪时按规格重写。v3.1.0 正是 ② → 补源 → ① 的完整一轮。
 
 **v2.9.2 保留的历史结论**：`components/Performance`（原零引用）→ 挂到混音页，数据只取真实可采集项
 （声部数/采样率/输出延迟/JS 堆）；CPU 与缓冲欠载浏览器不可采集，面板显示「—」而不是造数。

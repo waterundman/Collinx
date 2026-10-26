@@ -32,6 +32,7 @@
  */
 
 import type { NoteEvent, TempoMap } from "@collinx/core";
+import { applyMidiEffects, type MidiEffect } from "./midi-effects";
 
 /** 单个调度事件：端口按 atSeconds 换算时间戳后投递 */
 export interface ScheduledEvent {
@@ -88,12 +89,18 @@ function toMidiVelocity(velocity: number): number {
 export function buildPlaybackEvents(
   notes: NoteEvent[],
   tempoMap: TempoMap,
-  from: { bar: number; beat: number }
+  from: { bar: number; beat: number },
+  /**
+   * v3.1.0：演奏期 MIDI 效果链。在**编译事件之前**作用于音符副本，
+   * 因此不影响工程数据与钢琴卷显示 —— 只影响这一遍听到的声音。
+   */
+  midiEffects?: MidiEffect[],
 ): ScheduledEvent[] {
   const fromSeconds = tempoMap.timeAt(from.bar, from.beat);
   const events: ScheduledEvent[] = [];
+  const effectiveNotes = midiEffects && midiEffects.length > 0 ? applyMidiEffects(notes, midiEffects) : notes;
 
-  for (const note of notes) {
+  for (const note of effectiveNotes) {
     const onSeconds = tempoMap.timeAt(note.bar, note.beat);
     // (60 / bpm) = 每拍秒数；durQn 为四分音符数（1 beat ≡ 1 四分音符）
     const secondsPerBeat = 60 / tempoMap.bpmAt(note.bar, note.beat);

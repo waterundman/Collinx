@@ -632,6 +632,8 @@ export function App() {
     },
     // v2.1.0 S2 (D12-4)：播放期节拍器（settings.midi.playback.metronome）
     metronome: settings.midi.playback.metronome,
+    // v3.1.0：演奏期 MIDI 效果链（移调 / 力度），只影响发声
+    midiEffects: settings.midi.effects,
     // v2.2.0 S0 (D21)：录制 take 自动提交（stop/pause 防丢）→ 换算 → 批量落盘
     onRecordingCommit: handleRecordingCommit,
     instrumentOfTrack,

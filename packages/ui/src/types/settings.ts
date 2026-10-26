@@ -1,3 +1,5 @@
+import type { MidiEffect } from "../services/midi-effects";
+
 /** 通用设置 */
 export interface GeneralSettings {
   language: string;
@@ -45,6 +47,11 @@ export interface MidiSettings {
     /** v2.1.0 S2 (D12-4)：播放期节拍器（S2 消费；false = 仅 count-in 响） */
     metronome: boolean;
   };
+  /**
+   * v3.1.0：演奏期 MIDI 效果链（移调 / 力度）。
+   * 只作用于发送前的事件流，不改工程音符 —— 因此属于会话设置而非工程数据。
+   */
+  effects: MidiEffect[];
 }
 
 /** 混音设置 */
@@ -156,6 +163,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
       // v2.1.0 S2 (D12-4): 默认 false —— 与 v2.0.0 行为逐字一致（仅 count-in 响）
       metronome: false,
     },
+    effects: [],
   },
   mixer: {
     defaultFXChain: [],

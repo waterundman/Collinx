@@ -6,6 +6,13 @@ import { enumerateMidiDevices } from '../../services/device-enumeration';
 import { DEFAULT_SETTINGS } from '../../types/settings';
 import type { MidiSettings as MidiSettingsType } from '../../types/settings';
 import { DeviceSelector } from './DeviceSelector';
+import { Button } from '../common/Button';
+import {
+  MIDI_EFFECT_LIMITS,
+  createMidiEffect,
+  normalizeMidiEffects,
+  type MidiEffect,
+} from '../../services/midi-effects';
 import styles from './AudioMidiSettings.module.css';
 
 export interface MidiSettingsProps {
@@ -21,6 +28,12 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
   const { t } = useI18n();
   const { settings, updateSettings, resetCategory } = useSettings();
   const { midi } = settings;
+
+  /* v3.1.0：效果链读取走归一函数 —— 旧存档没有 effects 字段时得到空数组，
+     数组里若有非法项（类型不认识 / 值是 NaN）直接丢弃，不让它流进调度器。 */
+  const midiEffects = normalizeMidiEffects(midi.effects);
+  const setMidiEffects = (effects: MidiEffect[]) =>
+    updateSettings({ midi: { ...midi, effects } });
   // v1.26.0 (D2-3): 录入设置块。真实 Provider 经 deepMerge 必有 recording；
   // 兜底默认值以兼容旧 settings 夹具（测试 mock 未含该块时仍可渲染）。
   const recording: MidiSettingsType['recording'] =
@@ -512,6 +525,98 @@ export const MidiSettings: React.FC<MidiSettingsProps> = ({ className }) => {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* v3.1.0：演奏期 MIDI 效果链（移调 / 力度）—— 只影响发声，不改工程音符 */}
+      <div className={styles.section}>
+        <h3 className={styles.sectionTitle}>
+          {t('settings.midi.effects', { defaultValue: 'MIDI 效果' })}
+        </h3>
+        <p className={styles.settingDescription}>
+          {t('settings.midi.effectsHint', {
+            defaultValue: '作用在发送前的音符上，不修改工程里的音符；关掉即恢复原声。',
+          })}
+        </p>
+
+        {midiEffects.length === 0 ? (
+          <div className={styles.effectEmpty} data-testid="midi-effects-empty">
+            {t('settings.midi.effectsEmpty', { defaultValue: '还没有效果。' })}
+          </div>
+        ) : (
+          <div className={styles.effectList} data-testid="midi-effects-list">
+            {midiEffects.map((fx) => {
+              const limits = MIDI_EFFECT_LIMITS[fx.type];
+              const label =
+                fx.type === 'transpose'
+                  ? t('settings.midi.effectTranspose', { defaultValue: '移调' })
+                  : t('settings.midi.effectVelocity', { defaultValue: '力度' });
+              return (
+                <div key={fx.id} className={styles.effectRow}>
+                  <input
+                    type="checkbox"
+                    checked={fx.enabled}
+                    aria-label={`${label} 启用`}
+                    data-testid={`midi-effect-enabled-${fx.id}`}
+                    onChange={(e) =>
+                      setMidiEffects(
+                        midiEffects.map((x) =>
+                          x.id === fx.id ? { ...x, enabled: e.target.checked } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <span className={styles.effectName}>{label}</span>
+                  <input
+                    type="number"
+                    className={styles.effectValue}
+                    value={fx.value}
+                    min={limits.min}
+                    max={limits.max}
+                    step={limits.step}
+                    data-testid={`midi-effect-value-${fx.id}`}
+                    onChange={(e) => {
+                      const raw = Number(e.target.value);
+                      if (!Number.isFinite(raw)) return;
+                      const clamped = Math.min(limits.max, Math.max(limits.min, raw));
+                      setMidiEffects(
+                        midiEffects.map((x) => (x.id === fx.id ? { ...x, value: clamped } : x)),
+                      );
+                    }}
+                  />
+                  <span className={styles.effectUnit}>
+                    {fx.type === 'transpose' ? 'semitones' : '×'}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.effectRemove}
+                    aria-label={`${label} 移除`}
+                    data-testid={`midi-effect-remove-${fx.id}`}
+                    onClick={() => setMidiEffects(midiEffects.filter((x) => x.id !== fx.id))}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className={styles.effectActions}>
+          <Button
+            variant="ghost"
+            testId="midi-effect-add-transpose"
+            onClick={() => setMidiEffects([...midiEffects, createMidiEffect('transpose')])}
+          >
+            {t('settings.midi.addTranspose', { defaultValue: '+ 移调' })}
+          </Button>
+          <Button
+            variant="ghost"
+            testId="midi-effect-add-velocity"
+            onClick={() => setMidiEffects([...midiEffects, createMidiEffect('velocity')])}
+          >
+            {t('settings.midi.addVelocity', { defaultValue: '+ 力度' })}
+          </Button>
         </div>
       </div>
 

@@ -369,3 +369,67 @@
 .hiddenInput {
   display: none;
 }
+
+/* ---- v3.1.0：MIDI 效果链 ---- */
+
+.effectEmpty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+}
+
+.effectList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.effectRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 0;
+}
+
+.effectName {
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 48px;
+}
+
+.effectValue {
+  width: 72px;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.effectUnit {
+  font-size: 10px;
+  color: var(--text-disabled);
+  min-width: 64px;
+}
+
+.effectRemove {
+  border: none;
+  background: transparent;
+  color: var(--text-disabled);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.effectRemove:hover {
+  color: var(--accent-red);
+}
+
+.effectActions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

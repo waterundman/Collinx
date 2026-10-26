@@ -51,6 +51,7 @@ import type { NoteEvent, TempoMap } from "@collinx/core";
 import { encodeNoteOn, encodeNoteOff } from "../services/midi-output";
 import { AudioPreview } from "../services/audio-preview";
 import { instrumentForTrack } from "../services/instruments";
+import type { MidiEffect } from "../services/midi-effects";
 import {
   buildPlaybackEvents,
   buildClickEvents,
@@ -96,6 +97,8 @@ export interface UseTransportOptions {
   lookaheadMs?: number;
   /** v2.1.0 S2 (D12-4)：播放期节拍器（settings.midi.playback.metronome） */
   metronome?: boolean;
+  /** v3.1.0：演奏期 MIDI 效果链（settings.midi.effects），只影响发声不改工程 */
+  midiEffects?: MidiEffect[];
   /** v2.2.0 S0 (D21)：录制 take 自动提交回调（stop/pause 防丢） */
   onRecordingCommit?: (take: RecordedTake) => void;
   /**
@@ -223,6 +226,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
     schedulerTickMs,
     lookaheadMs,
     metronome,
+    midiEffects,
     onRecordingCommit,
     instrumentOfTrack,
     audio: audioOptions,
@@ -246,6 +250,9 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
   /** v2.1.0 S2 (D12-4)：播放期节拍器开关（ref 供会话构建读取） */
   const metronomeRef = useRef(metronome ?? false);
   metronomeRef.current = metronome ?? false;
+  /** v3.1.0：MIDI 效果链同样走 ref —— 播放中改效果不应让 play() 引用失效 */
+  const midiEffectsRef = useRef<MidiEffect[]>(midiEffects ?? []);
+  midiEffectsRef.current = midiEffects ?? [];
 
   // ── v2.1.0 S2 (D12-1)：loop 状态（对 UI 暴露 + ref 供会话构建/折返读取） ──
   const [loop, setLoopState] = useState<TransportLoop | null>(null);
@@ -609,7 +616,7 @@ export function useTransport(options: UseTransportOptions): UseTransportResult {
       // （>= timeAt(from) >= 0），与 sessionStartSeconds 同处一条时间轴；
       // 调度器以 atSeconds 直接作绝对秒、以 startSeconds = sessionStartSeconds
       // 作参考，故无需对音符事件额外偏移——它们自然落在 count-in 结束之后。
-      const noteEvents = buildPlaybackEvents(notesRef.current, tm, from);
+      const noteEvents = buildPlaybackEvents(notesRef.current, tm, from, midiEffectsRef.current);
       for (const ev of noteEvents) {
         events.push(ev);
       }
