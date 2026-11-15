@@ -162,7 +162,20 @@ export type ProjectStoreAction =
   | { type: "RECORD_DECISION_EVIDENCE"; diff: DiffEnvelope }
   | { type: "ADD_NOTE"; note: NoteEvent }
   /** v2.6.0：从空编排的起点卡片创建乐段 */
-  | { type: "ADD_PHRASE"; name: string; formRole: string; startBar: number; endBar: number }
+  | { type: "ADD_PHRASE"; name: string; formRole: string; startBar: number; endBar: number; energyLevel?: number }
+  /** v3.2.0：乐段结构编辑（拖动/改长度/改角色/能量），graph-native + undo */
+  | {
+      type: "UPDATE_PHRASE";
+      id: string;
+      changes: {
+        name?: string;
+        formRole?: string;
+        startBar?: number;
+        endBar?: number;
+        energyLevel?: number;
+      };
+    }
+  | { type: "DELETE_PHRASE"; id: string }
   | { type: "ADD_NOTES"; notes: NoteEvent[] }
   | { type: "MOVE_NOTE"; id: string; bar: number; beat: number; pitch: number }
   | { type: "RESIZE_NOTE"; id: string; durQn: number }
@@ -640,7 +653,22 @@ export interface ProjectStoreActions {
     formRole: string;
     startBar: number;
     endBar: number;
+    /** v3.2.0：可选能量值，用于复制乐段时保留原值 */
+    energyLevel?: number;
   }) => void;
+  /** v3.2.0：修改乐段结构；非法区间/重叠由 reducer 拒绝 */
+  updatePhrase: (
+    id: string,
+    changes: {
+      name?: string;
+      formRole?: string;
+      startBar?: number;
+      endBar?: number;
+      energyLevel?: number;
+    },
+  ) => void;
+  /** v3.2.0：删除乐段节点（音符保留；可 undo） */
+  deletePhrase: (id: string) => void;
   /** v2.2.0 S1 (D22-4)：批量新增（录制 take 落盘；一条 undo 记录） */
   addNotes: (notes: NoteEvent[]) => void;
   /** v2.1.0 S3 (D13-1)：设置 bar 处速度（bpm）——TransportBar 的 BPM 控件消费 */
@@ -1448,8 +1476,54 @@ export function createProjectReducer(
           formRole: action.formRole,
           startBar: action.startBar,
           endBar: action.endBar,
+          ...(action.energyLevel !== undefined
+            ? { energyLevel: action.energyLevel }
+            : {}),
           motifIds: [],
         });
+        return withUndo(state, { graph });
+      }
+
+      case "UPDATE_PHRASE": {
+        const graph = state.graph.snapshot();
+        const node = graph.getNode(action.id);
+        if (!node || node.type !== "Phrase") return state;
+        const current = (node.data ?? {}) as Record<string, unknown>;
+        const startBar = action.changes.startBar ?? Number(current.startBar);
+        const endBar = action.changes.endBar ?? Number(current.endBar);
+        // 结构与图表语义同一套守卫：正整数、start<=end、不与其它乐段重叠。
+        if (
+          !Number.isInteger(startBar) ||
+          !Number.isInteger(endBar) ||
+          startBar < 1 ||
+          endBar < startBar
+        ) {
+          return state;
+        }
+        for (const other of graph.getNodesByType("Phrase")) {
+          if (other.id === action.id) continue;
+          const otherStart = Number((other.data as Record<string, unknown>).startBar);
+          const otherEnd = Number((other.data as Record<string, unknown>).endBar);
+          if (
+            Number.isFinite(otherStart) &&
+            Number.isFinite(otherEnd) &&
+            startBar <= otherEnd &&
+            endBar >= otherStart
+          ) {
+            return state;
+          }
+        }
+        node.data = { ...current, ...action.changes, startBar, endBar };
+        node.updated_at = new Date().toISOString();
+        return withUndo(state, { graph });
+      }
+
+      case "DELETE_PHRASE": {
+        const graph = state.graph.snapshot();
+        const node = graph.getNode(action.id);
+        if (!node || node.type !== "Phrase") return state;
+        // 只删结构节点，不级联删除音符 —— 乐段是分组，不是音符所有者。
+        graph.removeNode(action.id);
         return withUndo(state, { graph });
       }
 

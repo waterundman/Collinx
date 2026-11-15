@@ -105,7 +105,14 @@
   overflow: auto;
 }
 
+/* v3.2.0 S2：编排区要能吃满剩余高度。
+   此前这里只是个带下边距的 block —— 里面的 .arrangementRootExpanded 写了
+   `flex: 1` 也没有可分配的高度，于是编排页下半屏永远是纯黑死区。 */
 .sectionMargin {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   margin-bottom: var(--space-2);
 }
 

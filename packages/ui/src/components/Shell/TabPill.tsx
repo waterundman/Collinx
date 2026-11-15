@@ -27,6 +27,14 @@ export const TabPill = <TId extends string = string>({
 }: TabPillProps<TId>) => {
   return (
     <button
+      type="button"
+      // v3.2.0 S3：此前只是「一排长得像页签的按钮」—— 读屏软件读不出
+      // 当前在哪一页，Tab 键要按 10 次才能穿过顶栏。
+      // 现在：role="tab" + aria-selected + roving tabindex（只有当前页在 Tab 序列里，
+      // 页签之间用 ←/→ 移动）。
+      role="tab"
+      aria-selected={active}
+      tabIndex={active ? 0 : -1}
       data-testid={`tab-${id}`}
       onClick={() => onSelect(id)}
       className={`${styles.pill}${active ? ` ${styles.pillActive}` : ""}`}

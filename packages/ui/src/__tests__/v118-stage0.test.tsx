@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { App } from "../App";
+import i18n from "../i18n";
 import { I18nProvider } from "../providers/I18nProvider";
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { ThemeProvider } from "../providers/ThemeProvider";
@@ -133,8 +134,13 @@ describe("v1.18.0 Stage 0: ArrangementView real phrases (no demo data)", () => {
     click(container.querySelector('[data-testid="tab-compose"]'));
     const view = container.querySelector('[data-testid="arrangement-view"]');
     expect(view).not.toBeNull();
+    // 乐段名来自图节点数据（不翻译），角色标签走 i18n。
     expect(view!.textContent).toContain("Chorus");
-    expect(view!.textContent).toContain("副歌"); // ROLE_LABELS["chorus"]
+    // v3.2.0：角色标签改为按当前语言渲染。断言仍落在 t() 级
+    // （若组件把标签写死成中文，在 en 环境下这条必然失败）。
+    const chorusRole = i18n.t("arranger.formRoles.chorus");
+    expect(chorusRole).not.toBe("arranger.formRoles.chorus"); // 键被解析，不是 raw key
+    expect(view!.textContent).toContain(chorusRole);
     // Empty state gone; demo template content never leaks.
     expect(container.querySelector('[data-testid="arrangement-empty"]')).toBeNull();
     expect(container.textContent).not.toContain("Verse A");
@@ -153,10 +159,13 @@ describe("v1.18.0 Stage 0: ArrangementView real phrases (no demo data)", () => {
     click(harmonyCard.querySelector("button"));
 
     click(container.querySelector('[data-testid="tab-arrange"]'));
-    const block = Array.from(
-      container.querySelectorAll('[data-testid="arrangement-view"] div'),
-    ).find((el) => el.textContent === "Chorus副歌");
-    expect(block).toBeDefined();
+    // v3.2.0：乐段块改为 role="button"（可拖动/可键盘操作），不再按
+    // 「名字+中文角色」拼接的 textContent 定位 —— 标签语言由当前 locale 决定。
+    const block = container.querySelector(
+      '[data-testid="arrangement-view"] [role="button"]',
+    );
+    expect(block).not.toBeNull();
+    expect(block!.textContent).toContain("Chorus");
     act(() => {
       block!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
     });
@@ -182,8 +191,11 @@ describe("v1.18.0 Stage 0: ArrangementView real phrases (no demo data)", () => {
         container.querySelector('[data-testid="arrangement-empty"]'),
       ).not.toBeNull();
       // Demo template content must NOT appear anywhere in the arrangement.
+      // v3.2.0：原断言用 "Bridge" 作代理，但角色标签已本地化，en 环境下
+      // "Bridge" 是起点卡片的合法角色名而非 demo 泄漏 —— 换用 demo 曲式里
+      // 特有的段落名（"Verse A" / "Final Chorus"）作代理。
       expect(container.textContent).not.toContain("Verse A");
-      expect(container.textContent).not.toContain("Bridge");
+      expect(container.textContent).not.toContain("Final Chorus");
     }
 
     cleanup();
@@ -206,7 +218,10 @@ describe("v1.18.0 Stage 0: ArrangementView real phrases (no demo data)", () => {
     expect(container.querySelector('[data-testid="arrangement-empty"]')).toBeNull();
     const view = container.querySelector('[data-testid="arrangement-view"]');
     expect(view?.textContent).toContain("Chorus");
-    expect(view?.textContent).toContain("副歌"); // ROLE_LABELS["chorus"]
+    // v3.2.0：角色标签按当前语言渲染（t() 级证据，防回退到硬编码中文）
+    const chorusRole = i18n.t("arranger.formRoles.chorus");
+    expect(chorusRole).not.toBe("arranger.formRoles.chorus");
+    expect(view?.textContent).toContain(chorusRole);
 
     cleanup();
   });

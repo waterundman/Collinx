@@ -565,6 +565,7 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
         formRole: string;
         startBar: number;
         endBar: number;
+        energyLevel?: number;
       }): void => {
         dispatch({
           type: "ADD_PHRASE",
@@ -572,7 +573,23 @@ export const ProjectProvider: React.FC<ProjectProviderProps> = ({
           formRole: phrase.formRole,
           startBar: phrase.startBar,
           endBar: phrase.endBar,
+          energyLevel: phrase.energyLevel,
         } satisfies ProjectStoreAction);
+      },
+      updatePhrase: (
+        id: string,
+        changes: {
+          name?: string;
+          formRole?: string;
+          startBar?: number;
+          endBar?: number;
+          energyLevel?: number;
+        },
+      ): void => {
+        dispatch({ type: "UPDATE_PHRASE", id, changes } satisfies ProjectStoreAction);
+      },
+      deletePhrase: (id: string): void => {
+        dispatch({ type: "DELETE_PHRASE", id } satisfies ProjectStoreAction);
       },
       // v2.2.0 S1 (D22-4)：批量新增（录制 take 落盘；一条 undo 记录）
       addNotes: (notes: NoteEvent[]): void => {

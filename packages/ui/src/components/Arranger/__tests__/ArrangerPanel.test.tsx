@@ -237,4 +237,88 @@ describe("ArrangerPanel (Stage 1: real Arranger data source)", () => {
 
     cleanup();
   });
+
+  // v3.2.0 S2：此前点击"生成编排"没有任何 pending 态 —— 连点 3 次就会并发
+  // 跑 3 次 arranger.expandSection，最后一次回包覆盖前面的结果。
+  it("S2-T05: 生成中禁用重复提交（连点只触发一次 agent 调用）", async () => {
+    let resolveRun: (r: ArrangerRunResult) => void = () => {};
+    const onRunArranger = vi.fn().mockImplementation(
+      () =>
+        new Promise<ArrangerRunResult>((resolve) => {
+          resolveRun = resolve;
+        })
+    );
+    const { container, cleanup } = renderPanel({
+      motifs: [{ id: "m1", name: "Melody", notes: makeNotes() }],
+      onRunArranger,
+    });
+
+    const btn = container.querySelector(
+      '[data-testid="arranger-generate"]'
+    ) as HTMLButtonElement;
+
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    // 进入 pending：按钮真禁用 + aria-busy 可被读屏感知
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute("aria-busy")).toBe("true");
+
+    // 即便有人绕过 disabled 再点两次，ref 守卫也必须拦住
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(onRunArranger).toHaveBeenCalledTimes(1);
+
+    // 回包后恢复可点
+    await act(async () => {
+      resolveRun(buildRealResult());
+    });
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute("aria-busy")).toBe("false");
+    expect(
+      container.querySelectorAll('[data-testid^="arranger-variant-"]').length
+    ).toBeGreaterThan(0);
+
+    cleanup();
+  });
+
+  it("S2-T06: 失败后不只剩一行错误文字 —— 面板内可直接重试", async () => {
+    const failure: ArrangerRunResult = {
+      status: "error",
+      variants: [],
+      selectedVariant: null,
+      formStructure: null,
+      section: null,
+      energyCurvePoints: [],
+      confidence: 0,
+      diffs: [],
+    };
+    const onRunArranger = vi.fn().mockResolvedValue(failure);
+    const { container, cleanup } = renderPanel({
+      motifs: [{ id: "m1", name: "Melody", notes: makeNotes() }],
+      onRunArranger,
+    });
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="arranger-generate"]')!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(
+      container.querySelector('[data-testid="arranger-error-state"]')
+    ).not.toBeNull();
+
+    const retry = container.querySelector('[data-testid="arranger-retry"]');
+    expect(retry).not.toBeNull();
+
+    await act(async () => {
+      retry!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(onRunArranger).toHaveBeenCalledTimes(2);
+
+    cleanup();
+  });
 });

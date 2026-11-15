@@ -265,6 +265,11 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
   // rather than crashing — "failure keeps panel alive" (v1.18). Cleared on
   // the next generate attempt.
   const [runError, setRunError] = useState<string | null>(null);
+  // v3.2.0 S2：生成中禁用重复提交。用 ref 而不是只靠 state ——
+  // 连点两次时第二次 click 可能早于 setRunning 的提交落地（同一帧内），
+  // 只有 ref 能拦住那个窗口期。
+  const runningRef = useRef(false);
+  const [running, setRunning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const currentTemplate = useMemo(
@@ -293,26 +298,31 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
 
   const handleGenerate = useCallback(async () => {
     if (!currentTemplate) return;
+    // 已经有一次生成在飞行中 → 忽略这次点击（不做队列，也不弹提示：
+    // 按钮本身就是 disabled + aria-busy，用户已经看得到状态）。
+    if (runningRef.current) return;
 
     // v1.23.0 Stage 1 (D2-2): the local demo generator is gone. Without
     // onRunArranger the panel produces no variants and renders an empty
     // state (production App always wires onRunArranger — the bare-component
     // API now shows empty instead of fake data). A failed run surfaces an
     // error state and keeps the panel alive (v1.18).
+    runningRef.current = true;
+    setRunning(true);
     setRunError(null);
 
-    if (!onRunArranger) {
-      setVariants([]);
-      setSelectedVariant(null);
-      return;
-    }
-
-    const source = motifs
-      .filter((m) => m.notes.length > 0)
-      .flatMap((m) => m.notes);
-    const bars =
-      source.length > 0 ? Math.max(1, Math.max(...source.map((n) => n.bar))) : 4;
     try {
+      if (!onRunArranger) {
+        setVariants([]);
+        setSelectedVariant(null);
+        return;
+      }
+
+      const source = motifs
+        .filter((m) => m.notes.length > 0)
+        .flatMap((m) => m.notes);
+      const bars =
+        source.length > 0 ? Math.max(1, Math.max(...source.map((n) => n.bar))) : 4;
       const result = await onRunArranger({
         source,
         bars,
@@ -332,6 +342,9 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
       setVariants([]);
       setSelectedVariant(null);
       setRunError(t("arranger.runFailed"));
+    } finally {
+      runningRef.current = false;
+      setRunning(false);
     }
   }, [currentTemplate, motifs, onRunArranger, selectedTemplate, t]);
 
@@ -368,8 +381,10 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
           className={styles.generateBtn}
           data-testid="arranger-generate"
           onClick={handleGenerate}
+          disabled={running}
+          aria-busy={running}
         >
-          {t('arranger.generate')}
+          {running ? t('arranger.generating') : t('arranger.generate')}
         </button>
       </div>
 
@@ -507,10 +522,20 @@ export const ArrangerPanel: React.FC<ArrangerPanelProps> = ({
 
       {runError && (
         <div
-          className={styles.emptyState}
+          className={styles.errorState}
           data-testid="arranger-error-state"
+          role="alert"
         >
-          {runError}
+          <span className={styles.errorText}>{runError}</span>
+          <button
+            type="button"
+            className={styles.retryBtn}
+            data-testid="arranger-retry"
+            onClick={handleGenerate}
+            disabled={running}
+          >
+            {t('arranger.retry')}
+          </button>
         </div>
       )}
     </div>

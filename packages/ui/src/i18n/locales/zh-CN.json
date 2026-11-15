@@ -1337,7 +1337,18 @@
     "noNotes": "暂无音符数据",
     "vexflowHint": "使用 VexFlow 渲染引擎进行完整乐谱渲染",
     "exportStems": "分轨导出",
-    "exportWAV": "导出 WAV"
+    "exportWAV": "导出 WAV",
+    "layoutActions": "排版与分谱",
+    "exportActions": "导出格式",
+    "zoomOut": "缩小谱面",
+    "zoomIn": "放大谱面",
+    "fitWidth": "适合宽度",
+    "barRange": "第 {{start}}–{{end}} 小节",
+    "focusPreview": "当前乐句",
+    "sheetTitle": "乐谱",
+    "dataViewTitle": "逐小节音符分布",
+    "renderFailed": "VexFlow 渲染失败",
+    "retry": "重试"
   },
   "mixer": {
     "title": "混音台",
@@ -1415,6 +1426,8 @@
     "subtitle": "选择曲式模板生成编排方案",
     "formTemplate": "曲式模板",
     "generate": "生成编排",
+    "generating": "生成中…",
+    "retry": "重试",
     "arrangementPlans": "编排方案",
     "fitness": "适配",
     "divergence": "差异",
@@ -1440,6 +1453,27 @@
       "breakdown": "分解",
       "interlude": "间奏"
     }
+  },
+  "chord": {
+    "label": "和弦",
+    "root": "根音",
+    "quality": "性质",
+    "none": "未设置",
+    "clear": "清除",
+    "done": "收起",
+    "cellAria": "第 {{bar}} 小节和弦 {{chord}}",
+    "cellEmpty": "第 {{bar}} 小节，未设置和弦",
+    "editorAria": "第 {{bar}} 小节和弦编辑",
+    "barPrefix": "第 {{bar}} 小节"
+  },
+  "arrangement": {
+    "summary": "{{count}} 个乐段 · {{bars}} 小节",
+    "dragHint": "拖动移动位置 · 拖右缘改长度 · ←/→ 微调",
+    "phraseAria": "{{name}}，{{role}}，第 {{start}} 到 {{end}} 小节",
+    "startBars": "{{count}} 小节",
+    "focus": "到编曲",
+    "duplicate": "复制",
+    "delete": "删除"
   },
   "agentChat": {
     "typing": "正在输入...",
@@ -1523,6 +1557,7 @@
     "record": "录制"
   },
   "app": {
+    "tabsLabel": "页签导航",
     "tabs": {
       "compose": "编曲",
       "arrange": "编排",
@@ -1567,7 +1602,8 @@
     "arrange": {
       "planReady": "编排方案已就绪",
       "opsAndExplanations": "{{ops}} 操作 · {{explanations}} 段落说明",
-      "emptyPhrases": "暂无乐段（Phrase）节点——应用乐段提案或添加 Phrase 节点后，这里将显示段落编排。"
+      "emptyPhrases": "暂无乐段（Phrase）节点——应用乐段提案或添加 Phrase 节点后，这里将显示段落编排。",
+      "copySuffix": "副本"
     },
     "orchestrate": {
       "planReady": "编制方案已就绪",
@@ -1597,7 +1633,8 @@
       "partsEmpty": "未提取到声部",
       "extractPartsFailed": "分谱提取失败，请重试",
       "exportMusicXMLDone": "已导出 collinx-score.xml（{{count}} 个音符）",
-      "exportMusicXMLEmpty": "当前没有音符可导出"
+      "exportMusicXMLEmpty": "当前没有音符可导出",
+      "exportFailed": "{{format}} 导出失败，请重试"
     },
     "teaching": {
       "runFailed": "教学解释生成失败，请重试",

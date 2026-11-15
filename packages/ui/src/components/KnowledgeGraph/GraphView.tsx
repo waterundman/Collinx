@@ -33,26 +33,20 @@ interface LayoutNode extends GraphNode {
   vx: number;
   vy: number;
   opacity: number;
-  scale: number;
-  pulsePhase: number;
 }
 
 interface AnimationState {
   time: number;
   nodeAnimations: Map<string, NodeAnimation>;
-  edgeAnimations: Map<string, EdgeAnimation>;
 }
 
 interface NodeAnimation {
   fadeInProgress: number;
   pulseIntensity: number;
-  hoverIntensity: number;
   clickFeedback: number;
-}
-
-interface EdgeAnimation {
-  flowProgress: number;
-  highlightIntensity: number;
+  /** v3.2.0 S3：入场错峰（毫秒）。此前是每帧重新 `Math.random()*300`，
+   *  于是每个节点的 fadeInStart 每帧都在跳 —— 既不可能收敛，也完全不可测。 */
+  staggerMs: number;
 }
 
 const NODE_COLOR_VARS: Record<string, string> = {
@@ -74,9 +68,16 @@ const SPRING_LENGTH = 150;
 const SPRING_K = 0.008;
 const DAMPING = 0.8;
 const ITERATIONS = 300;
-const ANIMATION_DURATION = 500;
-const PULSE_SPEED = 2;
-const EDGE_FLOW_SPEED = 0.5;
+const ANIMATION_DURATION = 200;
+
+/** v3.2.0 S3：系统要求减弱动效时不播放任何入场/脉冲动画 */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
 
 /** v2.6.0：音高 → 音名（C4 记法，MIDI 60 = C4）。 */
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -130,8 +131,6 @@ function runForceLayout(graph: GraphData, w: number, h: number): LayoutNode[] {
       vx: 0,
       vy: 0,
       opacity: 0,
-      scale: 0.5,
-      pulsePhase: Math.random() * Math.PI * 2,
     };
   });
 
@@ -203,7 +202,6 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
   const animationRef = useRef<AnimationState>({
     time: 0,
     nodeAnimations: new Map(),
-    edgeAnimations: new Map(),
   });
   const startTimeRef = useRef<number>(0);
   const isAnimatingRef = useRef<boolean>(false);
@@ -214,85 +212,66 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
     animationRef.current = {
       time: 0,
       nodeAnimations: new Map(),
-      edgeAnimations: new Map(),
     };
     
     for (const node of layoutRef.current) {
       animationRef.current.nodeAnimations.set(node.id, {
         fadeInProgress: 0,
         pulseIntensity: 0,
-        hoverIntensity: 0,
         clickFeedback: 0,
+        staggerMs: 0,
       });
     }
-    
-    for (let i = 0; i < graph.edges.length; i++) {
-      const edge = graph.edges[i];
-      const key = `${edge.source}->${edge.target}`;
-      animationRef.current.edgeAnimations.set(key, {
-        flowProgress: Math.random(),
-        highlightIntensity: 0,
-      });
+    // 入场错峰：按布局顺序稳定递增（最多 240ms），不再依赖随机数
+    let index = 0;
+    for (const anim of animationRef.current.nodeAnimations.values()) {
+      anim.staggerMs = Math.min(240, index * 20);
+      index += 1;
     }
-  }, [graph.edges]);
+  }, []);
 
   const updateAnimations = useCallback((timestamp: number) => {
     const elapsed = timestamp - startTimeRef.current;
     animationRef.current.time = elapsed;
+    const reducedMotion = prefersReducedMotion();
     
     for (const [nodeId, anim] of animationRef.current.nodeAnimations) {
       const node = layoutRef.current.find(n => n.id === nodeId);
       if (!node) continue;
       
-      const fadeInDelay = Math.random() * 300;
-      const fadeInStart = fadeInDelay;
+      const fadeInStart = anim.staggerMs;
       const fadeInEnd = fadeInStart + ANIMATION_DURATION;
       
-      if (elapsed < fadeInStart) {
-        anim.fadeInProgress = 0;
-      } else if (elapsed < fadeInEnd) {
-        anim.fadeInProgress = (elapsed - fadeInStart) / ANIMATION_DURATION;
-      } else {
+      if (reducedMotion || elapsed >= fadeInEnd) {
         anim.fadeInProgress = 1;
-      }
-      
-      const isSelected = selectedRef.current === nodeId;
-      const isHovered = hoveredRef.current === nodeId;
-      
-      if (isSelected) {
-        anim.pulseIntensity = 0.5 + 0.5 * Math.sin(elapsed * PULSE_SPEED * 0.001);
-        anim.clickFeedback = Math.max(0, anim.clickFeedback - 0.05);
+      } else if (elapsed < fadeInStart) {
+        anim.fadeInProgress = 0;
       } else {
-        anim.pulseIntensity = Math.max(0, anim.pulseIntensity - 0.05);
+        anim.fadeInProgress = (elapsed - fadeInStart) / ANIMATION_DURATION;
       }
       
-      if (isHovered) {
-        anim.hoverIntensity = Math.min(1, anim.hoverIntensity + 0.1);
-      } else {
-        anim.hoverIntensity = Math.max(0, anim.hoverIntensity - 0.05);
-      }
+      // v3.2.0 S3：选中态不再做常驻正弦脉冲（那是自动播放的装饰动效），
+      // 改为「点击后一次涟漪」——幅度只由 clickFeedback 的衰减驱动。
+      anim.pulseIntensity = anim.clickFeedback;
+      anim.clickFeedback = Math.max(0, anim.clickFeedback - 0.05);
       
+      // hover / 选中高亮改为绘制期直接判定（见 render），不再需要每帧插值 ——
+      // 否则一个「静止但选中了某个节点」的画布会以 60fps 一直重绘。
       node.opacity = anim.fadeInProgress;
-      node.scale = 0.5 + 0.5 * anim.fadeInProgress + 0.1 * anim.hoverIntensity + 0.05 * anim.pulseIntensity;
     }
     
-    for (const [edgeKey, anim] of animationRef.current.edgeAnimations) {
-      const [sourceId, targetId] = edgeKey.split('->');
-      const isHighlighted = selectedRef.current === sourceId || selectedRef.current === targetId;
-      
-      anim.flowProgress = (anim.flowProgress + EDGE_FLOW_SPEED * 0.01) % 1;
-      
-      if (isHighlighted) {
-        anim.highlightIntensity = Math.min(1, anim.highlightIntensity + 0.1);
-      } else {
-        anim.highlightIntensity = Math.max(0, anim.highlightIntensity - 0.05);
-      }
-    }
+    // v3.2.0 S3：连线高亮/流动点已删除 —— 高亮改为绘制期按选中态直接判定，
+    // 不再有需要逐帧推进的边动画。
     
     const allNodesFadedIn = Array.from(animationRef.current.nodeAnimations.values())
       .every(anim => anim.fadeInProgress >= 1);
     
-    if (!allNodesFadedIn || selectedRef.current || hoveredRef.current) {
+    // v3.2.0 S3：只在「入场未完成」或「点击涟漪未衰减完」时继续请求下一帧。
+    // 此前任何 hover/选中都会让画布无限重绘（静止画面 60fps 空转）。
+    const anyFeedback = Array.from(animationRef.current.nodeAnimations.values())
+      .some(anim => anim.clickFeedback > 0);
+    
+    if (!allNodesFadedIn || anyFeedback) {
       return true;
     }
     
@@ -380,8 +359,9 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
 
       const edgeKey = `${edge.source}->${edge.target}`;
       const isHighlighted = connectedEdgeKeys.has(edgeKey);
-      const anim = animationRef.current.edgeAnimations.get(edgeKey);
-      const highlightIntensity = anim?.highlightIntensity ?? 0;
+      // v3.2.0 S3：高亮是状态而不是过渡 —— 直接按选中态取满值，
+      // 不再逐帧插值（插值正是"静止画面也在动"的来源）。
+      const highlightIntensity = isHighlighted ? 1 : 0;
       
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
@@ -391,7 +371,7 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
       const baseColor = getCSSVar("--canvas-node-default");
       const highlightColor = getCSSVar("--canvas-highlight");
       
-      if (isHighlighted && highlightIntensity > 0) {
+      if (isHighlighted) {
         ctx.strokeStyle = highlightColor;
         ctx.lineWidth = 1 + highlightIntensity;
         ctx.globalAlpha = 0.3 + 0.7 * highlightIntensity;
@@ -403,18 +383,8 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      if (isHighlighted && anim) {
-        const flowPos = anim.flowProgress;
-        const flowX = a.x + (b.x - a.x) * flowPos;
-        const flowY = a.y + (b.y - a.y) * flowPos;
-        
-        ctx.beginPath();
-        ctx.arc(flowX, flowY, 3, 0, Math.PI * 2);
-        ctx.fillStyle = highlightColor;
-        ctx.globalAlpha = 0.8;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
+      // v3.2.0 S3：删除沿连线匀速移动的高亮点 —— 它是自动播放的装饰动效，
+      // 而"这条边与选中节点相连"这个信息已经由上面的高亮色表达。
 
       const mx = (a.x + b.x) / 2;
       const my = (a.y + b.y) / 2;
@@ -438,9 +408,12 @@ export function GraphView({ graph, onNodeClick, width, height }: GraphViewProps)
       ctx.save();
       ctx.globalAlpha = node.opacity;
       ctx.translate(node.x, node.y);
-      ctx.scale(node.scale, node.scale);
+      // v3.2.0 S3：缩放改为绘制期计算 —— hover/点击反馈是"因果"，入场不长个。
+      const nodeScale = 1 + (isHovered ? 0.06 : 0) + 0.02 * anim.pulseIntensity;
+      ctx.scale(nodeScale, nodeScale);
       
       if (isSelected && anim.pulseIntensity > 0) {
+        // 点击后的一次涟漪（幅度由 clickFeedback 衰减驱动，约 300ms 归零）
         const pulseRadius = NODE_RADIUS + 8 + 4 * anim.pulseIntensity;
         const pulseAlpha = 0.3 * (1 - anim.pulseIntensity);
         ctx.beginPath();

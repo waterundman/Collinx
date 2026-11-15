@@ -1337,7 +1337,18 @@
     "noNotes": "No note data",
     "vexflowHint": "Use VexFlow rendering engine for full score rendering",
     "exportStems": "Export Stems",
-    "exportWAV": "Export WAV"
+    "exportWAV": "Export WAV",
+    "layoutActions": "Layout and parts",
+    "exportActions": "Export formats",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "fitWidth": "Fit width",
+    "barRange": "Bars {{start}}–{{end}}",
+    "focusPreview": "Current phrase",
+    "sheetTitle": "Score",
+    "dataViewTitle": "Notes by bar",
+    "renderFailed": "VexFlow rendering failed",
+    "retry": "Retry"
   },
   "mixer": {
     "title": "Mixer",
@@ -1415,6 +1426,8 @@
     "subtitle": "Select form template to generate arrangement",
     "formTemplate": "Form Template",
     "generate": "Generate",
+    "generating": "Generating…",
+    "retry": "Retry",
     "arrangementPlans": "Arrangement Plans",
     "fitness": "Fitness",
     "divergence": "Divergence",
@@ -1440,6 +1453,27 @@
       "breakdown": "Breakdown",
       "interlude": "Interlude"
     }
+  },
+  "chord": {
+    "label": "Chords",
+    "root": "Root",
+    "quality": "Quality",
+    "none": "none",
+    "clear": "Clear",
+    "done": "Close",
+    "cellAria": "Bar {{bar}} chord {{chord}}",
+    "cellEmpty": "Bar {{bar}}, no chord",
+    "editorAria": "Edit chord for bar {{bar}}",
+    "barPrefix": "Bar {{bar}}"
+  },
+  "arrangement": {
+    "summary": "{{count}} phrases · {{bars}} bars",
+    "dragHint": "Drag to move · drag the right edge to resize · ←/→ to nudge",
+    "phraseAria": "{{name}}, {{role}}, bars {{start}} to {{end}}",
+    "startBars": "{{count}} bars",
+    "focus": "Open composer",
+    "duplicate": "Duplicate",
+    "delete": "Delete"
   },
   "agentChat": {
     "typing": "Typing...",
@@ -1523,6 +1557,7 @@
     "record": "Record"
   },
   "app": {
+    "tabsLabel": "Section tabs",
     "tabs": {
       "compose": "Compose",
       "arrange": "Arrange",
@@ -1567,7 +1602,8 @@
     "arrange": {
       "planReady": "Arrangement plan ready",
       "opsAndExplanations": "{{ops}} ops · {{explanations}} explanations",
-      "emptyPhrases": "No phrase nodes yet — apply a phrase proposal or add Phrase nodes to see the arrangement."
+      "emptyPhrases": "No phrase nodes yet — apply a phrase proposal or add Phrase nodes to see the arrangement.",
+      "copySuffix": "copy"
     },
     "orchestrate": {
       "planReady": "Orchestration plan ready",
@@ -1597,7 +1633,8 @@
       "partsEmpty": "No parts were extracted",
       "extractPartsFailed": "Part extraction failed, please retry",
       "exportMusicXMLDone": "Exported collinx-score.xml ({{count}} notes)",
-      "exportMusicXMLEmpty": "There are no notes to export"
+      "exportMusicXMLEmpty": "There are no notes to export",
+      "exportFailed": "{{format}} export failed, please retry"
     },
     "teaching": {
       "runFailed": "Teaching explanation failed, please retry",

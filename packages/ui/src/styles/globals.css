@@ -220,4 +220,30 @@ a:hover {
   color-scheme: light;
 }
 
+/* ============================================================
+   v3.2.0 S3：全局「减弱动效」兜底
+   此前只有零星几个模块写了 prefers-reduced-motion，剩下 6 处
+   @keyframes（打字点、脉冲、滑入、转圈）照旧播放。
+   这里统一把过渡与动画压到瞬时完成；加载指示器不是"装饰动效"而是状态
+   本身，单独保留旋转（否则用户看到的是一个不动的圈，像卡住）。
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  [class*="spin"],
+  [class*="Spin"],
+  [class*="loading"],
+  [class*="Loading"] {
+    animation-duration: 900ms !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
 

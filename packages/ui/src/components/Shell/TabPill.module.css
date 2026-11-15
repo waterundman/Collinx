@@ -29,3 +29,15 @@
   border-color: color-mix(in srgb, var(--accent-cyan) 55%, transparent);
   font-weight: 600;
 }
+
+/* v3.2.0 S3：页签纳入 tablist 后必须看得见焦点环（此前完全没有） */
+.pill:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill {
+    transition: none;
+  }
+}

@@ -357,3 +357,138 @@ describe("useKeyboardShortcuts v2.0.0 Space → onPlayPause (S1-T10)", () => {
     s.cleanup();
   });
 });
+
+// ---------------------------------------------------------------------------
+// v3.2.0 S3：⌘S / ⌘1..9。
+//
+// 这两条快捷键此前只存在于命令面板的提示文字里（"⌘S"、"⌘1"）—— 界面上
+// 承诺了、键盘做不到。本段锁住"承诺兑现"：真触发、真 preventDefault、
+// 且不破坏输入框里的打字与原生文本操作。
+// ---------------------------------------------------------------------------
+
+describe("useKeyboardShortcuts v3.2.0 ⌘S / ⌘1..9", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  function setupSaveTab(hasSave = true) {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const onSave = vi.fn();
+    const onSelectTab = vi.fn();
+    let root!: Root;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    function Probe() {
+      useKeyboardShortcuts({
+        onUndo,
+        onRedo,
+        onSelectTab,
+        ...(hasSave ? { onSave } : {}),
+      });
+      return <div data-testid="save-probe" />;
+    }
+
+    act(() => {
+      root = createRoot(container);
+      root.render(<Probe />);
+    });
+
+    return {
+      onUndo,
+      onRedo,
+      onSave,
+      onSelectTab,
+      cleanup() {
+        act(() => {
+          root.unmount();
+          container.remove();
+        });
+      },
+    };
+  }
+
+  function fire(target: EventTarget, init: KeyboardEventInit): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+    return event;
+  }
+
+  it("S3-T01: Ctrl/Cmd+S 触发 onSave 并吃掉浏览器「保存网页」 (critical)", () => {
+    const s = setupSaveTab();
+    const e = fire(window, { key: "s", ctrlKey: true });
+    expect(s.onSave).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+
+    const e2 = fire(window, { key: "S", metaKey: true });
+    expect(s.onSave).toHaveBeenCalledTimes(2);
+    expect(e2.defaultPrevented).toBe(true);
+    expect(s.onUndo).not.toHaveBeenCalled();
+
+    s.cleanup();
+  });
+
+  it("S3-T02: 输入框内 Ctrl+S 仍然保存（文档级命令不受编辑守卫拦截）", () => {
+    const s = setupSaveTab();
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+
+    const e = fire(input, { key: "s", ctrlKey: true });
+    expect(s.onSave).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+
+    input.remove();
+    s.cleanup();
+  });
+
+  it("S3-T03: 未提供 onSave 时不 preventDefault（把默认行为留给调用方）", () => {
+    const s = setupSaveTab(false);
+    const e = fire(window, { key: "s", ctrlKey: true });
+    expect(e.defaultPrevented).toBe(false);
+    s.cleanup();
+  });
+
+  it("S3-T04: Ctrl/Cmd+1..9 按 0-based 下标回调 onSelectTab (critical)", () => {
+    const s = setupSaveTab();
+
+    fire(window, { key: "1", ctrlKey: true });
+    expect(s.onSelectTab).toHaveBeenLastCalledWith(0);
+
+    fire(window, { key: "4", metaKey: true });
+    expect(s.onSelectTab).toHaveBeenLastCalledWith(3);
+
+    fire(window, { key: "9", ctrlKey: true });
+    expect(s.onSelectTab).toHaveBeenLastCalledWith(8);
+    expect(s.onSelectTab).toHaveBeenCalledTimes(3);
+
+    s.cleanup();
+  });
+
+  it("S3-T05: 输入框里按数字是打字 —— 不切页签、不 preventDefault", () => {
+    const s = setupSaveTab();
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+
+    const e = fire(input, { key: "2", ctrlKey: true });
+    expect(s.onSelectTab).not.toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(false);
+
+    input.remove();
+    s.cleanup();
+  });
+
+  it("S3-T06: 无修饰键的数字不切页签（避免污染普通输入/快捷键）", () => {
+    const s = setupSaveTab();
+    fire(window, { key: "3" });
+    fire(window, { key: "3", shiftKey: true, ctrlKey: true });
+    expect(s.onSelectTab).not.toHaveBeenCalled();
+    s.cleanup();
+  });
+});

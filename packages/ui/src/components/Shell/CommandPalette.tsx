@@ -25,6 +25,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -46,6 +47,48 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   useEffect(() => {
     setCursor((c) => Math.min(c, Math.max(0, filtered.length - 1)));
   }, [filtered.length]);
+
+  /**
+   * v3.2.0 S3：关闭后把焦点还给打开它的控件。
+   *
+   * 此前 Esc 关闭面板后焦点落在 <body>，键盘用户要重新从页面开头 Tab 进来。
+   * 记录时机取"open 刚变 true"这一刻 —— 此时输入框的 focus 还在 setTimeout 里
+   * 没落地，activeElement 仍是触发按钮。
+   */
+  useEffect(() => {
+    if (!open) return undefined;
+    const previous = document.activeElement as HTMLElement | null;
+    return () => {
+      previous?.focus?.();
+    };
+  }, [open]);
+
+  /**
+   * v3.2.0 S3：焦点陷阱。aria-modal="true" 只是声明，浏览器不会真的拦住 Tab。
+   * 不拦的话 Tab 会跑到面板背后的顶栏按钮上，而遮罩又挡住了它们的视觉焦点。
+   */
+  const handleTabTrap = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const focusables = Array.from(
+      panelRef.current?.querySelectorAll<HTMLElement>(
+        'input, button:not([disabled])',
+      ) ?? [],
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    const inside = active !== null && panelRef.current?.contains(active) === true;
+    if (e.shiftKey) {
+      if (!inside || active === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (!inside || active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   if (!open) return null;
 
@@ -81,7 +124,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className={styles.panel} role="dialog" aria-modal="true" aria-label="命令面板">
+      <div
+        ref={panelRef}
+        className={styles.panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label="命令面板"
+        onKeyDown={handleTabTrap}
+      >
         <input
           ref={inputRef}
           className={styles.input}
@@ -91,7 +141,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
         />
-        <div className={styles.list} role="listbox">
+        <div className={styles.list} role="listbox" aria-label="命令">
           {filtered.length === 0 ? (
             <div className={styles.empty} data-testid="command-empty">
               没有匹配的命令

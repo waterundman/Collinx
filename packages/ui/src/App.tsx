@@ -240,6 +240,8 @@ export function App() {
                 ? d.startBar
                 : 1,
           formRole: typeof d.formRole === "string" ? d.formRole : "verse",
+          energyLevel:
+            typeof d.energyLevel === "number" ? d.energyLevel : undefined,
         };
       })
       .sort((a, b) => a.startBar - b.startBar);
@@ -692,19 +694,17 @@ export function App() {
   // onPlayPause reads transport.isPlaying on each keypress through the hook's
   // handler ref, so it always acts on the latest phase (no stale closure).
   // v2.0.0 Stage 2: Space 起播也走 runId 自增（否则手动平移后按 Space 无法恢复跟随）。
-  useKeyboardShortcuts({
-    onUndo: actions.undo,
-    onRedo: actions.redo,
-    onPlayPause: () => {
-      if (transport.isPlaying) {
-        transport.pause();
-      } else {
-        setTransportRunId((n) => n + 1);
-        // v2.0.0 Stage 3 (D3-3)：Space 起播同样显式传入 settings 的 countInBars。
-        transport.play({ countInBars: settings.midi.playback.countInBars });
-      }
-    },
-  });
+  // v3.2.0 S3：⌘S / ⌘1..9 只能有一个 window 监听入口 → 与 undo/space 同挂在此处。
+  // 因此本调用延后到 handleSaveProject 定义之后（tabs 在更早已定义）。
+  const handlePlayPauseShortcut = useCallback(() => {
+    if (transport.isPlaying) {
+      transport.pause();
+    } else {
+      setTransportRunId((n) => n + 1);
+      // v2.0.0 Stage 3 (D3-3)：Space 起播同样显式传入 settings 的 countInBars。
+      transport.play({ countInBars: settings.midi.playback.countInBars });
+    }
+  }, [transport, settings.midi.playback.countInBars]);
 // ── v2.2.0 S2 (D23-2)：录制开关 ──
   // 未在播 → 先 startRecording 再走既有 play（含 count-in 设置与 runId 推进）；
   // 录制中 → stopRecording 提交 take（播放不中断，用户可继续听）。
@@ -844,15 +844,59 @@ export function App() {
   // v2.6.0：从空编排的起点卡片创建乐段（顺接在最后一个乐段之后）
   const handleCreatePhrase = useCallback(
     (role: string, bars: number) => {
-      const startBar = storePhrases.reduce((max, p) => Math.max(max, p.endBar), 0);
+      // v3.2.0 修正：小节是 1-based。此前 startBar 直接取 endBar 的最大值（空图时为 0）
+      // 且 endBar = startBar + bars，导致首个乐段落在「第 0–4 小节」= 5 小节长，
+      // 而 UI 上第 0 根线不存在 —— 于是拖动/改长度的最小值守卫会对它失效。
+      const lastEnd = storePhrases.reduce((max, p) => Math.max(max, p.endBar), 0);
+      const startBar = lastEnd + 1;
+      const length = Math.max(1, Math.floor(bars));
       actions.addPhrase({
         name: role.charAt(0).toUpperCase() + role.slice(1),
         formRole: role,
         startBar,
-        endBar: startBar + bars,
+        endBar: startBar + length - 1,
       });
     },
     [storePhrases, actions],
+  );
+
+  const handlePhraseChange = useCallback(
+    (
+      id: string,
+      changes: {
+        formRole?: string;
+        startBar?: number;
+        endBar?: number;
+        energyLevel?: number;
+      },
+    ) => {
+      actions.updatePhrase(id, changes);
+    },
+    [actions],
+  );
+
+  const handlePhraseDelete = useCallback(
+    (id: string) => {
+      actions.deletePhrase(id);
+    },
+    [actions],
+  );
+
+  const handlePhraseDuplicate = useCallback(
+    (id: string) => {
+      const source = storePhrases.find((p) => p.id === id);
+      if (!source) return;
+      const length = source.endBar - source.startBar + 1;
+      const startBar = storePhrases.reduce((max, p) => Math.max(max, p.endBar), 0) + 1;
+      actions.addPhrase({
+        name: `${source.name} ${t("app.arrange.copySuffix")}`,
+        formRole: source.formRole,
+        startBar,
+        endBar: startBar + length - 1,
+        energyLevel: source.energyLevel,
+      });
+    },
+    [storePhrases, actions, t],
   );
 
   const handleMixerTrackChange = useCallback(
@@ -967,18 +1011,38 @@ export function App() {
     void actions.saveProjectAsAgentMusic();
   }, [actions]);
 
+  // v3.2.0 S3：全局快捷键的唯一 window 监听入口（⌘Z/⌘⇧Z/Space/⌘S/⌘1..9）。
+  useKeyboardShortcuts({
+    onUndo: actions.undo,
+    onRedo: actions.redo,
+    onPlayPause: handlePlayPauseShortcut,
+    onSave: handleSaveProject,
+    onSelectTab: (index) => {
+      const tab = tabs[index];
+      if (tab) setActiveTab(tab.id);
+    },
+  });
+
   // v1.16.0 Stage 1: export menu wiring — MIDI (current notes → .mid) and PDF
   // (score layout + notes → .pdf) through the real core exporters. The score
   // layout is the same Layout instance the ScorePanel/ScoreRenderer consume.
+  // v3.2.0 S3：失败不再只进 console —— 用户的屏幕上什么都没有，只会以为
+  // "点了没反应"。改为在乐谱面板顶部的 notice 条里给出可见错误。
   const handleExportMIDI = useCallback(() => {
-    // eslint-disable-next-line no-console
-    void actions.exportMIDI().catch(console.error);
-  }, [actions]);
+    void actions.exportMIDI().catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error("导出 MIDI 失败", err);
+      setScoreNotice(t("app.score.exportFailed", { format: "MIDI" }));
+    });
+  }, [actions, t]);
 
   const handleExportPDF = useCallback(() => {
-    // eslint-disable-next-line no-console
-    void actions.exportPDF(defaultLayout).catch(console.error);
-  }, [actions, defaultLayout]);
+    void actions.exportPDF(defaultLayout).catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error("导出 PDF 失败", err);
+      setScoreNotice(t("app.score.exportFailed", { format: "PDF" }));
+    });
+  }, [actions, defaultLayout, t]);
 
   /**
    * v2.8.0：导出 WAV —— 让用户拿到能播的成品。
@@ -1033,9 +1097,10 @@ export function App() {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error("导出 WAV 失败", err);
+        setScoreNotice(t("app.score.exportFailed", { format: "WAV" }));
       }
     })();
-  }, [buildRenderableNotes, mixer, settings.audio.sampleRate, settings.mixer.loudnessNormalization]);
+  }, [buildRenderableNotes, mixer, settings.audio.sampleRate, settings.mixer.loudnessNormalization, t]);
 
   /**
    * v2.9.1：分轨导出 —— 每轨一个 WAV，走与整曲相同的 MixerGraph
@@ -1060,9 +1125,10 @@ export function App() {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error("分轨导出失败", err);
+        setScoreNotice(t("app.score.exportFailed", { format: "Stems" }));
       }
     })();
-  }, [buildRenderableNotes, mixer, settings.audio.sampleRate, settings.mixer.loudnessNormalization]);
+  }, [buildRenderableNotes, mixer, settings.audio.sampleRate, settings.mixer.loudnessNormalization, t]);
 
   /**
    * 混音台 → 音频图（v2.8.0 推子；v2.9.0 扩到静音/独奏/声像/FX）。
@@ -1334,6 +1400,7 @@ export function App() {
       <TopBar
         brand="Collinx"
         status={headerStatus}
+        tablistLabel={t("app.tabsLabel")}
         command={
           <button
             type="button"
@@ -1422,8 +1489,14 @@ export function App() {
               phrases={storePhrases}
               totalBars={totalBars}
               emptyHint={t("app.arrange.emptyPhrases")}
-              onSectionDoubleClick={handleSectionDoubleClick}
               onCreatePhrase={handleCreatePhrase}
+              // v3.2.0 S2：紧凑条也支持拖动/复制/删除，播放头随 transport 移动。
+              // 不传 onSectionDoubleClick —— 这里已经在 compose，双击无处可去
+              // （此前该回调也是"设置当前 tab 为 compose"，视觉上是死按钮）。
+              onPhraseChange={handlePhraseChange}
+              onPhraseDelete={handlePhraseDelete}
+              onPhraseDuplicate={handlePhraseDuplicate}
+              playheadPosition={transport.position}
             />
             <ChordTrack
               totalBars={totalBars}
@@ -1442,6 +1515,7 @@ export function App() {
                 playheadPosition={transport.position}
                 onSeek={transport.seek}
                 compact
+                focusBars={4}
               />
             </div>
 
@@ -1515,6 +1589,11 @@ export function App() {
                 emptyHint={t("app.arrange.emptyPhrases")}
                 onSectionDoubleClick={handleSectionDoubleClick}
                 onCreatePhrase={handleCreatePhrase}
+                onPhraseChange={handlePhraseChange}
+                onPhraseDelete={handlePhraseDelete}
+                onPhraseDuplicate={handlePhraseDuplicate}
+                playheadPosition={transport.position}
+                expanded
               />
             </div>
 
@@ -1550,6 +1629,11 @@ export function App() {
                 emptyHint={t("app.arrange.emptyPhrases")}
                 onSectionDoubleClick={handleSectionDoubleClick}
                 onCreatePhrase={handleCreatePhrase}
+                onPhraseChange={handlePhraseChange}
+                onPhraseDelete={handlePhraseDelete}
+                onPhraseDuplicate={handlePhraseDuplicate}
+                playheadPosition={transport.position}
+                expanded
               />
             </div>
 

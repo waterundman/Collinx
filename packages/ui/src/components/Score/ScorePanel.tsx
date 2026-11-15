@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type {
   NoteEvent,
   TempoMap,
@@ -39,6 +39,16 @@ export interface ScorePanelProps {
   onExportStems?: () => void;
   compact?: boolean;
   /**
+   * 紧凑视图的焦点窗小节数（默认关闭 = 沿用既有按页渲染）。
+   * compose 精简谱传 4：只渲染播放头附近的 4 小节，保证音符可读，
+   * 而不是把全曲压进 180px。未传时行为与改动前一致。
+   */
+  focusBars?: number;
+  /**
+   * 全尺寸谱面纸张缩放（0.5–1.5）。仅影响显示，不改变小节几何与锚点。
+   */
+  initialZoom?: number;
+  /**
    * 谱面播放头位置（只读跟随），透传给内部 ScoreRenderer。缺省零行为变化。
    */
   playheadPosition?: { bar: number; beat: number } | null;
@@ -76,6 +86,8 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   onExportWAV,
   onExportStems,
   compact = false,
+  focusBars,
+  initialZoom = 1,
   playheadPosition,
   onBarAnchorsChange,
   onSeek,
@@ -109,6 +121,15 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
     });
   }, [staffConfig, notes]);
 
+  const barNoteCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const note of notes) {
+      if (!Number.isInteger(note.bar) || note.bar < 1) continue;
+      counts.set(note.bar, (counts.get(note.bar) ?? 0) + 1);
+    }
+    return counts;
+  }, [notes]);
+
   // 全曲小节数：与 ScoreRenderer 的 renderBars 同一规则（staffConfig.bars 的最大值，
   // 下限 4）。此前该值恒为 4 —— 工程有 48 小节时谱面只有 4 个槽位，用户看到的就是
   // 「五线谱怎么就四个区」。
@@ -136,13 +157,58 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   const pageBars = page?.bars ?? renderBars;
   const pageStartBar = page?.startBar ?? 1;
 
-  // 播放头走到别的页时自动翻页：否则播到第 41 小节时谱面停在第一页，游标直接消失。
+  // 紧凑焦点窗：只给 compose 传 focusBars=4；全尺寸乐谱仍按页渲染。
+  const focusWindowBars =
+    compact && focusBars && focusBars > 0
+      ? Math.min(renderBars, Math.max(1, Math.floor(focusBars)))
+      : null;
+  const focusPageCount = focusWindowBars
+    ? Math.max(1, Math.ceil(renderBars / focusWindowBars))
+    : pages.length;
+  const maxFocusStart = focusWindowBars
+    ? Math.max(1, renderBars - focusWindowBars + 1)
+    : 1;
+  const [requestedFocusStart, setRequestedFocusStart] = useState(1);
+  const focusStartBar = focusWindowBars
+    ? Math.min(Math.max(1, requestedFocusStart), maxFocusStart)
+    : 1;
+  const focusIndex = focusWindowBars
+    ? Math.min(
+        focusPageCount - 1,
+        Math.floor((focusStartBar - 1) / focusWindowBars),
+      )
+    : pageIndex;
+  const effectivePageBars = focusWindowBars ?? pageBars;
+  const effectivePageStartBar = focusWindowBars ? focusStartBar : pageStartBar;
+  const effectivePageIndex = focusWindowBars ? focusIndex : pageIndex;
+  const effectivePageCount = focusWindowBars ? focusPageCount : pages.length;
+  const effectivePageStartRange = effectivePageStartBar;
+  const effectivePageEndRange = Math.min(
+    renderBars,
+    effectivePageStartBar + effectivePageBars - 1,
+  );
+
+  // 播放头走到别的页 / 焦点窗时自动翻页：否则播到第 41 小节时谱面停在第一页，
+  // 游标直接消失。紧凑谱只在播放头离开焦点窗时平移，避免每个八分音符都重排。
   const playheadBar = playheadPosition?.bar;
   useEffect(() => {
     if (playheadBar === undefined) return;
+    if (focusWindowBars) {
+      const end = focusStartBar + focusWindowBars - 1;
+      if (playheadBar >= focusStartBar && playheadBar <= end) return;
+      const target = Math.min(
+        maxFocusStart,
+        Math.max(
+          1,
+          Math.floor((playheadBar - 1) / focusWindowBars) * focusWindowBars + 1,
+        ),
+      );
+      setRequestedFocusStart((prev) => (prev === target ? prev : target));
+      return;
+    }
     const target = pageIndexForBar(pages, playheadBar);
     setRequestedPage((prev) => (prev === target ? prev : target));
-  }, [pages, playheadBar]);
+  }, [pages, playheadBar, focusWindowBars, focusStartBar, maxFocusStart]);
 
   // ScoreRenderer 的 layout 必须 memo 化：内联对象字面量每次渲染换身份，而它是
   // ScoreRenderer 渲染 effect 的 dep → 每次父渲染都触发重排版；若父组件用 state
@@ -157,12 +223,67 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
       staffConfig: (layout.staffConfig ?? []).map((s) => ({
         clef: s.clef as "treble" | "bass",
         name: s.name,
-        bars: pageBars,
+        bars: effectivePageBars,
       })),
       notationSize: houseStyle?.notationSize,
+      // 紧凑焦点窗必须让 4 小节落在同一行；全尺寸乐谱沿用 8 小节/系统。
+      barsPerSystem: focusWindowBars ?? undefined,
     }),
-    [layout.staffConfig, houseStyle?.notationSize, pageBars],
+    [layout.staffConfig, houseStyle?.notationSize, effectivePageBars, focusWindowBars],
   );
+
+  const previewCanvasRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * v3.2.0：紧凑谱的可用宽度。
+   *
+   * 谱表宽度是按「每小节至少 110px」算的（最小 540），于是 4 小节的紧凑谱
+   * 在 1000px 宽的面板里只占左侧一半，右边大片空白。这里量一下真实可用宽，
+   * 交给 ScoreRenderer 用 `max(最低宽, 可用宽)` —— 只在紧凑态生效，
+   * 全尺寸纸面仍是固定 920px（纸不能随窗口变宽）。
+   *
+   * 不传时（jsdom 里 ResizeObserver 被 stub 成空实现 → 宽度恒为 0）几何与
+   * 改动前逐值一致，所以既有锚点/点击反演的测试基准不受影响。
+   */
+  const scoreAreaRef = useRef<HTMLDivElement>(null);
+  const [scoreAreaWidth, setScoreAreaWidth] = useState(0);
+  useEffect(() => {
+    if (!compact) return undefined;
+    const el = scoreAreaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0].contentRect.width);
+      // 按值去重：小于 8px 的抖动不触发重渲染（否则滚动条出现/消失会让它抖）
+      setScoreAreaWidth((prev) => (Math.abs(prev - w) < 8 ? prev : w));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [compact]);
+
+  const [zoom, setZoom] = useState(() =>
+    Number.isFinite(initialZoom) ? Math.min(1.5, Math.max(0.5, initialZoom)) : 1,
+  );
+  const applyZoom = (next: number) =>
+    setZoom(Math.min(1.5, Math.max(0.5, Math.round(next * 100) / 100)));
+  const fitWidth = () => {
+    const width = previewCanvasRef.current?.clientWidth ?? 0;
+    if (width <= 0) return;
+    // 920px 是纸面基准宽；两侧各留 16px，避免贴边。
+    applyZoom((width - 32) / 920);
+  };
+  const goPage = (delta: number) => {
+    if (focusWindowBars) {
+      const next = Math.min(
+        maxFocusStart,
+        Math.max(1, focusStartBar + delta * focusWindowBars),
+      );
+      setRequestedFocusStart(next);
+      return;
+    }
+    setRequestedPage(
+      Math.min(pages.length - 1, Math.max(0, pageIndex + delta)),
+    );
+  };
 
   return (
     <div
@@ -173,77 +294,129 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
       // 在 jsdom 里跑不完（无 canvas，20s+ 仍不返回）——那不是产品缺陷
       // （真实浏览器已验证 startBar 会从 1 变 41），而是测试环境的限制。
       // 组件状态是同步可靠的断言面。
-      data-page-index={pageIndex}
-      data-page-start-bar={pageStartBar}
-      data-page-bars={pageBars}
-      data-page-count={pages.length}
+      data-page-index={effectivePageIndex}
+      data-page-start-bar={effectivePageStartBar}
+      data-page-bars={effectivePageBars}
+      data-page-count={effectivePageCount}
     >
       <div className={styles.toolbar}>
-        {onAutoLayout && (
-          <button className={styles.toolbarBtn} onClick={onAutoLayout}>
-            {t('score.autoLayout')}
-          </button>
-        )}
-        {onExtractParts && (
-          <button className={styles.toolbarBtn} onClick={onExtractParts}>
-            {t('score.extractParts')}
-          </button>
-        )}
-        {onExportMusicXML && (
-          <button className={styles.toolbarBtn} onClick={onExportMusicXML}>
-            {t('score.exportMusicXML')}
-          </button>
-        )}
-        {onExportMIDI && (
-          <button
-            className={styles.toolbarBtn}
-            onClick={onExportMIDI}
-            data-testid="export-midi"
-          >
-            {t('score.exportMIDI')}
-          </button>
-        )}
-        {onExportWAV && (
-          <button
-            onClick={onExportWAV}
-            data-testid="export-wav"
-          >
-            {t('score.exportWAV')}
-          </button>
-        )}
-        {onExportStems && (
-          <button
-            className={styles.toolbarBtn}
-            onClick={onExportStems}
-            data-testid="export-stems"
-          >
-            {t('score.exportStems')}
-          </button>
-        )}
-        {onExportPDF && (
-          <button
-            className={styles.toolbarBtn}
-            onClick={onExportPDF}
-            data-testid="export-pdf"
-          >
-            {t('score.exportPDF')}
-          </button>
-        )}
+        <div className={styles.toolbarGroup} role="group" aria-label={t('score.layoutActions')}>
+          {onAutoLayout && (
+            <button className={styles.toolbarBtn} onClick={onAutoLayout}>
+              {t('score.autoLayout')}
+            </button>
+          )}
+          {onExtractParts && (
+            <button className={styles.toolbarBtn} onClick={onExtractParts}>
+              {t('score.extractParts')}
+            </button>
+          )}
+          {onExportMusicXML && (
+            <button className={styles.toolbarBtn} onClick={onExportMusicXML}>
+              {t('score.exportMusicXML')}
+            </button>
+          )}
+        </div>
+
+        <span className={styles.toolbarDivider} aria-hidden="true" />
+
+        <div className={styles.toolbarGroup} role="group" aria-label={t('score.exportActions')}>
+          {onExportMIDI && (
+            <button
+              className={styles.toolbarBtn}
+              onClick={onExportMIDI}
+              data-testid="export-midi"
+            >
+              {t('score.exportMIDI')}
+            </button>
+          )}
+          {onExportWAV && (
+            <button
+              className={styles.toolbarBtn}
+              onClick={onExportWAV}
+              data-testid="export-wav"
+            >
+              {t('score.exportWAV')}
+            </button>
+          )}
+          {onExportStems && (
+            <button
+              className={styles.toolbarBtn}
+              onClick={onExportStems}
+              data-testid="export-stems"
+            >
+              {t('score.exportStems')}
+            </button>
+          )}
+          {onExportPDF && (
+            <button
+              className={styles.toolbarBtn}
+              onClick={onExportPDF}
+              data-testid="export-pdf"
+            >
+              {t('score.exportPDF')}
+            </button>
+          )}
+        </div>
+
         <div className={styles.viewToggle}>
           <button
             className={`${styles.toolbarBtn} ${viewMode === "data" ? styles.toolbarBtnActive : ""}`}
             onClick={() => setViewMode("data")}
+            aria-pressed={viewMode === "data"}
           >
             {t('score.dataView')}
           </button>
           <button
             className={`${styles.toolbarBtn} ${viewMode === "rendered" ? styles.toolbarBtnActive : ""}`}
             onClick={() => setViewMode("rendered")}
+            aria-pressed={viewMode === "rendered"}
           >
             {t('score.renderedView')}
           </button>
         </div>
         <span className={styles.toolbarSpacer} />
+        {!compact && viewMode === "rendered" ? (
+          <div className={styles.zoomControls} data-testid="score-zoom-controls">
+            <button
+              type="button"
+              className={styles.zoomBtn}
+              onClick={() => applyZoom(zoom - 0.1)}
+              disabled={zoom <= 0.5}
+              aria-label={t('score.zoomOut')}
+              data-testid="score-zoom-out"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className={styles.zoomValue}
+              onClick={fitWidth}
+              title={t('score.fitWidth')}
+              data-testid="score-zoom-fit"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              className={styles.zoomBtn}
+              onClick={() => applyZoom(zoom + 0.1)}
+              disabled={zoom >= 1.5}
+              aria-label={t('score.zoomIn')}
+              data-testid="score-zoom-in"
+            >
+              +
+            </button>
+          </div>
+        ) : null}
+        {compact ? (
+          <span className={styles.focusChip} data-testid="score-focus-range">
+            {t('score.barRange', {
+              start: effectivePageStartRange,
+              end: effectivePageEndRange,
+            })}
+          </span>
+        ) : null}
         <span className={styles.toolbarBadge}>
           {t('score.notesCount', { count: notes.length })} · {t('score.stavesCount', { count: staffConfig.length })}
         </span>
@@ -377,30 +550,40 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
 
         <div className={styles.previewArea}>
           <div className={styles.previewHeader}>
-            <span className={styles.previewHeaderTitle}>{t('score.preview')}</span>
-            {pages.length > 1 && (
+            <div className={styles.previewHeaderMain}>
+              <span className={styles.previewHeaderTitle}>
+                {compact ? t('score.focusPreview') : t('score.preview')}
+              </span>
+              <span className={styles.previewHeaderRange}>
+                {t('score.barRange', {
+                  start: effectivePageStartRange,
+                  end: effectivePageEndRange,
+                })}
+              </span>
+            </div>
+            {effectivePageCount > 1 && (
               <div className={styles.pageNav}>
                 <button
                   className={styles.pageBtn}
                   data-testid="score-page-prev"
                   title={t('score.prevPage')}
-                  disabled={pageIndex === 0}
-                  onClick={() => setRequestedPage(Math.max(0, pageIndex - 1))}
+                  disabled={effectivePageIndex === 0}
+                  onClick={() => goPage(-1)}
                 >
                   ‹
                 </button>
                 <span className={styles.pageIndicator} data-testid="score-page-indicator">
                   {t('score.pageIndicator', {
-                    current: pageIndex + 1,
-                    total: pages.length,
+                    current: effectivePageIndex + 1,
+                    total: effectivePageCount,
                   })}
                 </span>
                 <button
                   className={styles.pageBtn}
                   data-testid="score-page-next"
                   title={t('score.nextPage')}
-                  disabled={pageIndex >= pages.length - 1}
-                  onClick={() => setRequestedPage(Math.min(pages.length - 1, pageIndex + 1))}
+                  disabled={effectivePageIndex >= effectivePageCount - 1}
+                  onClick={() => goPage(1)}
                 >
                   ›
                 </button>
@@ -410,31 +593,81 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
               {layout.pageWidth}×{layout.pageHeight}mm
             </span>
           </div>
-          <div className={styles.previewCanvas}>
+          <div
+            ref={previewCanvasRef}
+            className={`${styles.previewCanvas} ${compact ? styles.previewCanvasCompact : styles.previewCanvasPaper}`}
+            data-testid="score-preview-canvas"
+          >
             {viewMode === "rendered" ? (
-              <ScoreRenderer
-                notes={notes}
-                layout={rendererLayout}
-                tempoMap={tempoMap}
-                scale={1}
-                startBar={pageStartBar}
-                playheadPosition={playheadPosition}
-                onBarAnchorsChange={onBarAnchorsChange}
-                onSeek={onSeek}
-              />
-            ) : (
-              <div className={styles.previewPlaceholder}>
-                <div className={styles.previewPlaceholderIcon}>&#9839;</div>
-                <div className={styles.previewPlaceholderText}>
-                  {notes.length > 0
-                    ? t('score.renderingInProgress', { count: notes.length })
-                    : t('score.noNotes')}
-                </div>
-                {notes.length > 0 && (
-                  <div className={`${styles.previewPlaceholderText} ${styles.previewHint}`}>
-                    {t('score.vexflowHint')}
+              <div
+                className={`${styles.pageSheet} ${compact ? styles.pageSheetCompact : ""}`}
+                data-testid="score-page-sheet"
+                style={
+                  compact
+                    ? undefined
+                    : ({ "--page-zoom": zoom } as React.CSSProperties)
+                }
+              >
+                {!compact && (
+                  <div className={styles.paperHeader}>
+                    <span className={styles.paperTitle}>{t('score.sheetTitle')}</span>
+                    <span className={styles.paperMeta}>
+                      {t('score.barRange', {
+                        start: effectivePageStartRange,
+                        end: effectivePageEndRange,
+                      })}
+                    </span>
                   </div>
                 )}
+                <div className={styles.pageScore} ref={scoreAreaRef}>
+                  <ScoreRenderer
+                    notes={notes}
+                    layout={rendererLayout}
+                    tempoMap={tempoMap}
+                    scale={1}
+                    paper={!compact}
+                    startBar={effectivePageStartBar}
+                    playheadPosition={playheadPosition}
+                    onBarAnchorsChange={onBarAnchorsChange}
+                    onSeek={onSeek}
+                    width={compact && scoreAreaWidth > 0 ? scoreAreaWidth : undefined}
+                  />
+                </div>
+                {!compact && (
+                  <div className={styles.paperFooter}>
+                    <span>Collinx</span>
+                    <span>
+                      {t('score.pageIndicator', {
+                        current: effectivePageIndex + 1,
+                        total: effectivePageCount,
+                      })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className={styles.dataView} data-testid="score-data-view">
+                <div className={styles.dataViewHeader}>
+                  <span>{t('score.dataViewTitle')}</span>
+                  <span className={styles.dataViewMeta}>
+                    {t('score.notesCount', { count: notes.length })}
+                  </span>
+                </div>
+                <div className={styles.barGrid}>
+                  {Array.from({ length: renderBars }, (_, index) => {
+                    const bar = index + 1;
+                    const count = barNoteCounts.get(bar) ?? 0;
+                    return (
+                      <div
+                        key={bar}
+                        className={`${styles.barCell} ${count > 0 ? styles.barCellFilled : ""}`}
+                      >
+                        <span className={styles.barCellIndex}>{bar}</span>
+                        <span className={styles.barCellCount}>{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import type { NoteEvent, TempoMap } from "@collinx/core";
+import { useI18n } from "../../i18n";
 import styles from "./ScoreRenderer.module.css";
 import { planBarSlots, barBeatFromX } from "./bar-anchors";
 import type { BarAnchor, BarSlot } from "./bar-anchors";
@@ -106,6 +107,8 @@ export interface ScoreRendererProps {
    * 函数），DOM 结构与行为零变化。
    */
   onSeek?: (pos: { bar: number; beat: number }) => void;
+  /** 纸面模式：透明容器 + 纸张底色（由 ScorePanel 设置 --score-paper/--score-ink）。 */
+  paper?: boolean;
 }
 
 const STAVE_WIDTH = 550;
@@ -148,7 +151,9 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   onBarAnchorsChange,
   playheadPosition,
   onSeek,
+  paper = false,
 }) => {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const renderIdRef = useRef(0);
   // 用 ref 持有最新回调，避免把它塞进渲染 useEffect 的 deps 引发重排版。
@@ -170,13 +175,32 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   const [anchors, setAnchors] = useState<BarAnchor[]>([]);
   // 上一次已上报锚点的序列化值（按值去重的判据）。null 表示尚未上报过。
   const lastAnchorsKeyRef = useRef<string | null>(null);
+  // 谱面悬停小节：只表达「这里可以点击定位」，不改变任何数据。
+  const [hoverBar, setHoverBar] = useState<number | null>(null);
+  // VexFlow 动态 import / 渲染的可见状态；失败可重试，不再只把错误塞进 DOM。
+  const [renderState, setRenderState] = useState<"loading" | "ready" | "error">("loading");
+  const [renderError, setRenderError] = useState("");
+  const [retryNonce, setRetryNonce] = useState(0);
 
-  const meter = useMemo(() => {
-    if (tempoMap) {
-      return tempoMap.meterAt(1);
-    }
-    return { numerator: 4, denominator: 4 };
-  }, [tempoMap]);
+  /**
+   * 拍号按**小节**取，而不是全曲共用 `meterAt(1)`。
+   *
+   * 旧实现把首小节拍号喂给所有小节的 Voice / 休止补齐 / 播放头插值，中途变拍号
+   * （如 4/4 → 6/8）后，后续小节的拍数、休止与游标位置会系统性偏移。
+   * 缺省 tempoMap 时回落 4/4，保持裸组件 API 行为不变。
+   */
+  const meterAt = useCallback(
+    (bar: number) => (tempoMap ? tempoMap.meterAt(bar) : { numerator: 4, denominator: 4 }),
+    [tempoMap],
+  );
+  const beatsPerBarAt = useCallback(
+    (bar: number) => {
+      const meter = meterAt(bar);
+      const denominator = meter.denominator || 4;
+      return (meter.numerator * 4) / denominator;
+    },
+    [meterAt],
+  );
 
   /**
    * v2.9.6：谱表分配改为「按同时性分组后整组归属」。
@@ -225,22 +249,6 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     [systems.length, layout.staffConfig.length],
   );
 
-  // 拍号派生：单行谱面各小节共用同一拍号（tempoMap.meterAt(1)）。
-  //
-  // 关键：NoteEvent.beat 的单位是「四分音符」，而非「拍号分母所指的拍」。
-  // 依据 TempoMap.positionInBars(bar, beat) = bar + (beat - 1) / 4 —— beat 每 +1
-  // 前进一个四分音符。故「每小节的四分音符拍数」必须换算为 numerator * 4 / denominator：
-  //   3/4 → 3 * 4 / 4 = 3     ✔（与旧式 meter.numerator 侥幸一致）
-  //   6/8 → 6 * 4 / 8 = 3     （旧式错给 6）
-  //   7/8 → 7 * 4 / 8 = 3.5   （旧式错给 7）
-  // 该值直接喂给 ScorePlayhead 的 fraction = (beat - 1) / beatsPerBarAt(bar)，
-  // 故复合拍号下不换算会让覆盖层落点系统性偏移。
-  // denominator 缺失或为 0 时回落到 4/4 语义（此时 == numerator）。
-  const beatsPerBarAt = useCallback(() => {
-    const denominator = meter.denominator || 4;
-    return (meter.numerator * 4) / denominator;
-  }, [meter]);
-
   /**
    * 点击定位换算（Stage 2）。
    *
@@ -276,9 +284,41 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     [anchors, beatsPerBarAt, scale],
   );
 
+  /**
+   * 悬停小节：只更新「哪一小节高亮」，不重排版。用于表达谱面可点击定位。
+   * 每像素移动不会 setState —— 只有跨小节边界时才更新，避免 60fps 提交。
+   */
+  const handleHoverMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!onSeekRef.current) return;
+      const el = e.currentTarget;
+      const rect = el.getBoundingClientRect();
+      const localX = (e.clientX - rect.left) / scale + (el.scrollLeft || 0);
+      const localY = (e.clientY - rect.top) / scale + (el.scrollTop || 0);
+      const inSystem = anchors.filter((a) =>
+        a.y !== undefined && a.height !== undefined
+          ? localY >= a.y && localY < a.y + a.height
+          : true,
+      );
+      const pool = inSystem.length > 0 ? inSystem : anchors;
+      const anchor = pool.find((a) => localX >= a.x0 && localX < a.x1);
+      const next = anchor?.bar ?? null;
+      setHoverBar((prev) => (prev === next ? prev : next));
+    },
+    [anchors, scale],
+  );
+
+  const hoverAnchor =
+    hoverBar === null ? null : anchors.find((a) => a.bar === hoverBar) ?? null;
+
   useEffect(() => {
     let cancelled = false;
     const currentRenderId = ++renderIdRef.current;
+    // 首次渲染显示骨架；已渲染过的谱面在增量重排时保持旧画面，避免闪白。
+    if (!containerRef.current?.querySelector("svg")) {
+      setRenderState("loading");
+      setRenderError("");
+    }
 
     async function render() {
       try {
@@ -294,7 +334,12 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         const systemPlans = systems.length > 0 ? systems : planSystems({ bars: renderBars, startBar });
         // 谱表宽度按「本行实际小节数」计算：每小节至少 MIN_BAR_WIDTH。
         // 末行可能不满（按实际小节数算，不按名义值），避免最后一页被拉宽。
-        const staveWidth = computeStaveWidth(systemPlans[0]?.bars ?? renderBars);
+        // v3.2.0：调用方若给出 width（紧凑谱 / 分栏自适应），则取「不低于最低
+        // 宽度」的可用宽 —— 否则 4 小节的紧凑谱在 1000px 面板里只占左侧 540px。
+        const minStaveWidth = computeStaveWidth(systemPlans[0]?.bars ?? renderBars);
+        const staveWidth = width
+          ? Math.max(minStaveWidth, width - STAVE_PADDING_LEFT * 2)
+          : minStaveWidth;
         // totalHeight 由渲染作用域的 useMemo 提供（唯一来源，见其注释）。
 
         const renderer = new VF.Renderer(container, VF.Renderer.Backends.SVG);
@@ -347,6 +392,20 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
           });
           allSlots.push(...slots.map((slot) => ({ ...slot, systemTop })));
 
+          // 每小节拍号 + 是否相对前一小节发生变化。跨系统时用 startBar-1 的拍号
+          // 作为前值，保证行首变拍号仍会被标注。
+          let previousMeter =
+            system.startBar > 1 ? meterAt(system.startBar - 1) : null;
+          const slotMeters = slots.map((slot) => {
+            const barMeter = meterAt(slot.bar);
+            const changed =
+              previousMeter === null ||
+              previousMeter.numerator !== barMeter.numerator ||
+              previousMeter.denominator !== barMeter.denominator;
+            previousMeter = barMeter;
+            return { meter: barMeter, changed };
+          });
+
           // 本系统内每个谱表「第一小节」的 Stave（用于双谱表 BRACE 连接）。
           const vfStaves: InstanceType<typeof VF.Stave>[] = [];
 
@@ -358,6 +417,8 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
             for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
               const slot = slots[slotIdx];
+              const slotMeter = slotMeters[slotIdx]!;
+              const barMeter = slotMeter.meter;
               // 每个小节一个独立 Stave 片段（x/y/width 取槽位），首尾相接拼成一行。
               const barStave = new VF.Stave(slot.x, yOffset, slot.width);
 
@@ -372,13 +433,15 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               // - 谱号：**每个谱表**每行首小节都要挂（旧实现只挂 staff 0，
               //   低音谱表一直没有谱号 —— 用户指出的「不规范」之一）
               // - 调号：紧随谱号，每行每个谱表都要（key_map 驱动）
-              // - 拍号：仅首系统首谱表（变化处另行标注，当前不支持中途变拍号 UI）
+              // - 拍号：首小节与变拍号处标注；同一拍号不重复画。
               if (slotIdx === 0) {
                 barStave.addClef(staff.clef);
                 barStave.addKeySignature(vexflowKeySpec(currentKey));
-                if (system.index === 0 && staffIdx === 0) {
-                  barStave.addTimeSignature(`${meter.numerator}/${meter.denominator}`);
-                }
+              }
+              if (slotMeter.changed && staffIdx === 0) {
+                barStave.addTimeSignature(
+                  `${barMeter.numerator}/${barMeter.denominator}`,
+                );
               }
 
               barStave.setContext(context).draw();
@@ -443,8 +506,8 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                 tickables.push({ beat: group.beat, note: staveNote });
               }
               for (const rest of fillRestGaps(
-                meter.numerator,
-                meter.denominator,
+                barMeter.numerator,
+                barMeter.denominator,
                 barGroups.map((g) => ({ beat: g.beat, durQn: g.durQn })),
               )) {
                 const { duration } = durQnToVfDuration(rest.durQn);
@@ -463,8 +526,8 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
               // 每小节独立 Voice + Formatter（不再把全曲音符展平进单个 Voice）。
               const voice = new VF.Voice({
-                numBeats: meter.numerator,
-                beatValue: meter.denominator,
+                numBeats: barMeter.numerator,
+                beatValue: barMeter.denominator,
               });
               voice.setStrict(false);
               voice.addTickables(vfNotes);
@@ -478,7 +541,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               const beamables = vfNotes.filter((n) => !n.isRest());
               const beams = beamables.length >= 2
                 ? VF.Beam.generateBeams(beamables, {
-                    groups: beamGroups(meter.numerator, meter.denominator).map(
+                    groups: beamGroups(barMeter.numerator, barMeter.denominator).map(
                       ([num, den]) => new VF.Fraction(num, den),
                     ),
                   })
@@ -531,16 +594,16 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
             onBarAnchorsChangeRef.current?.(nextAnchors);
           }
         }
+        if (!cancelled && currentRenderId === renderIdRef.current) {
+          setRenderState("ready");
+          setRenderError("");
+        }
       } catch (err) {
         if (!cancelled && currentRenderId === renderIdRef.current) {
           const container = containerRef.current;
-          if (container) {
-            container.innerHTML = "";
-            const placeholder = document.createElement("div");
-            placeholder.className = styles.errorPlaceholder;
-            placeholder.textContent = `VexFlow 渲染失败: ${err instanceof Error ? err.message : String(err)}`;
-            container.appendChild(placeholder);
-          }
+          if (container) container.innerHTML = "";
+          setRenderState("error");
+          setRenderError(err instanceof Error ? err.message : String(err));
         }
       }
     }
@@ -549,7 +612,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [notes, groupsByStaffAndBar, layout, meter, renderBars, totalHeight, startBar, systems]);
+  }, [notes, groupsByStaffAndBar, layout, meterAt, renderBars, totalHeight, startBar, systems, retryNonce, width]);
 
   const containerStyle: React.CSSProperties = {
     transform: `scale(${scale})`,
@@ -558,11 +621,29 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     height: height ? `${height}px` : undefined,
   };
 
+  const hoverStyle: React.CSSProperties | undefined = hoverAnchor
+    ? {
+        left: `${hoverAnchor.x0 * scale}px`,
+        width: `${(hoverAnchor.x1 - hoverAnchor.x0) * scale}px`,
+        top: `${(hoverAnchor.y ?? 0) * scale}px`,
+        height: `${(hoverAnchor.height ?? totalHeight) * scale}px`,
+      }
+    : undefined;
+
+  const retryRender = () => {
+    setRenderError("");
+    setRetryNonce((n) => n + 1);
+  };
+
   return (
     // 点击处理仅在有 onSeek 时绑定（undefined 而非空函数）→ 缺省零行为变化。
     <div
-      className={styles.rendererContainer}
+      className={`${styles.rendererContainer} ${paper ? styles.paper : ""} ${onSeek ? styles.seekable : ""}`}
       onClick={onSeek ? handleSeekClick : undefined}
+      onPointerMove={onSeek ? handleHoverMove : undefined}
+      onPointerLeave={onSeek ? () => setHoverBar(null) : undefined}
+      aria-busy={renderState === "loading"}
+      data-render-state={renderState}
     >
       {/*
         相对定位包裹层：为播放头覆盖层提供绝对定位基准，同时把「画布可视高」显式
@@ -577,6 +658,14 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         data-testid="score-renderer-stack"
       >
         <div ref={containerRef} className={styles.rendererCanvas} style={containerStyle} />
+        {hoverAnchor && (
+          <div
+            className={styles.hoverBand}
+            style={hoverStyle}
+            data-testid="score-hover-band"
+            data-bar={hoverAnchor.bar}
+          />
+        )}
         <ScorePlayhead
           anchors={anchors}
           position={playheadPosition}
@@ -584,6 +673,23 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
           beatsPerBarAt={beatsPerBarAt}
         />
       </div>
+
+      {renderState === "loading" && (
+        <div className={styles.renderSkeleton} aria-hidden="true">
+          <span className={styles.skeletonStaff} />
+          <span className={styles.skeletonStaff} />
+        </div>
+      )}
+
+      {renderState === "error" && (
+        <div className={`${styles.renderError} ${styles.errorPlaceholder}`} role="alert">
+          <div className={styles.renderErrorTitle}>VexFlow 渲染失败</div>
+          <div className={styles.renderErrorDetail}>{renderError}</div>
+          <button type="button" className={styles.retryBtn} onClick={retryRender}>
+            {t("score.retry")}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -14,6 +14,19 @@ export interface KeyboardShortcutHandlers {
    * change. Ignored when the event target is an editable field.
    */
   onPlayPause?: () => void;
+  /**
+   * v3.2.0 S3：Ctrl/Cmd+S 保存工程。
+   *
+   * 命令面板一直展示 "⌘S" 提示，但从没实现 —— 属"界面承诺了、键盘做不到"。
+   * 这里补上：只在提供了 onSave 时才 preventDefault（否则把浏览器默认的
+   * 「保存网页」对话框留给调用方，不擅自吞掉）。
+   */
+  onSave?: () => void;
+  /**
+   * v3.2.0 S3：Ctrl/Cmd+1..9 跳转到第 N 个页签（0-based）。
+   * 与命令面板里的 "⌘1..⌘9" 提示同一套语义。
+   */
+  onSelectTab?: (index: number) => void;
 }
 
 /**
@@ -44,6 +57,8 @@ export function isEditableTarget(target: EventTarget | null): boolean {
  *
  * - Ctrl+Z (or Cmd+Z on macOS)        -> onUndo
  * - Ctrl+Shift+Z / Ctrl+Y (or Cmd+..) -> onRedo
+ * - Ctrl/Cmd+S                        -> onSave（输入框内也生效）
+ * - Ctrl/Cmd+1..9                     -> onSelectTab(n-1)
  * - Never fires when the event target is an input/textarea/contentEditable
  *   region, so typing in a field keeps the browser's native text undo.
  *
@@ -83,10 +98,31 @@ export function useKeyboardShortcuts(handlers: KeyboardShortcutHandlers): void {
 
       // Ignore plain-letter shortcuts without a modifier.
       if (!(e.ctrlKey || e.metaKey)) return;
+
+      const key = e.key.toLowerCase();
+
+      // v3.2.0 S3：⌘S 是文档级命令，输入框里也该保存 —— 因此放在
+      // editable-target 守卫**之前**。浏览器默认的「保存网页」必须挡掉，
+      // 否则用户按 ⌘S 会得到一份 HTML 而不是 .agentmusic。
+      if (key === "s" && !e.shiftKey && !e.altKey) {
+        if (!handlersRef.current.onSave) return;
+        e.preventDefault();
+        handlersRef.current.onSave();
+        return;
+      }
+
       // Native text undo/redo inside a field takes precedence.
       if (isEditableTarget(e.target)) return;
 
-      const key = e.key.toLowerCase();
+      // v3.2.0 S3：⌘1..⌘9 跳页签。数字在输入框里是打字，已由上面的
+      // editable-target 守卫排除。
+      if (!e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+        if (!handlersRef.current.onSelectTab) return;
+        e.preventDefault();
+        handlersRef.current.onSelectTab(Number(e.key) - 1);
+        return;
+      }
+
       if (key === "z") {
         e.preventDefault();
         if (e.shiftKey) {
