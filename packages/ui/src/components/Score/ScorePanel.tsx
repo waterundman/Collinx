@@ -72,6 +72,18 @@ const CLEF_SYMBOLS: Record<string, string> = {
   percussion: "\u{1D126}",
 };
 
+/**
+ * 纸面谱每行小节数（v3.3.0）。
+ *
+ * 与 `score-layout.BARS_PER_SYSTEM`（8，通用缺省）分开：纸面宽 920px 是硬约束，
+ * 8 小节/行会把每小节压到 110px 以下，VexFlow 的最小间距放不下 4-5 个符号，
+ * 音符就会溢出到相邻小节。4 小节/行 ≈ 220px/小节。
+ *
+ * 导出给测试用：`v230-stage4.test.tsx` 需要按「与 App 内的谱面几何一致」构造
+ * 点击坐标，硬编码 4 会在下次调整时静默失效。
+ */
+export const PAPER_BARS_PER_SYSTEM = 4;
+
 export const ScorePanel: React.FC<ScorePanelProps> = ({
   layout,
   notes,
@@ -138,16 +150,40 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
     [staffConfig],
   );
 
-  // 分页：每行最多 BARS_PER_SYSTEM(8) 小节（超出换行到下一系统），
+  /**
+   * 紧凑焦点窗：只给 compose 传 focusBars=4；全尺寸乐谱仍按页渲染。
+   *
+   * 提到分页之前：`barsPerSystem`（每行小节数）要同时喂给分页与渲染器，
+   * 而它依赖焦点窗宽度。
+   */
+  const focusWindowBars =
+    compact && focusBars && focusBars > 0
+      ? Math.min(renderBars, Math.max(1, Math.floor(focusBars)))
+      : null;
+
+  /**
+   * v3.3.0：每行小节数。
+   *
+   * 纸面谱旧值 8（`BARS_PER_SYSTEM`）在 920px 纸上把每小节压到 ~110px —— 一小节
+   * 只要有 4 个音 + 1 个休止 + 1 个临时记号，VexFlow 的最小间距就撑不下，音符会
+   * **越过小节线**画到下一小节（用户看到的「音符区间放置错误」之一）。
+   * 4 小节/行时每小节约 220px，普通密度绰绰有余，也是钢琴谱的通行排法。
+   */
+  const barsPerSystem = compact ? (focusWindowBars ?? undefined) : PAPER_BARS_PER_SYSTEM;
+
+  // 分页：每行最多 barsPerSystem 小节（超出换行到下一系统），
   // 每页系统数 = floor(stavesPerPage / 谱表数) —— 复用 Layout 既有的「每页谱表」字段。
+  // ⚠️ barsPerSystem 必须与渲染器**同一个值**：否则分页按 8 小节/行切、渲染按 4 小节/行
+  // 排，页内系统数与「第 X-Y 小节」的标注会一起错位。
   const pages = useMemo(
     () =>
       planScorePages({
         bars: renderBars,
         staffCount: staffConfig.length,
         stavesPerPage: layout.stavesPerPage,
+        barsPerSystem,
       }),
-    [renderBars, staffConfig.length, layout.stavesPerPage],
+    [renderBars, staffConfig.length, layout.stavesPerPage, barsPerSystem],
   );
 
   const [requestedPage, setRequestedPage] = useState(0);
@@ -157,11 +193,6 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   const pageBars = page?.bars ?? renderBars;
   const pageStartBar = page?.startBar ?? 1;
 
-  // 紧凑焦点窗：只给 compose 传 focusBars=4；全尺寸乐谱仍按页渲染。
-  const focusWindowBars =
-    compact && focusBars && focusBars > 0
-      ? Math.min(renderBars, Math.max(1, Math.floor(focusBars)))
-      : null;
   const focusPageCount = focusWindowBars
     ? Math.max(1, Math.ceil(renderBars / focusWindowBars))
     : pages.length;
@@ -218,6 +249,14 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   // 分页（v2.4.1）：一页只渲染本页的小节区间，故 `bars` 取**本页**小节数，
   // 首小节号经 ScoreRenderer 的 `startBar` 传给画布（否则第 2 页锚点会退回 bar 1）。
   // deps 里的 pageBars / 分页对象均为数值或稳定 memo，不引入身份抖动。
+  /**
+   * v3.3.0：纸面谱每行小节数。
+   *
+   * 旧值 8（`BARS_PER_SYSTEM`）在 920px 纸面上把每小节压到 ~110px —— 一小节只要
+   * 有 4 个音 + 1 个休止 + 1 个临时记号，VexFlow 的最小间距就撑不下，音符会**越过
+   * 小节线**画到下一小节去（用户看到的「音符区间放置错误」之一）。
+   * 4 小节/行时每小节约 220px，普通密度的乐句绰绰有余，也符合钢琴谱的通行排法。
+   */
   const rendererLayout = useMemo<ScoreRendererLayout>(
     () => ({
       staffConfig: (layout.staffConfig ?? []).map((s) => ({
@@ -226,21 +265,20 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
         bars: effectivePageBars,
       })),
       notationSize: houseStyle?.notationSize,
-      // 紧凑焦点窗必须让 4 小节落在同一行；全尺寸乐谱沿用 8 小节/系统。
-      barsPerSystem: focusWindowBars ?? undefined,
+      // 紧凑焦点窗必须让 4 小节落在同一行；纸面谱见 PAPER_BARS_PER_SYSTEM。
+      barsPerSystem,
     }),
-    [layout.staffConfig, houseStyle?.notationSize, effectivePageBars, focusWindowBars],
+    [layout.staffConfig, houseStyle?.notationSize, effectivePageBars, barsPerSystem],
   );
 
   const previewCanvasRef = useRef<HTMLDivElement>(null);
 
   /**
-   * v3.2.0：紧凑谱的可用宽度。
+   * 谱面可用宽度（紧凑谱与纸面谱都量）。
    *
-   * 谱表宽度是按「每小节至少 110px」算的（最小 540），于是 4 小节的紧凑谱
-   * 在 1000px 宽的面板里只占左侧一半，右边大片空白。这里量一下真实可用宽，
-   * 交给 ScoreRenderer 用 `max(最低宽, 可用宽)` —— 只在紧凑态生效，
-   * 全尺寸纸面仍是固定 920px（纸不能随窗口变宽）。
+   * v3.2.0 只在紧凑态量测：4 小节的紧凑谱在 1000px 面板里只占左侧一半。
+   * v3.3.0 起纸面谱也量 —— 纸面内边距固定，量到的宽度稳定，用来把 4 个小节
+   * 铺满纸面（每小节约 220px），避免「每小节 110px 装不下内容 → 音符越过小节线」。
    *
    * 不传时（jsdom 里 ResizeObserver 被 stub 成空实现 → 宽度恒为 0）几何与
    * 改动前逐值一致，所以既有锚点/点击反演的测试基准不受影响。
@@ -248,7 +286,6 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
   const scoreAreaRef = useRef<HTMLDivElement>(null);
   const [scoreAreaWidth, setScoreAreaWidth] = useState(0);
   useEffect(() => {
-    if (!compact) return undefined;
     const el = scoreAreaRef.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver((entries) => {
@@ -630,7 +667,7 @@ export const ScorePanel: React.FC<ScorePanelProps> = ({
                     playheadPosition={playheadPosition}
                     onBarAnchorsChange={onBarAnchorsChange}
                     onSeek={onSeek}
-                    width={compact && scoreAreaWidth > 0 ? scoreAreaWidth : undefined}
+                    width={scoreAreaWidth > 0 ? scoreAreaWidth : undefined}
                   />
                 </div>
                 {!compact && (

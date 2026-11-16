@@ -34,7 +34,7 @@ import { ThemeProvider } from "../providers/ThemeProvider";
 import { ProjectProvider } from "../providers/ProjectProvider";
 import { ScoreRenderer } from "../components/Score/ScoreRenderer";
 import type { ScoreRendererLayout } from "../components/Score/ScoreRenderer";
-import { ScorePanel } from "../components/Score/ScorePanel";
+import { ScorePanel, PAPER_BARS_PER_SYSTEM } from "../components/Score/ScorePanel";
 import { createDefaultLayout, createDemoNotes, defaultHouseStyle, demoPhrases } from "../data/demoData";
 import type { BarAnchor } from "../components/Score/bar-anchors";
 
@@ -144,7 +144,17 @@ function clickRenderedView(container: HTMLElement) {
 }
 
 /** 与 App 内 ScorePanel 等价的 rendererLayout（staffConfig 几何与 notes 无关）。 */
-function appEquivalentRendererLayout(): ScoreRendererLayout {
+/**
+ * 与 App 内等价的渲染器布局。
+ *
+ * `barsPerSystem` 必须与**被测的那个 ScorePanel** 实际喂给渲染器的值一致：
+ * - App 全尺寸纸面谱：`PAPER_BARS_PER_SYSTEM`（4）；
+ * - 紧凑面板且未给 `focusBars`：ScorePanel 传 `undefined` → 渲染器缺省 8。
+ *
+ * 传错会让「锚点算出的 60% 落点」与被测面板的实际几何错位，点击落到别的拍上
+ * （T55a/b 曾因此以「m2.2 ≠ m2.3」变红）。
+ */
+function appEquivalentRendererLayout(barsPerSystem?: number): ScoreRendererLayout {
   return {
     staffConfig: (createDefaultLayout(APP_TOTAL_BARS).staffConfig ?? []).map((s) => ({
       clef: s.clef as "treble" | "bass",
@@ -152,19 +162,20 @@ function appEquivalentRendererLayout(): ScoreRendererLayout {
       bars: s.bars,
     })),
     notationSize: defaultHouseStyle.notationSize,
+    barsPerSystem,
   };
 }
 
 /**
  * 挂载一次真实 ScoreRenderer，取回与 App 内一致的小节锚点。
- * 锚点几何只取决于 layout.staffConfig 与 ScoreRenderer 内部常量，与 notes 无关。
+ * 锚点几何只取决于 layout.staffConfig 与每行小节数，与 notes 无关。
  */
-async function captureAnchors(): Promise<BarAnchor[]> {
+async function captureAnchors(barsPerSystem?: number): Promise<BarAnchor[]> {
   let captured: BarAnchor[] | null = null;
   const h = mount(
     <ScoreRenderer
       notes={[]}
-      layout={appEquivalentRendererLayout()}
+      layout={appEquivalentRendererLayout(barsPerSystem)}
       onBarAnchorsChange={(a) => {
         captured = a;
       }}
@@ -260,7 +271,8 @@ describe("v2.3.0 S4a (D34-1/D34-2 T55) App 级谱面点击 → beat 米制敏感
   });
 
   it("T55a: 拍号 3/4 → 谱面第 2 小节同一落点点击 → transport 位置显示 m2.2 (critical)", async () => {
-    const anchors = await captureAnchors();
+    // App 的 score 标签页是**全尺寸纸面谱**（非 compact）→ 每行 4 小节。
+    const anchors = await captureAnchors(PAPER_BARS_PER_SYSTEM);
     expect(anchors).toHaveLength(EXPECTED_BARS);
     const clickX = clickXInBar2(anchors);
 
@@ -289,7 +301,7 @@ describe("v2.3.0 S4a (D34-1/D34-2 T55) App 级谱面点击 → beat 米制敏感
   });
 
   it("T55b: 拍号 4/4（对照）→ 同一落点点击 → transport 位置显示 m2.3 (critical)", async () => {
-    const anchors = await captureAnchors();
+    const anchors = await captureAnchors(PAPER_BARS_PER_SYSTEM);
     const clickX = clickXInBar2(anchors);
 
     // 不修改拍号（store 默认 bar1/4-4）。
@@ -307,6 +319,8 @@ describe("v2.3.0 S4a (D34-1/D34-2 T55) App 级谱面点击 → beat 米制敏感
   });
 
   it("T55c: 同落点、两拍号给出不同 beat（判别性）——防「隐式覆盖」退化为恒真 (critical)", async () => {
+    // 下面挂的是 **compact** ScorePanel 且不给 focusBars → 每行小节数回落到
+    // ScoreRenderer 缺省（8），锚点必须按同一几何捕获。
     const anchors = await captureAnchors();
     const clickX = clickXInBar2(anchors);
 

@@ -9,16 +9,23 @@ import { ScorePlayhead } from "./ScorePlayhead";
 import { groupNotesForStaves, type ScoredNoteGroup } from "./note-grouping";
 import {
   beamGroups,
-  fillRestGaps,
   stemDirection,
   keyAlterations,
   MeasureAccidentalState,
   vexflowKeySpec,
   type KeyDef,
 } from "./engraving";
+import {
+  assignVoices,
+  barLengthQn,
+  beamRuns,
+  fillVoiceRests,
+  planNoteSpans,
+  spansAreContiguous,
+  type NoteSpan,
+} from "./notation";
 
 const NOTE_NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const NOTE_NAMES_FLAT = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
 
 const MIDI_TO_VF_KEY: Record<number, string> = {};
 for (let midi = 21; midi <= 108; midi++) {
@@ -28,35 +35,22 @@ for (let midi = 21; midi <= 108; midi++) {
   MIDI_TO_VF_KEY[midi] = `${name}/${octave}`;
 }
 
-function durQnToVfDuration(durQn: number): { duration: string; isDotted: boolean } {
-  const tolerance = 0.01;
-  const isDottedFn = (base: number) => Math.abs(durQn - base * 1.5) < tolerance;
+/**
+ * 休止符的「锚点音高」——VexFlow 用 key 换算 y，而谱号不同则同一个 y 对应的
+ * 音高不同。旧实现所有谱表一律用 `b/4`：在高音谱表恰好是中线（正确），
+ * 在低音谱表 `b/4` 是**谱表上方加线之外**，整小节休止符会飘在五线谱上面。
+ * 每谱表取自己的中线音：高音 B4、低音 D3、中音 C4。
+ */
+const REST_KEY_BY_CLEF: Record<string, string> = {
+  treble: "b/4",
+  bass: "d/3",
+  alto: "c/4",
+  tenor: "c/4",
+  percussion: "b/4",
+};
 
-  if (isDottedFn(4)) return { duration: "w", isDotted: true };
-  if (Math.abs(durQn - 4) < tolerance) return { duration: "w", isDotted: false };
-  if (isDottedFn(2)) return { duration: "h", isDotted: true };
-  if (Math.abs(durQn - 2) < tolerance) return { duration: "h", isDotted: false };
-  if (isDottedFn(1)) return { duration: "q", isDotted: true };
-  if (Math.abs(durQn - 1) < tolerance) return { duration: "q", isDotted: false };
-  if (isDottedFn(0.5)) return { duration: "8", isDotted: true };
-  if (Math.abs(durQn - 0.5) < tolerance) return { duration: "8", isDotted: false };
-  if (Math.abs(durQn - 0.25) < tolerance) return { duration: "16", isDotted: false };
-  if (durQn < 0.5) return { duration: "16", isDotted: false };
-  return { duration: "q", isDotted: false };
-}
-
-function getAccidental(pitchMidi: number, pitchSpelling?: string): string | undefined {
-  if (pitchSpelling) {
-    const match = pitchSpelling.match(/^([A-G])([#b]+)/);
-    if (match) {
-      return match[2];
-    }
-  }
-  const pitchClass = ((pitchMidi % 12) + 12) % 12;
-  if ([1, 3, 6, 8, 10].includes(pitchClass)) {
-    return "#";
-  }
-  return undefined;
+function restKeyFor(clef: string): string {
+  return REST_KEY_BY_CLEF[clef] ?? "b/4";
 }
 
 export interface StaffConfig {
@@ -227,6 +221,57 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     return Math.max(...layout.staffConfig.map((s) => s.bars), 4);
   }, [layout.staffConfig]);
 
+  /**
+   * 谱面排布（v3.3.0）：把「逻辑音组」编译成「可单独绘制的 span」。
+   *
+   * 旧实现在渲染循环里就地查表，把 `durQn` 硬映射成一个 duration 符号 ——
+   * 跨小节、跨拍、附点以及 1.25 / 2.5 / 0.4 这类非常规时值全部失真（详见
+   * notation.ts 文件头）。排布是纯函数，提前到 memo 里一次算完，按
+   * 「谱表 → 小节」索引；渲染循环只负责构造 VexFlow 对象与绘制。
+   *
+   * `groups` 保留 chain → 原始分组 的映射：span 只携带时值，音高/拼写仍在分组里。
+   */
+  const engravingPlan = useMemo(() => {
+    const lastBar = startBar + renderBars - 1;
+    const groups = new Map<string, ScoredNoteGroup>();
+    const byStaff: Record<number, NoteSpan[]>[] = layout.staffConfig.map(() => ({}));
+
+    for (let staffIdx = 0; staffIdx < layout.staffConfig.length; staffIdx++) {
+      const source = groupsByStaffAndBar[staffIdx] ?? {};
+      const target = byStaff[staffIdx]!;
+      for (const barKey of Object.keys(source)) {
+        const bar = Number(barKey);
+        if (!Number.isInteger(bar) || bar < 1 || bar > lastBar) continue;
+        const list = source[bar]!;
+        for (let groupIdx = 0; groupIdx < list.length; groupIdx++) {
+          const group = list[groupIdx]!;
+          const chain = `${staffIdx}:${bar}:${groupIdx}`;
+          const spans = planNoteSpans({
+            bar,
+            offset: group.beat - 1,
+            durQn: group.durQn,
+            chain,
+            meterAt,
+            lastBar,
+          });
+          if (spans.length === 0) continue;
+          groups.set(chain, group);
+          // ⚠️ 必须按 **span 自己的小节** 归桶，不能一股脑塞进"分组所在小节"：
+          // 跨小节音符的后续段属于下一小节，塞错桶会让它在原小节里被重新定位
+          // （实测：跨小节音的第二段落到小节首，画成与首音同时发声）。
+          for (const span of spans) (target[span.bar] ??= []).push(span);
+        }
+      }
+      for (const barKey of Object.keys(target)) {
+        target[Number(barKey)]!.sort(
+          (a, b) => a.offset - b.offset || a.index - b.index,
+        );
+      }
+    }
+
+    return { byStaff, groups };
+  }, [groupsByStaffAndBar, layout.staffConfig, meterAt, renderBars, startBar]);
+
   // 系统（行）划分：每行最多 barsPerSystem 小节（缺省 8），超出的换行纵向堆叠。
   // 单行 / 单系统时几何与改动前逐值一致（锚点仍为 {bar,x0,x1}）。
   const systems = useMemo(
@@ -378,6 +423,20 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         const allSlots: (BarSlot & { systemTop: number })[] = [];
         const multiSystem = systemPlans.length > 1;
 
+        /**
+         * 连音链：chain → 已绘制的 (span, StaveNote)。
+         *
+         * 连音线必须在**全部音符绘制完成之后**再画 —— `StaveTie` 要读音符的
+         * 最终 x/y（`getTieRightX` / `getYs`）。所以这里先登记，等所有系统画完
+         * 统一连线；跨行、跨页的连音也因此能正确落到音符上。
+         */
+        const chainNotes = new Map<
+          string,
+          { span: NoteSpan; note: InstanceType<typeof VF.StaveNote> }[]
+        >();
+        // 同谱表同小节同时发声超过 2 个声部的小节数（谱面会拥挤，仅作诊断）。
+        let crowdedBarCount = 0;
+
         for (const system of systemPlans) {
           const systemTop = system.index * systemHeight;
           // v2.9.7：调号来自图 meta.key_map（tempoMap.keyAt），缺省 C major
@@ -411,9 +470,11 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
           for (let staffIdx = 0; staffIdx < staves.length; staffIdx++) {
             const staff = staves[staffIdx];
-            // 本谱表：小节号 → 和弦组（构建时已按拍排序）
-            const groupedByBar = groupsByStaffAndBar[staffIdx] ?? {};
+            // 本谱表：小节号 → 已排布的 span（构建时已按起点排序）
+            const spansByBar = engravingPlan.byStaff[staffIdx] ?? {};
             const yOffset = systemTop + staffIdx * (STAVE_HEIGHT + STAVE_GAP) + 30;
+            // 休止符的符头锚点音高按谱号取（见 REST_KEY_BY_CLEF）。
+            const restKey = restKeyFor(staff.clef);
 
             for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
               const slot = slots[slotIdx];
@@ -448,18 +509,9 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               if (slotIdx === 0) vfStaves.push(barStave);
 
               // 空小节不再跳过 —— v2.9.7 规则③要求画全小节休止符（下方分支）。
-              const barGroups = groupedByBar[slot.bar] ?? [];
+              const barSpans = spansByBar[slot.bar] ?? [];
+              const barLen = barLengthQn(barMeter);
 
-              // v2.9.6：每个「同时性组」= 一个 StaveNote（keys 为多音和弦）。
-              // 旧实现每音一个 StaveNote —— 三和弦被画成 3 个连续全音符，
-              // 一小节塞 12 拍，记谱不成立（v2.9.5 点击会话发现的谱面缺陷）。
-              const vfNotes: InstanceType<typeof VF.StaveNote>[] = [];
-              // v2.9.7 规则③：空小节画全小节休止符
-              if (barGroups.length === 0) {
-                vfNotes.push(
-                  new VF.StaveNote({ clef: staff.clef, keys: ["b/4"], duration: "wr" }),
-                );
-              }
               // v2.9.7 规则②：小节内临时记号状态机（Gould p.78 —— 小节内同八度
               // 同音名沿用、不重画；与调号一致不画；过小节线由新 context 复位）
               const accidentalState = new MeasureAccidentalState(
@@ -469,84 +521,199 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                     : { tonic: "C", mode: "major" },
                 ),
               );
-              const tickables: { beat: number; note: InstanceType<typeof VF.StaveNote> }[] = [];
-              for (const group of barGroups) {
+
+              /**
+               * 构造一个 StaveNote。
+               *
+               * ⚠️ 附点必须**同时**落到 ticks 与视觉修饰符上：`dots` 进 `StaveNote`
+               * 构造参数才会改变 `getTicks()`；`Dot.buildAndAttach` 只加修饰符。
+               * 旧实现只调后者 —— 谱面上是附点、tick 里没有，本小节后续音符整体前移。
+               * `{ all: true }` 让和弦的每个音都带附点（旧实现只点第一个音）。
+               */
+              const buildNote = (
+                span: NoteSpan,
+                group: ScoredNoteGroup,
+                voiceIdx: number,
+                voiceCount: number,
+              ) => {
                 const keys = group.notes.map(
                   (note) =>
                     MIDI_TO_VF_KEY[note.pitchMidi] ?? `c/${Math.floor(note.pitchMidi / 12) - 1}`,
                 );
-                const { duration, isDotted } = durQnToVfDuration(group.durQn);
                 const staveNote = new VF.StaveNote({
                   clef: staff.clef,
                   keys,
-                  duration: duration,
+                  duration: span.duration,
+                  dots: span.dots,
                 });
+                if (span.dots > 0) VF.Dot.buildAndAttach([staveNote], { all: true });
 
-                // 每个键位的临时记号必须带 keyIndex，否则修饰符全落在第一个音上。
-                // 是否画符号由小节状态机决定（旧实现见音就画，违反 Gould p.78）
-                group.notes.forEach((note, keyIndex) => {
-                  const symbol = accidentalState.symbolFor(note.pitchMidi, note.pitchSpelling);
-                  if (symbol) {
-                    staveNote.addModifier(new VF.Accidental(symbol), keyIndex);
-                  }
-                });
-                if (isDotted) {
-                  VF.Dot.buildAndAttach([staveNote]);
-                }
-
-                // v2.9.8 规则：符干方向由「离中线最远的音」决定（单音即自身）
-                if (group.durQn !== 4) {
-                  // 全音符无符干，不设方向
+                // 符干方向：多声部按声部（0 上 1 下，通行对位写法）；单声部按
+                // 「离中线最远的音」。全音符（含附点全音符）无符干，不设方向。
+                if (span.duration.startsWith("w")) {
+                  // 无符干
+                } else if (voiceCount > 1) {
+                  staveNote.setStemDirection(voiceIdx === 0 ? VF.Stem.UP : VF.Stem.DOWN);
+                } else {
                   const dir = stemDirection(
                     group.notes.map((n) => n.pitchMidi),
                     staff.clef,
                   );
                   staveNote.setStemDirection(dir === "up" ? VF.Stem.UP : VF.Stem.DOWN);
                 }
-                tickables.push({ beat: group.beat, note: staveNote });
-              }
-              for (const rest of fillRestGaps(
-                barMeter.numerator,
-                barMeter.denominator,
-                barGroups.map((g) => ({ beat: g.beat, durQn: g.durQn })),
-              )) {
-                const { duration } = durQnToVfDuration(rest.durQn);
-                tickables.push({
-                  beat: rest.beat,
-                  note: new VF.StaveNote({
-                    clef: staff.clef,
-                    keys: ["b/4"],
-                    duration: `${duration}r`,
-                  }),
+                return staveNote;
+              };
+
+              if (barSpans.length === 0) {
+                // v2.9.7 规则③：空小节画整小节休止符
+                const rest = new VF.StaveNote({
+                  clef: staff.clef,
+                  keys: [restKey],
+                  duration: "wr",
                 });
+                // 整小节休止符必须**居中**。Formatter 默认把唯一的 tickable 摆在
+                // 可用区起点，谱面上看起来贴在小节线上（用户可见的排版错误）。
+                // `setCenterAlignment` 让 Formatter 在 justify 后把它的中心补偿到
+                // 可用宽的中点（见 Formatter.shiftToIdealDistances 的
+                // getCenterAlignedTickables 分支）。
+                rest.setCenterAlignment(true);
+                const voice = new VF.Voice({
+                  numBeats: barMeter.numerator,
+                  beatValue: barMeter.denominator,
+                });
+                voice.setStrict(false);
+                voice.addTickables([rest]);
+                new VF.Formatter().joinVoices([voice]).format([voice], slot.width - 20);
+                voice.draw(context, barStave);
+              } else {
+                // v3.3.0：同小节同谱表内按时值区间分声部（旧实现把重叠音符串行
+                // 排成一条时间轴 → 第二个音被推到第 5 拍，整小节宽度翻倍）。
+                const voiceLists = assignVoices(barSpans);
+                if (voiceLists.length > 2) crowdedBarCount += 1;
+                const voiceCount = voiceLists.length;
+                const voiceObjs: InstanceType<typeof VF.Voice>[] = [];
+                /**
+                 * 每个声部的音符「可连梁候选」（时间位置 + 时值 + 音符对象）。
+                 *
+                 * ⚠️ 不能把所有音符直接丢给 `Beam.generateBeams`：它按 `groups`
+                 * 分桶后，桶内只要有一个四分及更长的音就**整桶作废** —— 于是
+                 * `q 8 8 q` 里那两个八分音符永远分不到梁。先经 `beamRuns` 切成
+                 * 「首尾相接且短于四分」的片段，再逐段生成梁。
+                 */
+                const beamCandidatesByVoice: {
+                  offset: number;
+                  durQn: number;
+                  note: InstanceType<typeof VF.StaveNote>;
+                }[][] = [];
+                /** 本小节已建好的音符，供「按时间顺序」补临时记号 */
+                const drawn: {
+                  span: NoteSpan;
+                  note: InstanceType<typeof VF.StaveNote>;
+                  pitch: number;
+                }[] = [];
+
+                for (let voiceIdx = 0; voiceIdx < voiceCount; voiceIdx++) {
+                  const spansInVoice = voiceLists[voiceIdx]!;
+                  const entries: {
+                    offset: number;
+                    note: InstanceType<typeof VF.StaveNote>;
+                  }[] = [];
+                  const beamCandidates: {
+                    offset: number;
+                    durQn: number;
+                    note: InstanceType<typeof VF.StaveNote>;
+                  }[] = [];
+
+                  for (const span of spansInVoice) {
+                    const group = engravingPlan.groups.get(span.chain);
+                    if (!group) continue;
+                    const note = buildNote(span, group, voiceIdx, voiceCount);
+                    entries.push({ offset: span.offset, note });
+                    beamCandidates.push({
+                      offset: span.offset,
+                      durQn: span.durQn,
+                      note,
+                    });
+                    drawn.push({
+                      span,
+                      note,
+                      pitch: group.notes[0]?.pitchMidi ?? 0,
+                    });
+                    // 连音链登记：同一逻辑音被跨小节/跨拍切成的各段，绘制后再连线
+                    const chain = chainNotes.get(span.chain);
+                    if (chain) chain.push({ span, note });
+                    else chainNotes.set(span.chain, [{ span, note }]);
+                  }
+
+                  // 每个声部都要被休止填满整小节，否则 Formatter 按 tick 总量
+                  // 摊开时会把这个声部挤到左侧、与另一声部错位。
+                  for (const rest of fillVoiceRests(barLen, spansInVoice)) {
+                    const note = new VF.StaveNote({
+                      clef: staff.clef,
+                      keys: [restKey],
+                      duration: rest.duration,
+                      // ⚠️ `type: "r"` 不能省：少了它 VexFlow 会把休止画成**实音**
+                      // （带符干的半音符），谱面上凭空多出一条符干。
+                      type: "r",
+                      dots: rest.dots,
+                    });
+                    if (rest.dots > 0) VF.Dot.buildAndAttach([note], { all: true });
+                    entries.push({ offset: rest.offset, note });
+                  }
+
+                  entries.sort((a, b) => a.offset - b.offset);
+                  const vfNotes = entries.map((e) => e.note);
+                  const voice = new VF.Voice({
+                    numBeats: barMeter.numerator,
+                    beatValue: barMeter.denominator,
+                  });
+                  voice.setStrict(false);
+                  voice.addTickables(vfNotes);
+                  voiceObjs.push(voice);
+                  beamCandidatesByVoice.push(beamCandidates);
+                }
+
+                // 临时记号必须在 format 之前加（影响间距），且顺序必须是「时间顺序」：
+                // 状态机按调用顺序记忆本小节已出现的升降，跨声部也要共用一份。
+                drawn.sort(
+                  (a, b) =>
+                    a.span.offset - b.span.offset ||
+                    a.pitch - b.pitch ||
+                    a.span.index - b.span.index,
+                );
+                for (const { span, note } of drawn) {
+                  const group = engravingPlan.groups.get(span.chain);
+                  if (!group) continue;
+                  group.notes.forEach((n, keyIndex) => {
+                    const symbol = accidentalState.symbolFor(n.pitchMidi, n.pitchSpelling);
+                    if (symbol) note.addModifier(new VF.Accidental(symbol), keyIndex);
+                  });
+                }
+
+                // 多声部必须 joinVoices 后再 format —— 否则两个声部各排各的，
+                // 同一拍的两个音不会纵向对齐。
+                const formatter = new VF.Formatter();
+                formatter.joinVoices(voiceObjs).format(voiceObjs, slot.width - 20);
+                voiceObjs.forEach((voice) => voice.draw(context, barStave));
+
+                // 梁按「声部 → 可连梁片段 → 拍组」三层切分：
+                // - 声部：两个声部各自成梁，不能把上下声部的符干连起来；
+                // - 片段（beamRuns）：四分及更长的音、休止造成的空隙都会断片，
+                //   否则 generateBeams 会把「混了四分音符的整桶」判为不可连梁；
+                // - 拍组（beamGroups）：4/4 半小节、6/8 附点四分 3/8、5/8 = 3+2 …
+                const groups = beamGroups(barMeter.numerator, barMeter.denominator).map(
+                  ([num, den]) => new VF.Fraction(num, den),
+                );
+                for (const candidates of beamCandidatesByVoice) {
+                  for (const run of beamRuns(candidates)) {
+                    if (run.length < 2) continue;
+                    VF.Beam.generateBeams(
+                      run.map((c) => c.note),
+                      { groups },
+                    ).forEach((beam) => beam.setContext(context).draw());
+                  }
+                }
               }
-              tickables
-                .sort((a, b) => a.beat - b.beat)
-                .forEach((t) => vfNotes.push(t.note));
-
-              // 每小节独立 Voice + Formatter（不再把全曲音符展平进单个 Voice）。
-              const voice = new VF.Voice({
-                numBeats: barMeter.numerator,
-                beatValue: barMeter.denominator,
-              });
-              voice.setStrict(false);
-              voice.addTickables(vfNotes);
-
-              new VF.Formatter().joinVoices([voice]).format([voice], slot.width - 20);
-              voice.draw(context, barStave);
-
-              // 梁只在本小节音符内生成。
-              // v2.9.7 规则⑤：按拍分梁（4/4 每拍一组；6/8 按附点四分 3/8 一组）。
-              // 旧实现整小节一条梁 —— 违反通行记谱法。
-              const beamables = vfNotes.filter((n) => !n.isRest());
-              const beams = beamables.length >= 2
-                ? VF.Beam.generateBeams(beamables, {
-                    groups: beamGroups(barMeter.numerator, barMeter.denominator).map(
-                      ([num, den]) => new VF.Fraction(num, den),
-                    ),
-                  })
-                : [];
-              beams.forEach((b) => b.setContext(context).draw());
             }
           }
 
@@ -557,12 +724,47 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
           }
         }
 
+        // ── 连音线（tie）──
+        //
+        // 判据是**几何相邻**：同一逻辑音被跨小节线 / 跨拍点切成多段后，前一段的
+        // 结束位置正好是后一段的起点（同小节）或小节末→下一小节首（跨小节）。
+        // 绝不以「音高相同」为判据 —— 那样会把「同音高但中间有休止」的两个音
+        // 连起来，语义就错了（这正是"连音识别错误"的一类）。
+        const barLenOf = (bar: number) => barLengthQn(meterAt(bar));
+        for (const list of chainNotes.values()) {
+          if (list.length < 2) continue;
+          list.sort((a, b) => a.span.bar - b.span.bar || a.span.offset - b.span.offset);
+          for (let i = 0; i < list.length - 1; i++) {
+            const from = list[i]!;
+            const to = list[i + 1]!;
+            if (!spansAreContiguous(from.span, to.span, barLenOf)) continue;
+            const indexes = from.note.getKeys().map((_, k) => k);
+            new VF.StaveTie({
+              firstNote: from.note,
+              lastNote: to.note,
+              firstIndexes: indexes,
+              lastIndexes: indexes.slice(),
+            })
+              .setContext(context)
+              .draw();
+          }
+        }
+
         // D32-5：越界 bar 音符统计一次性告知（仅在有越界音符时输出，含条数）。
         // 这是对旧「静默丢弃」行为的显式化，不改变渲染结果、不新增对外 prop。
         if (outOfRangeBarCount > 0) {
           console.warn(
             `[ScoreRenderer] 忽略 ${outOfRangeBarCount} 个越界 bar 音符` +
               `（bar < 1 或非整数或 > ${lastBar}）。`,
+          );
+        }
+
+        // 声部数超过 2 的小节：谱面可读性会下降（符干相撞），但每个音的
+        // 时间位置与时值都是真的 —— 这里显式告警，不做静默篡改。
+        if (crowdedBarCount > 0) {
+          console.warn(
+            `[ScoreRenderer] ${crowdedBarCount} 个小节在同谱表内同时发声超过 2 个声部` +
+              `（谱面会拥挤，但时值未被篡改）。`,
           );
         }
 
@@ -612,7 +814,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [notes, groupsByStaffAndBar, layout, meterAt, renderBars, totalHeight, startBar, systems, retryNonce, width]);
+  }, [notes, engravingPlan, layout, meterAt, renderBars, totalHeight, startBar, systems, retryNonce, width]);
 
   const containerStyle: React.CSSProperties = {
     transform: `scale(${scale})`,
